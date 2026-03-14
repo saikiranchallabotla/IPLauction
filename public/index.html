@@ -874,6 +874,13 @@
                         <div class="category-buttons" id="category-buttons"></div>
                         <h3 class="card-title" style="margin-top: 1rem;">Players in Category</h3>
                         <div class="players-list" id="players-list"></div>
+
+                        <!-- Unsold Players for Re-Auction -->
+                        <div id="unsold-reauction-section" style="display: none; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                            <h3 class="card-title" style="color: var(--danger);">Unsold Players <span id="unsold-reauction-count" style="background:rgba(255,23,68,0.15);padding:0.1rem 0.45rem;border-radius:10px;font-size:0.78rem;">0</span></h3>
+                            <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.5rem;">Click a player to bring them back into the auction</p>
+                            <div class="players-list" id="unsold-reauction-list" style="max-height: 300px;"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -1183,7 +1190,7 @@
 
         // ============ RENDERING ============
         function renderAll() {
-            const fns = [renderAuction, renderTeams, renderSetupTeams, renderCategoryTabs, renderPlayers, renderPlayersPrice, renderHistory, renderAdminSoldList];
+            const fns = [renderAuction, renderTeams, renderSetupTeams, renderCategoryTabs, renderPlayers, renderPlayersPrice, renderHistory, renderAdminSoldList, renderUnsoldAdmin];
             fns.forEach(fn => { try { fn(); } catch(e) { console.error('Render error in ' + fn.name + ':', e); } });
         }
 
@@ -1496,6 +1503,41 @@
             selectedPlayer = state.players.find(p => p.id === id);
             if (socket) socket.emit('selectPlayer', id);
             renderPlayers();
+        }
+
+        function reAuctionPlayer(playerId) {
+            if (!confirm('Bring this player back into auction?')) return;
+            if (socket) socket.emit('reAuctionPlayer', playerId);
+        }
+
+        function renderUnsoldAdmin() {
+            const unsoldPlayers = (state.auctionState || {}).unsoldPlayers || [];
+            const section = document.getElementById('unsold-reauction-section');
+            const countEl = document.getElementById('unsold-reauction-count');
+            const list = document.getElementById('unsold-reauction-list');
+
+            if (!section || !list) return;
+
+            if (unsoldPlayers.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+            if (countEl) countEl.textContent = unsoldPlayers.length;
+
+            list.innerHTML = unsoldPlayers.map(p => `
+                <div class="player-item" style="cursor: pointer;" onclick="reAuctionPlayer(${p.id})">
+                    <div class="player-info">
+                        <div class="name">${p.name} <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
+                        <div class="role">${p.role} | ${p.country}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <div class="player-price">${formatPrice(p.basePrice)}</div>
+                        <button class="btn btn-warning" style="padding: 0.2rem 0.5rem; font-size: 0.7rem; white-space: nowrap;">Re-Auction</button>
+                    </div>
+                </div>
+            `).join('');
         }
 
         // Dynamic bid step based on current bid amount

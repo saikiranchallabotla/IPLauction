@@ -383,8 +383,29 @@ io.on('connection', (socket) => {
             room.auctionState.currentBid = player.basePrice;
             room.auctionState.currentBidder = null;
             room.auctionState.status = 'bidding';
-            saveRooms(room.code); // Save when player selected
+            saveRooms(room.code);
             io.to(room.code).emit('auctionUpdate', room.auctionState);
+        }
+    });
+
+    // Admin: Re-auction an unsold player
+    socket.on('reAuctionPlayer', (playerId) => {
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+
+        const player = room.players.find(p => p.id === playerId);
+        if (player && player.status === 'unsold') {
+            // Move back to available
+            player.status = 'available';
+            // Remove from unsoldPlayers list
+            room.auctionState.unsoldPlayers = room.auctionState.unsoldPlayers.filter(p => p.id !== playerId);
+            saveRooms(room.code);
+            io.to(room.code).emit('fullUpdate', {
+                teams: room.teams,
+                players: room.players,
+                auctionState: room.auctionState,
+                config: { initialBudget: INITIAL_BUDGET }
+            });
         }
     });
 
