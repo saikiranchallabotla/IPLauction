@@ -12,18 +12,61 @@ const io = new Server(httpServer);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ============ DATA STORE (Persistent) ============
+// ============ DATA STORE ============
 const INITIAL_BUDGET = 100;
 const ROOMS_FILE = path.join(__dirname, 'data', 'rooms.json');
+const MONGODB_URI = process.env.MONGODB_URI;
 
-// Store multiple auction rooms
+// Store multiple auction rooms (in-memory cache)
 let rooms = new Map();
 
 // Load players data
 const playersData = require('./data/players.json');
 console.log(`Loaded ${playersData.length} players from players.json`);
 
-// ============ PERSISTENCE FUNCTIONS ============
+// ============ PERSISTENCE LAYER ============
+// Uses MongoDB if MONGODB_URI is set, otherwise falls back to file-based
+
+let db = null; // MongoDB database reference
+
+async function initPersistence() {
+    if (MONGODB_URI) {
+        try {
+            const { MongoClient } = require('mongodb');
+            const client = new MongoClient(MONGODB_URI);
+            await client.connect();
+            db = client.db('ipl_auction');
+            console.log('Connected to MongoDB for persistent storage');
+
+            // Load rooms from MongoDB into memory
+            const docs = await db.collection('rooms').find({}).toArray();
+            rooms = new Map(docs.map(d => {
+                const { _id, ...room } = d; // strip _id
+                return [room.code, room];
+            }));
+            console.log(`Loaded ${rooms.size} rooms from MongoDB`);
+
+            // Clean up rooms older than 7 days
+            const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            let cleaned = 0;
+            for (const [code, room] of rooms) {
+                if (room.createdAt < weekAgo) {
+                    rooms.delete(code);
+                    await db.collection('rooms').deleteOne({ code });
+                    cleaned++;
+                }
+            }
+            if (cleaned > 0) console.log(`Cleaned up ${cleaned} old rooms`);
+        } catch (err) {
+            console.error('MongoDB connection failed, falling back to file:', err.message);
+            db = null;
+            loadRoomsFromFile();
+        }
+    } else {
+        console.log('No MONGODB_URI set, using file-based persistence (data will be lost on Render redeploy)');
+        loadRoomsFromFile();
+    }
+}
 
 // Debounce save to prevent too many writes
 let saveTimeout = null;
@@ -32,39 +75,63 @@ function saveRoomsDebounced() {
     saveTimeout = setTimeout(() => saveRooms(), 500);
 }
 
-// Save rooms to file
-function saveRooms() {
-    try {
-        // Convert Map to array of [key, value] pairs for JSON serialization
-        const roomsArray = Array.from(rooms.entries());
-        fs.writeFileSync(ROOMS_FILE, JSON.stringify(roomsArray));
-        console.log(`Saved ${rooms.size} rooms to disk`);
-    } catch (err) {
-        console.error('Error saving rooms:', err);
+// Save a single room (or all rooms for file mode)
+function saveRooms(roomCode) {
+    if (db) {
+        // MongoDB: save specific room or all
+        if (roomCode) {
+            const room = rooms.get(roomCode);
+            if (room) {
+                db.collection('rooms').updateOne(
+                    { code: roomCode },
+                    { $set: room },
+                    { upsert: true }
+                ).catch(err => console.error('MongoDB save error:', err.message));
+            }
+        } else {
+            // Save all rooms (used rarely)
+            for (const [code, room] of rooms) {
+                db.collection('rooms').updateOne(
+                    { code },
+                    { $set: room },
+                    { upsert: true }
+                ).catch(err => console.error('MongoDB save error:', err.message));
+            }
+        }
+    } else {
+        // File-based fallback
+        try {
+            const roomsArray = Array.from(rooms.entries());
+            fs.writeFileSync(ROOMS_FILE, JSON.stringify(roomsArray));
+        } catch (err) {
+            console.error('Error saving rooms to file:', err);
+        }
     }
 }
 
-// Load rooms from file
-function loadRooms() {
+function deleteRoomFromDb(code) {
+    if (db) {
+        db.collection('rooms').deleteOne({ code }).catch(err => console.error('MongoDB delete error:', err.message));
+    }
+}
+
+// File-based load (fallback)
+function loadRoomsFromFile() {
     try {
-        // Ensure data directory exists
         const dataDir = path.dirname(ROOMS_FILE);
         if (!fs.existsSync(dataDir)) {
             fs.mkdirSync(dataDir, { recursive: true });
         }
-
-        // Create rooms file if it doesn't exist
         if (!fs.existsSync(ROOMS_FILE)) {
             fs.writeFileSync(ROOMS_FILE, '[]');
             console.log('Created new rooms.json file');
         }
-
         const data = fs.readFileSync(ROOMS_FILE, 'utf8');
         const roomsArray = JSON.parse(data);
         rooms = new Map(roomsArray);
-        console.log(`Loaded ${rooms.size} rooms from disk`);
+        console.log(`Loaded ${rooms.size} rooms from file`);
 
-        // Clean up old rooms (older than 7 days)
+        // Clean up old rooms
         const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
         let cleaned = 0;
         for (const [code, room] of rooms) {
@@ -78,13 +145,10 @@ function loadRooms() {
             saveRooms();
         }
     } catch (err) {
-        console.error('Error loading rooms:', err);
+        console.error('Error loading rooms from file:', err);
         rooms = new Map();
     }
 }
-
-// Load existing rooms on startup
-loadRooms();
 
 // Generate random 6-character room code
 function generateRoomCode() {
@@ -119,7 +183,7 @@ function createRoom(code) {
         }
     });
 
-    saveRooms(); // Save immediately after creating room
+    saveRooms(code); // Save immediately after creating room
     return rooms.get(code);
 }
 
@@ -213,7 +277,7 @@ app.post('/api/room/:code/teams', (req, res) => {
         };
 
         room.teams.push(team);
-        saveRoomsDebounced(); // Use debounced save
+        saveRooms(room.code); // Save after team creation
         console.log(`Team "${team.name}" added to room ${room.code}. Total teams: ${room.teams.length}`);
         io.to(room.code).emit('teamsUpdated', room.teams);
         res.json(team);
@@ -236,7 +300,7 @@ app.post('/api/room/:code/players/:id/price', (req, res) => {
     const playerIndex = room.players.findIndex(p => p.id === id);
     if (playerIndex !== -1) {
         room.players[playerIndex].basePrice = basePrice;
-        saveRooms(); // Save after price update
+        saveRooms(room.code); // Save after price update
         io.to(room.code).emit('playersUpdated', room.players);
         res.json({ success: true });
     } else {
@@ -253,7 +317,7 @@ app.delete('/api/room/:code/teams/:id', (req, res) => {
 
     const id = req.params.id; // String ID
     room.teams = room.teams.filter(t => t.id !== id);
-    saveRoomsDebounced(); // Save after team deletion
+    saveRooms(room.code); // Save after team deletion
     io.to(room.code).emit('teamsUpdated', room.teams);
     res.json({ success: true });
 });
@@ -281,7 +345,7 @@ app.post('/api/room/:code/reset', (req, res) => {
         unsoldPlayers: []
     };
 
-    saveRooms(); // Save after reset
+    saveRooms(room.code); // Save after reset
     io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
     res.json({ success: true });
 });
@@ -319,7 +383,7 @@ io.on('connection', (socket) => {
             room.auctionState.currentBid = player.basePrice;
             room.auctionState.currentBidder = null;
             room.auctionState.status = 'bidding';
-            saveRooms(); // Save when player selected
+            saveRooms(room.code); // Save when player selected
             io.to(room.code).emit('auctionUpdate', room.auctionState);
         }
     });
@@ -356,7 +420,7 @@ io.on('connection', (socket) => {
 
         room.auctionState.currentBid = amount;
         room.auctionState.currentBidder = team;
-        saveRooms(); // Save after each bid
+        saveRooms(room.code); // Save after each bid
         io.to(room.code).emit('auctionUpdate', room.auctionState);
     });
 
@@ -400,7 +464,7 @@ io.on('connection', (socket) => {
 
         room.auctionState.status = 'sold';
 
-        saveRooms(); // Save immediately after sale
+        saveRooms(room.code); // Save immediately after sale
 
         io.to(room.code).emit('playerSold', {
             player: room.players[playerIndex],
@@ -416,7 +480,7 @@ io.on('connection', (socket) => {
             room.auctionState.currentPlayer = null;
             room.auctionState.currentBid = 0;
             room.auctionState.currentBidder = null;
-            saveRooms();
+            saveRooms(room.code);
             io.to(room.code).emit('auctionUpdate', room.auctionState);
         }, 3000);
     });
@@ -442,7 +506,7 @@ io.on('connection', (socket) => {
         room.auctionState.unsoldPlayers.push(room.players[playerIndex]);
         room.auctionState.status = 'unsold';
 
-        saveRooms(); // Save immediately after unsold
+        saveRooms(room.code); // Save immediately after unsold
 
         io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
 
@@ -452,7 +516,7 @@ io.on('connection', (socket) => {
             room.auctionState.currentPlayer = null;
             room.auctionState.currentBid = 0;
             room.auctionState.currentBidder = null;
-            saveRooms();
+            saveRooms(room.code);
             io.to(room.code).emit('auctionUpdate', room.auctionState);
         }, 2000);
     });
@@ -464,16 +528,21 @@ io.on('connection', (socket) => {
 
 // ============ START SERVER ============
 const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => {
-    console.log(`
+
+initPersistence().then(() => {
+    httpServer.listen(PORT, () => {
+        console.log(`
     ╔═══════════════════════════════════════╗
     ║     IPL 2026 Fantasy Auction          ║
     ║     Server running on port ${PORT}        ║
     ╠═══════════════════════════════════════╣
-    ║  Rooms persist across server restarts ║
-    ║  Data saved to: data/rooms.json       ║
+    ║  Storage: ${db ? 'MongoDB (persistent)' : 'File (local only)'}        ║
     ╚═══════════════════════════════════════╝
 
     Open http://localhost:${PORT} in your browser
-    `);
+        `);
+    });
+}).catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
 });
