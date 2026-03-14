@@ -4,65 +4,90 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPL 2026 Fantasy Auction</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         :root {
             --primary: #1a237e;
-            --primary-light: #3949ab;
-            --accent: #ffd700;
-            --success: #2e7d32;
-            --danger: #c62828;
-            --warning: #f57c00;
-            --dark: #0d1117;
-            --card: #1a1f2e;
-            --border: #30363d;
-            --text: #ffffff;
-            --text-secondary: #8b949e;
+            --primary-light: #3f51b5;
+            --primary-glow: rgba(63, 81, 181, 0.4);
+            --accent: #f5c518;
+            --accent-glow: rgba(245, 197, 24, 0.35);
+            --accent-dim: rgba(245, 197, 24, 0.15);
+            --success: #00c853;
+            --success-glow: rgba(0, 200, 83, 0.3);
+            --danger: #ff1744;
+            --danger-glow: rgba(255, 23, 68, 0.3);
+            --warning: #ff9100;
+            --warning-glow: rgba(255, 145, 0, 0.3);
+            --dark: #080b14;
+            --dark-elevated: #0f1420;
+            --card: rgba(20, 27, 45, 0.75);
+            --card-solid: #141b2d;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-light: rgba(255, 255, 255, 0.12);
+            --text: #f0f0f0;
+            --text-secondary: #7a8599;
+            --glass: rgba(255, 255, 255, 0.04);
+            --glass-border: rgba(255, 255, 255, 0.1);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Segoe UI', Tahoma, sans-serif;
+            font-family: 'Outfit', 'Segoe UI', sans-serif;
             background: var(--dark);
             color: var(--text);
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        /* Landing Page Styles */
+        /* Landing Page */
         .landing-page {
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            background: linear-gradient(135deg, var(--dark) 0%, #1a1a2e 100%);
+            background:
+                radial-gradient(ellipse at 20% 50%, rgba(26, 35, 126, 0.25) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 50%, rgba(245, 197, 24, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 100%, rgba(63, 81, 181, 0.15) 0%, transparent 50%),
+                linear-gradient(180deg, #080b14 0%, #0d1220 50%, #080b14 100%);
             padding: 2rem;
         }
 
         .landing-logo {
-            font-size: 3rem;
-            font-weight: 700;
+            font-size: 3.2rem;
+            font-weight: 800;
             color: var(--accent);
             margin-bottom: 0.5rem;
             text-align: center;
-            text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+            text-shadow: 0 0 40px var(--accent-glow), 0 0 80px rgba(245, 197, 24, 0.15);
+            letter-spacing: -0.02em;
         }
 
         .landing-subtitle {
             color: var(--text-secondary);
             margin-bottom: 3rem;
-            font-size: 1.2rem;
+            font-size: 1.15rem;
+            font-weight: 300;
+            letter-spacing: 0.02em;
         }
 
         .landing-card {
             background: var(--card);
-            border-radius: 16px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
             padding: 2.5rem;
-            max-width: 450px;
+            max-width: 460px;
             width: 100%;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(63, 81, 181, 0.08);
         }
 
         .landing-section {
@@ -79,8 +104,9 @@
 
         .landing-section h2 {
             color: var(--accent);
-            font-size: 1.3rem;
-            margin-bottom: 1rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -90,6 +116,7 @@
             color: var(--text-secondary);
             font-size: 0.9rem;
             margin-bottom: 1rem;
+            font-weight: 300;
         }
 
         .room-code-input {
@@ -104,16 +131,19 @@
             text-transform: uppercase;
             letter-spacing: 0.3rem;
             text-align: center;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            background: var(--dark);
+            border: 2px solid var(--border-light);
+            border-radius: 12px;
+            background: var(--dark-elevated);
             color: var(--text);
             font-weight: 600;
+            font-family: 'Outfit', sans-serif;
+            transition: all 0.3s ease;
         }
 
         .room-code-input input:focus {
             outline: none;
-            border-color: var(--primary-light);
+            border-color: var(--accent);
+            box-shadow: 0 0 20px var(--accent-glow);
         }
 
         .btn-large {
@@ -121,26 +151,33 @@
             font-size: 1rem;
             font-weight: 600;
             border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.3s ease;
             width: 100%;
+            font-family: 'Outfit', sans-serif;
+            letter-spacing: 0.02em;
         }
 
         .btn-large:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            transform: translateY(-3px);
         }
+
+        .btn-large:active { transform: translateY(0); }
 
         .btn-create {
-            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            background: linear-gradient(135deg, #1a237e, #3f51b5, #5c6bc0);
             color: white;
+            box-shadow: 0 4px 20px var(--primary-glow);
         }
+        .btn-create:hover { box-shadow: 0 8px 30px var(--primary-glow); }
 
         .btn-join {
-            background: var(--accent);
+            background: linear-gradient(135deg, #f5c518, #ffca28);
             color: #000;
+            box-shadow: 0 4px 15px var(--accent-glow);
         }
+        .btn-join:hover { box-shadow: 0 8px 25px var(--accent-glow); }
 
         .room-code-display {
             display: none;
@@ -164,96 +201,105 @@
 
         .room-code-value {
             font-size: 2.5rem;
-            font-weight: 700;
+            font-weight: 800;
             letter-spacing: 0.5rem;
             color: var(--accent);
-            font-family: monospace;
+            font-family: 'Outfit', monospace;
+            text-shadow: 0 0 20px var(--accent-glow);
         }
 
-        .room-code-label {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            margin-bottom: 0.5rem;
-        }
+        .room-code-label { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.5rem; }
 
         .copy-btn {
-            background: var(--border);
+            background: var(--glass);
             color: var(--text);
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
+            border: 1px solid var(--glass-border);
+            padding: 0.5rem 1.25rem;
+            border-radius: 8px;
             cursor: pointer;
             margin-top: 1rem;
             font-size: 0.9rem;
+            font-family: 'Outfit', sans-serif;
+            transition: all 0.3s ease;
         }
+        .copy-btn:hover { background: var(--primary-light); border-color: var(--primary-light); }
 
-        .copy-btn:hover {
-            background: var(--primary-light);
-        }
-
-        .error-msg {
-            color: var(--danger);
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-            display: none;
-        }
-
-        .error-msg.show {
-            display: block;
-        }
+        .error-msg { color: var(--danger); font-size: 0.9rem; margin-top: 0.5rem; display: none; }
+        .error-msg.show { display: block; }
 
         .enter-btn {
             margin-top: 1rem;
-            background: var(--success);
-            color: white;
+            background: linear-gradient(135deg, #00c853, #00e676);
+            color: #000;
+            box-shadow: 0 4px 15px var(--success-glow);
         }
+        .enter-btn:hover { box-shadow: 0 8px 25px var(--success-glow); }
 
-        /* Room Code Badge in Header */
+        /* ============ HEADER ============ */
         .room-badge {
-            background: rgba(255, 215, 0, 0.2);
+            background: var(--accent-dim);
             color: var(--accent);
-            padding: 0.4rem 0.8rem;
-            border-radius: 6px;
+            padding: 0.4rem 0.9rem;
+            border-radius: 8px;
             font-weight: 600;
-            font-family: monospace;
+            font-family: 'Outfit', monospace;
             letter-spacing: 0.1rem;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            border: 1px solid rgba(245, 197, 24, 0.2);
         }
 
         .header {
-            background: linear-gradient(135deg, var(--primary), var(--primary-light));
-            padding: 1rem 2rem;
+            background: linear-gradient(135deg, #0d1226 0%, #1a237e 50%, #0d1226 100%);
+            padding: 0.9rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 30px rgba(0,0,0,0.4), 0 1px 0 rgba(245, 197, 24, 0.15);
+            border-bottom: 1px solid rgba(245, 197, 24, 0.1);
+            position: relative;
+        }
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 10%; right: 10%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
         }
 
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
+        .header-left { display: flex; align-items: center; gap: 1rem; }
+        .logo {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: var(--accent);
+            text-shadow: 0 0 20px var(--accent-glow);
+            letter-spacing: -0.02em;
         }
-
-        .logo { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
         .nav-btns { display: flex; gap: 0.5rem; align-items: center; }
 
         .btn {
-            padding: 0.6rem 1.2rem;
+            padding: 0.55rem 1.1rem;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             font-weight: 600;
-            transition: all 0.3s;
+            transition: all 0.25s ease;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
         }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), #ffca28); color: #000; box-shadow: 0 2px 10px var(--accent-glow); }
+        .btn-primary:hover { box-shadow: 0 4px 20px var(--accent-glow); }
+        .btn-secondary { background: var(--glass); color: #fff; border: 1px solid var(--glass-border); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+        .btn-success { background: linear-gradient(135deg, #00c853, #00e676); color: #000; box-shadow: 0 2px 10px var(--success-glow); }
+        .btn-success:hover { box-shadow: 0 4px 20px var(--success-glow); }
+        .btn-danger { background: linear-gradient(135deg, #d50000, #ff1744); color: #fff; box-shadow: 0 2px 10px var(--danger-glow); }
+        .btn-danger:hover { box-shadow: 0 4px 20px var(--danger-glow); }
+        .btn-warning { background: linear-gradient(135deg, #ff6d00, #ff9100); color: #fff; box-shadow: 0 2px 10px var(--warning-glow); }
+        .btn-warning:hover { box-shadow: 0 4px 20px var(--warning-glow); }
+        .btn:hover { transform: translateY(-2px); }
+        .btn:active { transform: translateY(0); }
 
-        .btn-primary { background: var(--accent); color: #000; }
-        .btn-secondary { background: var(--border); color: #fff; }
-        .btn-success { background: var(--success); color: #fff; }
-        .btn-danger { background: var(--danger); color: #fff; }
-        .btn-warning { background: var(--warning); color: #fff; }
-        .btn:hover { transform: translateY(-2px); opacity: 0.9; }
-
+        /* ============ LAYOUT ============ */
         .view { display: none; }
         .view.active { display: block; }
 
@@ -268,21 +314,32 @@
 
         .card {
             background: var(--card);
-            border-radius: 12px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
             padding: 1.5rem;
+            transition: box-shadow 0.3s ease, border-color 0.3s ease;
         }
+        .card:hover { border-color: var(--border-light); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
 
         .card-title {
             color: var(--accent);
-            font-size: 1.2rem;
+            font-size: 1.15rem;
+            font-weight: 700;
             margin-bottom: 1rem;
             padding-bottom: 0.5rem;
-            border-bottom: 2px solid var(--border);
+            border-bottom: 2px solid;
+            border-image: linear-gradient(90deg, var(--accent), transparent) 1;
         }
 
+        /* ============ AUCTION DISPLAY ============ */
         .auction-display {
-            background: linear-gradient(135deg, var(--primary), var(--primary-light));
-            border-radius: 16px;
+            background:
+                radial-gradient(ellipse at 50% 30%, rgba(63, 81, 181, 0.4) 0%, transparent 60%),
+                radial-gradient(ellipse at 50% 80%, rgba(245, 197, 24, 0.1) 0%, transparent 50%),
+                linear-gradient(135deg, #0d1226 0%, #1a237e 50%, #0d1226 100%);
+            border-radius: 20px;
             padding: 3rem;
             text-align: center;
             min-height: 350px;
@@ -291,29 +348,40 @@
             justify-content: center;
             align-items: center;
             position: relative;
+            border: 1px solid rgba(63, 81, 181, 0.2);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+            overflow: hidden;
         }
 
         .status-badge {
             position: absolute;
-            top: 1rem;
-            right: 1rem;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.85rem;
+            top: 1rem; right: 1rem;
+            padding: 0.5rem 1.2rem;
+            border-radius: 25px;
+            font-weight: 700;
+            font-size: 0.8rem;
             text-transform: uppercase;
+            letter-spacing: 0.08em;
+            z-index: 1;
+        }
+        .status-waiting { background: rgba(255,255,255,0.1); color: var(--text-secondary); border: 1px solid var(--border-light); }
+        .status-bidding {
+            background: linear-gradient(135deg, var(--warning), #ffab00);
+            color: #000;
+            animation: bidPulse 1.5s ease-in-out infinite;
+            box-shadow: 0 0 20px var(--warning-glow);
+        }
+        .status-sold { background: linear-gradient(135deg, var(--success), #00e676); color: #000; box-shadow: 0 0 20px var(--success-glow); }
+        .status-unsold { background: linear-gradient(135deg, #d50000, var(--danger)); box-shadow: 0 0 15px var(--danger-glow); }
+
+        @keyframes bidPulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 20px var(--warning-glow); }
+            50% { opacity: 0.85; box-shadow: 0 0 35px var(--warning-glow); }
         }
 
-        .status-waiting { background: var(--border); }
-        .status-bidding { background: var(--warning); animation: pulse 1s infinite; }
-        .status-sold { background: var(--success); }
-        .status-unsold { background: var(--danger); }
-
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-
-        .player-name { font-size: 2.8rem; font-weight: 700; color: var(--accent); margin-bottom: 0.5rem; }
-        .player-details { font-size: 1.1rem; color: rgba(255,255,255,0.8); margin-bottom: 1rem; }
-        .player-base { font-size: 1.3rem; color: white; }
+        .player-name { font-size: 2.8rem; font-weight: 800; color: var(--accent); margin-bottom: 0.5rem; text-shadow: 0 0 30px var(--accent-glow); z-index: 1; }
+        .player-details { font-size: 1.05rem; color: rgba(255,255,255,0.75); margin-bottom: 1rem; font-weight: 400; z-index: 1; }
+        .player-base { font-size: 1.25rem; color: white; font-weight: 500; z-index: 1; }
         .player-base span { color: var(--accent); font-weight: 700; }
 
         .bid-info {
@@ -321,33 +389,39 @@
             justify-content: center;
             gap: 3rem;
             margin-top: 2rem;
-            padding: 1.5rem;
-            background: rgba(0,0,0,0.2);
-            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            z-index: 1;
         }
+        .bid-label { font-size: 0.85rem; color: rgba(255,255,255,0.5); font-weight: 400; letter-spacing: 0.05em; text-transform: uppercase; }
+        .bid-amount { font-size: 2.5rem; font-weight: 800; color: var(--accent); text-shadow: 0 0 15px var(--accent-glow); }
+        .bid-team { font-size: 1.3rem; font-weight: 600; color: white; }
 
-        .bid-label { font-size: 0.9rem; color: rgba(255,255,255,0.7); }
-        .bid-amount { font-size: 2.5rem; font-weight: 700; color: var(--accent); }
-        .bid-team { font-size: 1.4rem; font-weight: 600; color: white; }
-
-        .teams-list { display: flex; flex-direction: column; gap: 0.75rem; max-height: 500px; overflow-y: auto; }
+        /* ============ TEAMS ============ */
+        .teams-list { display: flex; flex-direction: column; gap: 0.6rem; max-height: 500px; overflow-y: auto; }
 
         .team-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1rem;
-            background: var(--dark);
-            border-radius: 8px;
+            padding: 1rem 1.2rem;
+            background: var(--dark-elevated);
+            border-radius: 12px;
+            border: 1px solid var(--border);
             border-left: 4px solid var(--primary-light);
+            transition: all 0.25s ease;
         }
-
-        .team-item.current-bidder { border-left-color: var(--accent); background: rgba(255,215,0,0.1); }
+        .team-item:hover { background: rgba(63, 81, 181, 0.08); border-color: var(--border-light); transform: translateX(4px); }
+        .team-item.current-bidder { border-left-color: var(--accent); background: var(--accent-dim); border-color: rgba(245, 197, 24, 0.2); box-shadow: 0 0 15px var(--accent-glow); }
         .team-name { font-weight: 600; }
         .team-budget { color: var(--accent); font-weight: 700; }
-        .team-budget.low { color: var(--danger); }
+        .team-budget.low { color: var(--danger); text-shadow: 0 0 10px var(--danger-glow); }
         .team-spent { font-size: 0.75rem; color: var(--danger); }
 
+        /* ============ ADMIN ============ */
         .admin-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem; padding: 1rem; }
         .admin-right-panel { display: flex; flex-direction: column; gap: 0.5rem; }
         .players-list { max-height: 500px; overflow-y: auto; }
@@ -356,306 +430,251 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.75rem;
-            background: var(--dark);
-            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            background: var(--dark-elevated);
+            border-radius: 10px;
             margin-bottom: 0.5rem;
             cursor: pointer;
-            border: 2px solid transparent;
-            transition: all 0.2s;
+            border: 1px solid transparent;
+            transition: all 0.25s ease;
         }
-
-        .player-item:hover { border-color: var(--primary-light); }
-        .player-item.selected { border-color: var(--accent); background: rgba(255,215,0,0.1); }
+        .player-item:hover { border-color: rgba(63, 81, 181, 0.3); background: rgba(63, 81, 181, 0.06); transform: translateX(2px); }
+        .player-item.selected { border-color: var(--accent); background: var(--accent-dim); box-shadow: 0 0 15px var(--accent-glow); }
         .player-info .name { font-weight: 600; }
-        .player-info .role { font-size: 0.85rem; color: var(--text-secondary); }
-        .player-price { color: var(--accent); font-weight: 600; }
+        .player-info .role { font-size: 0.85rem; color: var(--text-secondary); font-weight: 400; }
+        .player-price { color: var(--accent); font-weight: 700; }
 
-        .bid-controls { background: var(--dark); padding: 1.5rem; border-radius: 10px; margin-bottom: 1rem; }
+        .bid-controls { background: var(--dark-elevated); padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem; border: 1px solid var(--border); }
         .form-group { margin-bottom: 1rem; }
-        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-secondary); }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 500; }
         .form-group input, .form-group select {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--card);
-            color: var(--text);
-            font-size: 1rem;
+            width: 100%; padding: 0.75rem;
+            border: 1px solid var(--border-light); border-radius: 10px;
+            background: var(--dark); color: var(--text);
+            font-size: 1rem; font-family: 'Outfit', sans-serif;
+            transition: all 0.3s ease;
         }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
 
-        /* Team bid buttons */
         .team-bid-btn {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.75rem 1rem;
-            background: var(--card);
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            color: var(--text);
-            cursor: pointer;
-            transition: all 0.2s;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.7rem 1rem;
+            background: var(--dark-elevated);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text); cursor: pointer;
+            transition: all 0.25s ease;
         }
-        .team-bid-btn:hover:not(:disabled) {
-            border-color: var(--accent);
-            background: rgba(255,215,0,0.1);
-        }
-        .team-bid-btn.active-bidder {
-            border-color: var(--success);
-            background: rgba(46,204,113,0.2);
-        }
-        .team-bid-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .team-bid-name { font-weight: 600; }
-        .team-bid-budget { color: var(--accent); font-size: 0.9rem; }
+        .team-bid-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-dim); box-shadow: 0 0 12px var(--accent-glow); transform: translateY(-1px); }
+        .team-bid-btn.active-bidder { border-color: var(--success); background: rgba(0, 200, 83, 0.1); box-shadow: 0 0 12px var(--success-glow); }
+        .team-bid-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .team-bid-name { font-weight: 600; font-size: 0.9rem; }
+        .team-bid-budget { color: var(--accent); font-size: 0.85rem; }
         .team-bid-action {
-            background: var(--primary);
-            padding: 0.25rem 0.75rem;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            font-weight: 600;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            padding: 0.25rem 0.75rem; border-radius: 6px;
+            font-size: 0.8rem; font-weight: 700; letter-spacing: 0.03em;
         }
-        .team-bid-btn.active-bidder .team-bid-action {
-            background: var(--success);
-        }
+        .team-bid-btn.active-bidder .team-bid-action { background: linear-gradient(135deg, #00c853, #00e676); color: #000; }
 
         .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .btn-group .btn { flex: 1; min-width: 100px; }
 
         .filters { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
         .filters select, .filters input {
-            padding: 0.5rem;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--dark);
-            color: var(--text);
-            flex: 1;
-            min-width: 120px;
+            padding: 0.6rem 0.8rem;
+            border: 1px solid var(--border-light); border-radius: 10px;
+            background: var(--dark-elevated); color: var(--text);
+            flex: 1; min-width: 120px;
+            font-family: 'Outfit', sans-serif; transition: all 0.3s ease;
         }
+        .filters select:focus, .filters input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
 
-        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
         .tab {
-            padding: 0.5rem 1rem;
-            background: var(--dark);
-            border: none;
-            color: var(--text-secondary);
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 500;
-            font-size: 0.85rem;
+            padding: 0.55rem 1.1rem;
+            background: var(--glass); border: 1px solid var(--border);
+            color: var(--text-secondary); border-radius: 10px;
+            cursor: pointer; font-weight: 600; font-size: 0.85rem;
+            font-family: 'Outfit', sans-serif; transition: all 0.25s ease;
         }
-        .tab.active { background: var(--primary-light); color: white; }
+        .tab:hover { background: rgba(255,255,255,0.06); border-color: var(--border-light); }
+        .tab.active { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; border-color: transparent; box-shadow: 0 2px 10px var(--primary-glow); }
 
-        .category-buttons {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-
+        .category-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 1rem; }
         .category-btn {
-            padding: 0.75rem 0.5rem;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 0.8rem;
-            text-align: center;
-            transition: all 0.2s;
-            background: var(--dark);
-            color: var(--text);
+            padding: 0.7rem 0.5rem;
+            border: 1px solid var(--border); border-radius: 10px;
+            cursor: pointer; font-weight: 600; font-size: 0.8rem;
+            text-align: center; transition: all 0.25s ease;
+            background: var(--dark-elevated); color: var(--text);
+            font-family: 'Outfit', sans-serif;
         }
-
-        .category-btn:hover { border-color: var(--primary-light); }
-        .category-btn.active { border-color: var(--accent); background: rgba(255, 215, 0, 0.15); color: var(--accent); }
-        .category-btn .count { display: block; font-size: 1.2rem; color: var(--accent); margin-top: 0.25rem; }
-        .category-btn.home { border-left: 4px solid var(--success); }
-        .category-btn.overseas { border-left: 4px solid var(--warning); }
+        .category-btn:hover { border-color: var(--border-light); background: rgba(255,255,255,0.04); transform: translateY(-1px); }
+        .category-btn.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+        .category-btn .count { display: block; font-size: 1.2rem; color: var(--accent); margin-top: 0.25rem; font-weight: 700; }
+        .category-btn.home { border-left: 3px solid var(--success); }
+        .category-btn.overseas { border-left: 3px solid var(--warning); }
 
         .price-select {
             padding: 0.4rem 0.6rem;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            background: var(--card);
-            color: var(--accent);
-            font-weight: 600;
-            cursor: pointer;
-            min-width: 80px;
+            border: 1px solid var(--border-light); border-radius: 8px;
+            background: var(--dark-elevated); color: var(--accent);
+            font-weight: 600; cursor: pointer; min-width: 80px;
+            font-family: 'Outfit', sans-serif; transition: all 0.3s ease;
         }
+        .price-select:focus { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); outline: none; }
 
         .player-item-admin {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.6rem 0.75rem;
-            background: var(--dark);
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
-            gap: 0.5rem;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.6rem 0.85rem;
+            background: var(--dark-elevated); border-radius: 10px;
+            margin-bottom: 0.5rem; gap: 0.5rem;
+            border: 1px solid var(--border); transition: all 0.2s ease;
         }
+        .player-item-admin:hover { border-color: var(--border-light); }
         .player-item-admin .player-info { flex: 1; }
 
         .ipl-team-badge {
-            background: rgba(255, 111, 0, 0.2);
-            color: var(--warning);
-            padding: 0.15rem 0.4rem;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            font-weight: 600;
+            background: rgba(255, 145, 0, 0.15); color: var(--warning);
+            padding: 0.15rem 0.5rem; border-radius: 6px;
+            font-size: 0.7rem; font-weight: 700;
+            border: 1px solid rgba(255, 145, 0, 0.2); letter-spacing: 0.02em;
         }
 
         .team-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
         .team-form input {
-            flex: 1;
-            padding: 0.75rem;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--dark);
-            color: var(--text);
+            flex: 1; padding: 0.75rem 1rem;
+            border: 1px solid var(--border-light); border-radius: 10px;
+            background: var(--dark-elevated); color: var(--text);
+            font-family: 'Outfit', sans-serif; transition: all 0.3s ease;
         }
+        .team-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
 
         .team-management-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            background: var(--dark);
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.9rem 1rem; background: var(--dark-elevated);
+            border-radius: 10px; margin-bottom: 0.5rem;
+            border: 1px solid var(--border); transition: all 0.2s ease;
         }
-        .delete-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 1.2rem; }
+        .team-management-item:hover { border-color: var(--border-light); }
 
+        .delete-btn {
+            background: none; border: none; color: var(--danger);
+            cursor: pointer; font-size: 1.2rem; transition: all 0.2s ease;
+            padding: 0.2rem 0.4rem; border-radius: 6px;
+        }
+        .delete-btn:hover { background: var(--danger-glow); transform: scale(1.1); }
+
+        /* ============ HISTORY ============ */
         .history-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
-        .stat-box { background: var(--dark); padding: 1rem; border-radius: 8px; text-align: center; }
-        .stat-value { font-size: 2rem; font-weight: 700; color: var(--accent); }
-        .stat-label { font-size: 0.85rem; color: var(--text-secondary); }
+        .stat-box {
+            background: var(--card); backdrop-filter: blur(10px);
+            border: 1px solid var(--border); padding: 1.2rem;
+            border-radius: 14px; text-align: center; transition: all 0.3s ease;
+        }
+        .stat-box:hover { border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); transform: translateY(-2px); }
+        .stat-value { font-size: 2rem; font-weight: 800; color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
+        .stat-label { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
 
         .history-list { max-height: 400px; overflow-y: auto; }
-        .history-item { display: flex; justify-content: space-between; padding: 1rem; border-bottom: 1px solid var(--border); }
+        .history-item { display: flex; justify-content: space-between; padding: 1rem 1.2rem; border-bottom: 1px solid var(--border); transition: background 0.2s ease; }
+        .history-item:hover { background: var(--glass); }
 
+        /* ============ SOLD OVERLAY ============ */
         .sold-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
+            display: none; position: fixed; top: 0; left: 0;
             width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9);
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
+            background: rgba(0,0,0,0.92);
+            justify-content: center; align-items: center; z-index: 2000;
         }
         .sold-overlay.active { display: flex; }
-        .sold-content { text-align: center; animation: soldPop 0.5s ease-out; }
-        @keyframes soldPop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        .sold-content h1 { font-size: 5rem; color: var(--success); text-shadow: 0 0 30px rgba(46,125,50,0.5); }
-        .sold-content .player { font-size: 2rem; color: var(--accent); margin: 0.5rem 0; }
-        .sold-content .team { font-size: 1.5rem; color: var(--primary-light); }
-        .sold-content .price { font-size: 1.3rem; color: white; }
+        .sold-content { text-align: center; animation: soldBounce 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
+        @keyframes soldBounce {
+            0% { transform: scale(0.3) rotate(-5deg); opacity: 0; }
+            60% { transform: scale(1.1) rotate(2deg); opacity: 1; }
+            100% { transform: scale(1) rotate(0); opacity: 1; }
+        }
+        .sold-content h1 { font-size: 5.5rem; font-weight: 800; color: var(--success); text-shadow: 0 0 40px var(--success-glow), 0 0 80px var(--success-glow); letter-spacing: 0.1em; }
+        .sold-content .player { font-size: 2rem; color: var(--accent); margin: 0.5rem 0; font-weight: 700; text-shadow: 0 0 15px var(--accent-glow); }
+        .sold-content .team { font-size: 1.5rem; color: var(--primary-light); font-weight: 500; }
+        .sold-content .price { font-size: 1.3rem; color: white; font-weight: 600; margin-top: 0.5rem; }
 
-        /* Warning popup modal */
+        /* ============ WARNING POPUP ============ */
         .auction-popup-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
+            display: none; position: fixed; top: 0; left: 0;
             width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7);
-            justify-content: center;
-            align-items: center;
-            z-index: 3000;
+            background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+            justify-content: center; align-items: center; z-index: 3000;
         }
         .auction-popup-overlay.active { display: flex; }
         .auction-popup {
-            background: var(--card);
-            border: 2px solid var(--warning);
-            border-radius: 12px;
-            padding: 2rem;
-            max-width: 450px;
-            width: 90%;
+            background: var(--card-solid);
+            border: 1px solid var(--warning); border-radius: 16px;
+            padding: 2rem; max-width: 450px; width: 90%;
             text-align: center;
+            box-shadow: 0 0 30px var(--warning-glow), 0 20px 40px rgba(0,0,0,0.5);
+            animation: popupIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
-        .auction-popup h3 { color: var(--warning); font-size: 1.3rem; margin-bottom: 1rem; }
-        .auction-popup p { color: var(--text); margin-bottom: 1.5rem; line-height: 1.5; }
+        @keyframes popupIn { from { transform: scale(0.8) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+        .auction-popup h3 { color: var(--warning); font-size: 1.3rem; margin-bottom: 1rem; font-weight: 700; }
+        .auction-popup p { color: var(--text); margin-bottom: 1.5rem; line-height: 1.6; font-weight: 400; }
         .auction-popup .popup-btn {
-            padding: 0.6rem 2rem;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 1rem;
-            background: var(--warning);
-            color: #000;
+            padding: 0.6rem 2.5rem; border: none; border-radius: 10px;
+            cursor: pointer; font-weight: 700; font-size: 1rem;
+            background: linear-gradient(135deg, var(--warning), #ffab00); color: #000;
+            font-family: 'Outfit', sans-serif; transition: all 0.25s ease;
+            box-shadow: 0 2px 10px var(--warning-glow);
         }
+        .auction-popup .popup-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 20px var(--warning-glow); }
 
-        /* Sold players overlay panel */
+        /* ============ SOLD PLAYERS SLIDE-OUT ============ */
         .sold-list-overlay {
-            display: none;
-            position: fixed;
-            top: 0; right: 0;
-            width: 380px;
-            height: 100%;
-            background: var(--card);
-            box-shadow: -5px 0 30px rgba(0,0,0,0.5);
-            z-index: 2500;
-            flex-direction: column;
-            animation: slideIn 0.3s ease-out;
+            display: none; position: fixed; top: 0; right: 0;
+            width: 380px; height: 100%;
+            background: var(--card-solid);
+            box-shadow: -5px 0 40px rgba(0,0,0,0.6);
+            z-index: 2500; flex-direction: column;
+            animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            border-left: 1px solid var(--border-light);
         }
         .sold-list-overlay.active { display: flex; }
-        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
         .sold-list-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 1.2rem;
-            background: linear-gradient(135deg, var(--primary), var(--primary-light));
-            border-bottom: 2px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1.2rem 1.4rem;
+            background: linear-gradient(135deg, #0d1226, #1a237e);
+            border-bottom: 1px solid rgba(245, 197, 24, 0.15);
         }
-        .sold-list-header h3 { color: var(--accent); font-size: 1.1rem; }
+        .sold-list-header h3 { color: var(--accent); font-size: 1.05rem; font-weight: 700; }
         .sold-list-header .close-btn {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0.2rem 0.5rem;
+            background: none; border: none; color: rgba(255,255,255,0.7);
+            font-size: 1.5rem; cursor: pointer; padding: 0.2rem 0.5rem;
+            border-radius: 8px; transition: all 0.2s ease;
         }
-        .sold-list-body { flex: 1; overflow-y: auto; padding: 0.3rem 0.4rem; }
+        .sold-list-header .close-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+        .sold-list-body { flex: 1; overflow-y: auto; padding: 0.5rem 0.6rem; }
         .sold-list-backdrop {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
+            display: none; position: fixed; top: 0; left: 0;
             width: 100%; height: 100%;
-            background: rgba(0,0,0,0.4);
+            background: rgba(0,0,0,0.4); backdrop-filter: blur(2px);
             z-index: 2499;
         }
         .sold-list-backdrop.active { display: block; }
 
-        /* Sold players button */
         .btn-sold-toggle {
-            background: linear-gradient(135deg, var(--success), #388e3c);
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 700;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            width: 100%;
-            justify-content: center;
-            transition: all 0.2s;
+            background: linear-gradient(135deg, #00c853, #00e676); color: #000;
+            border: none; padding: 0.55rem 1rem; border-radius: 10px;
+            cursor: pointer; font-weight: 700; font-size: 0.88rem;
+            display: flex; align-items: center; gap: 0.5rem;
+            width: 100%; justify-content: center;
+            transition: all 0.25s ease; font-family: 'Outfit', sans-serif;
+            box-shadow: 0 2px 10px var(--success-glow);
         }
-        .btn-sold-toggle:hover { opacity: 0.9; transform: translateY(-1px); }
-        .btn-sold-toggle .sold-badge {
-            background: rgba(255,255,255,0.2);
-            padding: 0.15rem 0.5rem;
-            border-radius: 12px;
-            font-size: 0.85rem;
-        }
+        .btn-sold-toggle:hover { transform: translateY(-2px); box-shadow: 0 4px 20px var(--success-glow); }
+        .btn-sold-toggle .sold-badge { background: rgba(0,0,0,0.2); padding: 0.15rem 0.55rem; border-radius: 12px; font-size: 0.82rem; }
 
+        /* ============ RESPONSIVE ============ */
         @media (max-width: 900px) {
             .main-layout { grid-template-columns: 1fr; }
             .admin-grid { grid-template-columns: 1fr; }
@@ -665,34 +684,30 @@
             .bid-info { flex-direction: column; gap: 1rem; }
             .landing-logo { font-size: 2rem; }
             .category-buttons { grid-template-columns: repeat(2, 1fr); }
+            .nav-btns { gap: 0.3rem; }
+            .btn { padding: 0.45rem 0.7rem; font-size: 0.78rem; }
         }
 
-        /* Sold player item in admin panel */
+        /* ============ SOLD ITEMS ============ */
         .admin-sold-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.2rem 0.5rem;
-            background: rgba(46,204,113,0.08);
-            border-radius: 4px;
-            margin-bottom: 0.15rem;
-            font-size: 0.72rem;
-            line-height: 1.2;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.3rem 0.6rem;
+            background: rgba(0, 200, 83, 0.06); border-radius: 6px;
+            margin-bottom: 0.2rem; font-size: 0.72rem; line-height: 1.2;
+            border: 1px solid rgba(0, 200, 83, 0.08); transition: all 0.2s ease;
         }
-        .admin-sold-item .player-info {
-            display: flex;
-            gap: 0.3rem;
-            align-items: center;
-            flex: 1;
-            min-width: 0;
-        }
+        .admin-sold-item:hover { background: rgba(0, 200, 83, 0.1); border-color: rgba(0, 200, 83, 0.15); }
+        .admin-sold-item .player-info { display: flex; gap: 0.3rem; align-items: center; flex: 1; min-width: 0; }
         .admin-sold-item .player-name { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .admin-sold-item .team-name { font-size: 0.65rem; color: var(--primary-light); white-space: nowrap; }
         .admin-sold-item .sold-price { color: var(--accent); font-weight: 700; white-space: nowrap; margin-left: 0.3rem; }
 
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: var(--dark); }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        /* ============ SCROLLBAR ============ */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+        ::selection { background: #f5c518; color: #000; }
     </style>
 </head>
 <body>
