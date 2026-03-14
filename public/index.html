@@ -383,6 +383,44 @@
             font-size: 1rem;
         }
 
+        /* Team bid buttons */
+        .team-bid-btn {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background: var(--card);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .team-bid-btn:hover:not(:disabled) {
+            border-color: var(--accent);
+            background: rgba(255,215,0,0.1);
+        }
+        .team-bid-btn.active-bidder {
+            border-color: var(--success);
+            background: rgba(46,204,113,0.2);
+        }
+        .team-bid-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .team-bid-name { font-weight: 600; }
+        .team-bid-budget { color: var(--accent); font-size: 0.9rem; }
+        .team-bid-action {
+            background: var(--primary);
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .team-bid-btn.active-bidder .team-bid-action {
+            background: var(--success);
+        }
+
         .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .btn-group .btn { flex: 1; min-width: 100px; }
 
@@ -672,24 +710,30 @@
                     </div>
 
                     <div class="card" style="margin-bottom: 1rem;">
-                        <h3 class="card-title">Bid Controls</h3>
+                        <h3 class="card-title">Bidding Panel</h3>
                         <div class="bid-controls">
-                            <div class="form-group">
-                                <label>Current Bid (Cr) <span id="step-indicator" style="color: var(--accent); font-size: 0.85rem;">(Step: 10L)</span></label>
-                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <!-- Current Bid Display -->
+                            <div style="text-align: center; margin-bottom: 1rem; padding: 1rem; background: rgba(255,215,0,0.1); border-radius: 10px;">
+                                <div style="font-size: 0.9rem; color: rgba(255,255,255,0.7);">Current Bid <span id="step-indicator" style="color: var(--accent);">(Step: 10L)</span></div>
+                                <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 0.5rem;">
                                     <button class="btn btn-danger" onclick="decrementBid()" style="padding: 0.5rem 1rem; font-size: 1.5rem; font-weight: bold;">−</button>
-                                    <input type="number" id="bid-amount" step="0.1" min="0" style="flex: 1; text-align: center; font-size: 1.3rem; font-weight: bold;">
+                                    <div id="current-bid-display" style="font-size: 2.5rem; font-weight: 700; color: var(--accent);">0.20 Cr</div>
                                     <button class="btn btn-success" onclick="incrementBid()" style="padding: 0.5rem 1rem; font-size: 1.5rem; font-weight: bold;">+</button>
                                 </div>
+                                <div id="current-bidder-display" style="font-size: 1.2rem; color: white; margin-top: 0.5rem;">No bids yet</div>
+                                <input type="hidden" id="bid-amount" value="0.2">
                             </div>
-                            <div class="form-group">
-                                <label>Bidding Team</label>
-                                <select id="bid-team"></select>
+
+                            <!-- Team Bid Buttons -->
+                            <div style="margin-bottom: 1rem;">
+                                <div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 0.5rem;">Click team to place bid:</div>
+                                <div id="team-bid-buttons" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
                             </div>
-                            <div class="btn-group">
-                                <button class="btn btn-warning" onclick="updateBid()">Update Bid</button>
-                                <button class="btn btn-success" onclick="markSold()">SOLD!</button>
-                                <button class="btn btn-danger" onclick="markUnsold()">Unsold</button>
+
+                            <!-- SOLD / UNSOLD Buttons -->
+                            <div style="display: flex; gap: 1rem;">
+                                <button class="btn btn-success" onclick="markSold()" style="flex: 1; padding: 1rem; font-size: 1.3rem; font-weight: bold;">SOLD!</button>
+                                <button class="btn btn-danger" onclick="markUnsold()" style="flex: 1; padding: 1rem; font-size: 1.3rem; font-weight: bold;">UNSOLD</button>
                             </div>
                         </div>
                     </div>
@@ -913,6 +957,16 @@
             document.querySelectorAll('.team-item').forEach(item => {
                 item.classList.toggle('current-bidder', auctionState.currentBidder && item.dataset.id == auctionState.currentBidder.id);
             });
+
+            // Update current bid display
+            document.getElementById('current-bid-display').textContent = formatPrice(auctionState.currentBid);
+            document.getElementById('current-bidder-display').textContent = auctionState.currentBidder?.name || 'No bids yet';
+            document.getElementById('bid-amount').value = auctionState.currentBid;
+
+            // Highlight current bidder in team buttons
+            document.querySelectorAll('.team-bid-btn').forEach(btn => {
+                btn.classList.toggle('active-bidder', auctionState.currentBidder && btn.dataset.teamId == auctionState.currentBidder.id);
+            });
         }
 
         function renderTeams() {
@@ -934,9 +988,24 @@
 
             document.getElementById('teams-display').innerHTML = html || '<p style="color: var(--text-secondary);">No teams yet</p>';
 
-            const select = document.getElementById('bid-team');
-            select.innerHTML = '<option value="">Select Team</option>' +
-                state.teams.map(t => `<option value="${t.id}">${t.name} (${t.budget.toFixed(2)} Cr)</option>`).join('');
+            // Render team bid buttons
+            const currentBid = parseFloat(document.getElementById('bid-amount').value) || 0.2;
+            const nextBid = currentBid + getBidStep(currentBid);
+            const bidBtnsHtml = state.teams.map(t => {
+                const canAfford = t.budget >= nextBid;
+                const isCurrentBidder = state.auctionState?.currentBidder?.id === t.id;
+                return `
+                    <button class="team-bid-btn ${isCurrentBidder ? 'active-bidder' : ''} ${!canAfford ? 'disabled' : ''}"
+                            data-team-id="${t.id}"
+                            onclick="teamBid(${t.id})"
+                            ${!canAfford ? 'disabled' : ''}>
+                        <span class="team-bid-name">${t.name}</span>
+                        <span class="team-bid-budget">${t.budget.toFixed(2)} Cr</span>
+                        <span class="team-bid-action">${isCurrentBidder ? '✓ Leading' : '+ Bid'}</span>
+                    </button>
+                `;
+            }).join('');
+            document.getElementById('team-bid-buttons').innerHTML = bidBtnsHtml || '<p style="color: var(--text-secondary);">No teams created yet</p>';
 
             const mgmtHtml = state.teams.map(t => `
                 <div class="team-management-item">
@@ -1166,11 +1235,37 @@
             updateStepIndicator();
         }
 
-        function updateBid() {
-            const amount = parseFloat(document.getElementById('bid-amount').value);
-            const teamId = parseInt(document.getElementById('bid-team').value);
-            if (amount && teamId) socket.emit('updateBid', { amount, teamId });
+        // Team bid button click - auto increment and set bidder
+        function teamBid(teamId) {
+            const team = state.teams.find(t => t.id === teamId);
+            if (!team) return;
+
+            let currentBid = parseFloat(document.getElementById('bid-amount').value) || 0.2;
+            let newBid = currentBid;
+
+            // If same team clicking again, don't increment (they're already leading)
+            const isCurrentBidder = state.auctionState?.currentBidder?.id === teamId;
+            if (!isCurrentBidder) {
+                // Different team bidding - increment the bid
+                newBid = currentBid + getBidStep(currentBid);
+            }
+
+            // Check if team can afford
+            if (team.budget < newBid) {
+                alert(`${team.name} cannot afford ${formatPrice(newBid)}. Budget: ${formatPrice(team.budget)}`);
+                return;
+            }
+
+            // Update bid amount display
+            document.getElementById('bid-amount').value = newBid;
+            document.getElementById('current-bid-display').textContent = formatPrice(newBid);
             updateStepIndicator();
+
+            // Emit to server
+            socket.emit('updateBid', { amount: newBid, teamId: teamId });
+
+            // Update button states
+            renderTeams();
         }
 
         function markSold() { socket.emit('markSold'); }
