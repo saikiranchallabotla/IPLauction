@@ -422,8 +422,20 @@
         .team-spent { font-size: 0.75rem; color: var(--danger); }
 
         /* ============ ADMIN ============ */
-        .admin-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem; padding: 1rem; }
+        .admin-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; padding: 1rem; }
         .admin-right-panel { display: flex; flex-direction: column; gap: 0.5rem; }
+        .admin-sold-panel { display: flex; flex-direction: column; gap: 0; max-height: calc(100vh - 80px); }
+        .admin-sold-panel .sold-panel-header {
+            padding: 0.8rem 1rem; background: linear-gradient(135deg, #0d1226, #1a237e);
+            border-bottom: 1px solid rgba(245, 197, 24, 0.15); border-radius: 12px 12px 0 0;
+        }
+        .admin-sold-panel .sold-panel-header h3 {
+            color: var(--accent); font-size: 0.95rem; font-weight: 700; margin: 0;
+        }
+        .admin-sold-panel .sold-panel-body {
+            flex: 1; overflow-y: auto; background: var(--glass);
+            border-radius: 0 0 12px 12px; border: 1px solid var(--glass-border); border-top: none;
+        }
         .players-list { max-height: 500px; overflow-y: auto; }
 
         .player-item {
@@ -628,34 +640,7 @@
         }
         .auction-popup .popup-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 20px var(--warning-glow); }
 
-        /* ============ SOLD PLAYERS SLIDE-OUT ============ */
-        .sold-list-overlay {
-            display: none; position: fixed; top: 0; right: 0;
-            width: 520px; height: 100%;
-            background: var(--card-solid);
-            box-shadow: -5px 0 40px rgba(0,0,0,0.6);
-            z-index: 2500; flex-direction: column;
-            animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-            border-left: 1px solid var(--border-light);
-        }
-        .sold-list-overlay.active { display: flex; }
-        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        .sold-list-header {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 1.2rem 1.4rem;
-            background: linear-gradient(135deg, #0d1226, #1a237e);
-            border-bottom: 1px solid rgba(245, 197, 24, 0.15);
-        }
-        .sold-list-header h3 { color: var(--accent); font-size: 1.05rem; font-weight: 700; }
-        .sold-list-header .close-btn {
-            background: none; border: none; color: rgba(255,255,255,0.7);
-            font-size: 1.5rem; cursor: pointer; padding: 0.2rem 0.5rem;
-            border-radius: 8px; transition: all 0.2s ease;
-        }
-        .sold-list-header .close-btn:hover { background: rgba(255,255,255,0.1); color: white; }
-        .sold-list-body { flex: 1; overflow-y: auto; padding: 0; }
-
-        /* Sold Table */
+        /* ============ SOLD PLAYERS TABLE ============ */
         .sold-table {
             width: 100%; border-collapse: collapse; font-size: 0.82rem;
         }
@@ -670,10 +655,10 @@
             border-bottom: 1px solid rgba(245, 197, 24, 0.2);
             white-space: nowrap;
         }
-        .sold-table th:first-child { text-align: center; width: 40px; }
+        .sold-table th:first-child { text-align: center; width: 35px; }
         .sold-table th:last-child { text-align: right; }
         .sold-table td {
-            padding: 0.5rem 0.6rem;
+            padding: 0.45rem 0.6rem;
             border-bottom: 1px solid rgba(255,255,255,0.04);
             color: var(--text); vertical-align: middle;
         }
@@ -687,32 +672,12 @@
         }
         .sold-table .buyer-name { color: #81d4fa; font-weight: 600; }
 
-        .sold-list-backdrop {
-            display: none; position: fixed; top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.4); backdrop-filter: blur(2px);
-            z-index: 2499;
-        }
-        .sold-list-backdrop.active { display: block; }
-
-        .btn-sold-toggle {
-            background: linear-gradient(135deg, #00c853, #00e676); color: #000;
-            border: none; padding: 0.55rem 1rem; border-radius: 10px;
-            cursor: pointer; font-weight: 700; font-size: 0.88rem;
-            display: flex; align-items: center; gap: 0.5rem;
-            width: 100%; justify-content: center;
-            transition: all 0.25s ease; font-family: 'Outfit', sans-serif;
-            box-shadow: 0 2px 10px var(--success-glow);
-        }
-        .btn-sold-toggle:hover { transform: translateY(-2px); box-shadow: 0 4px 20px var(--success-glow); }
-        .btn-sold-toggle .sold-badge { background: rgba(0,0,0,0.2); padding: 0.15rem 0.55rem; border-radius: 12px; font-size: 0.82rem; }
-
         /* ============ RESPONSIVE ============ */
         @media (max-width: 900px) {
             .main-layout { grid-template-columns: 1fr; }
             .admin-grid { grid-template-columns: 1fr; }
             .admin-right-panel { flex-direction: column; }
-            .sold-list-overlay { width: 100%; }
+            .admin-sold-panel { max-height: 400px; }
             .history-stats { grid-template-columns: repeat(2, 1fr); }
             .bid-info { flex-direction: column; gap: 1rem; }
             .landing-logo { font-size: 2rem; }
@@ -967,12 +932,30 @@
                     <div class="card" style="margin-bottom: 0;">
                         <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Teams Overview</h3>
                         <div id="team-management-list" style="max-height: 120px; overflow-y: auto;"></div>
-                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                            <button class="btn-sold-toggle" onclick="toggleSoldList()">
-                                Sold Players <span class="sold-badge" id="admin-sold-count">0</span>
-                            </button>
-                            <button class="btn btn-danger" style="flex: 1; padding: 0.4rem; font-size: 0.85rem;" onclick="resetAuction()">Reset Auction</button>
+                        <div style="margin-top: 0.5rem;">
+                            <button class="btn btn-danger" style="width: 100%; padding: 0.4rem; font-size: 0.85rem;" onclick="resetAuction()">Reset Auction</button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Pane 3: Sold Players -->
+                <div class="admin-sold-panel">
+                    <div class="sold-panel-header">
+                        <h3>Players Sold (<span id="admin-sold-count">0</span>)</h3>
+                    </div>
+                    <div class="sold-panel-body">
+                        <table class="sold-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Player</th>
+                                    <th>IPL Team</th>
+                                    <th>Bought By</th>
+                                    <th>Price</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sold-table-body"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -1014,29 +997,6 @@
                     <div class="history-list" id="teams-history" style="display: none;"></div>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <!-- Sold Players Slide-out Panel -->
-    <div class="sold-list-backdrop" id="sold-list-backdrop" onclick="toggleSoldList()"></div>
-    <div class="sold-list-overlay" id="sold-list-overlay">
-        <div class="sold-list-header">
-            <h3>Sold Players (<span id="admin-sold-count-overlay">0</span>)</h3>
-            <button class="close-btn" onclick="toggleSoldList()">✕</button>
-        </div>
-        <div class="sold-list-body" id="admin-sold-list">
-            <table class="sold-table">
-                <thead>
-                    <tr>
-                        <th>S.No</th>
-                        <th>Player Name</th>
-                        <th>IPL Team</th>
-                        <th>Bought By</th>
-                        <th>Amount</th>
-                    </tr>
-                </thead>
-                <tbody id="sold-table-body"></tbody>
-            </table>
         </div>
     </div>
 
@@ -1537,11 +1497,9 @@
         function renderAdminSoldList() {
             const soldPlayers = (state.auctionState || {}).soldPlayers || [];
             const countEl = document.getElementById('admin-sold-count');
-            const countOverlay = document.getElementById('admin-sold-count-overlay');
             const tbody = document.getElementById('sold-table-body');
 
             if (countEl) countEl.textContent = soldPlayers.length;
-            if (countOverlay) countOverlay.textContent = soldPlayers.length;
 
             if (tbody) {
                 if (soldPlayers.length === 0) {
@@ -1558,14 +1516,6 @@
                     `).join('');
                 }
             }
-        }
-
-        function toggleSoldList() {
-            const overlay = document.getElementById('sold-list-overlay');
-            const backdrop = document.getElementById('sold-list-backdrop');
-            const isOpen = overlay.classList.contains('active');
-            overlay.classList.toggle('active', !isOpen);
-            backdrop.classList.toggle('active', !isOpen);
         }
 
         function selectPlayer(id) {
