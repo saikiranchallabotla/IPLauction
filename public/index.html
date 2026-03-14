@@ -1570,12 +1570,14 @@
             let currentBid = parseFloat(document.getElementById('bid-amount').value) || 0.2;
             let newBid = currentBid;
 
-            // If same team clicking again, don't increment (they're already leading)
             const isCurrentBidder = state.auctionState?.currentBidder?.id === teamId;
-            if (!isCurrentBidder) {
-                // Different team bidding - increment the bid
+            const hasAnyBidder = !!state.auctionState?.currentBidder;
+
+            if (!isCurrentBidder && hasAnyBidder) {
+                // Different team outbidding - increment the bid
                 newBid = currentBid + getBidStep(currentBid);
             }
+            // If no one has bid yet (first bid) or same team clicking again, keep currentBid as is
 
             // Check if team can afford
             if (budget < newBid) {
