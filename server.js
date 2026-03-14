@@ -12,47 +12,101 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============ DATA STORE (In-Memory) ============
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ipl2026';
 const INITIAL_BUDGET = 100;
 
-let teams = [];
-let players = [];
-let auctionState = {
-    status: 'waiting', // waiting, bidding, sold, unsold, paused
-    currentPlayer: null,
-    currentBid: 0,
-    currentBidder: null,
-    soldPlayers: [],
-    unsoldPlayers: []
-};
+// Store multiple auction rooms
+const rooms = new Map();
 
-// Initialize players from data
+// Load players data
 const playersData = require('./data/players.json');
-players = playersData.map((p, index) => ({
-    id: index + 1,
-    ...p,
-    status: 'available' // available, sold, unsold
-}));
+
+// Generate random 6-character room code
+function generateRoomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+}
+
+// Create a new room with fresh player data
+function createRoom(code) {
+    const players = playersData.map((p, index) => ({
+        id: index + 1,
+        ...p,
+        status: 'available'
+    }));
+
+    rooms.set(code, {
+        code,
+        createdAt: Date.now(),
+        teams: [],
+        players,
+        auctionState: {
+            status: 'waiting',
+            currentPlayer: null,
+            currentBid: 0,
+            currentBidder: null,
+            soldPlayers: [],
+            unsoldPlayers: []
+        }
+    });
+
+    return rooms.get(code);
+}
+
+// Get room or return null
+function getRoom(code) {
+    return rooms.get(code?.toUpperCase()) || null;
+}
 
 // ============ REST API ============
 
-// Get all data for initial load
-app.get('/api/data', (req, res) => {
+// Create a new auction room
+app.post('/api/room/create', (req, res) => {
+    let code = generateRoomCode();
+    // Make sure code is unique
+    while (rooms.has(code)) {
+        code = generateRoomCode();
+    }
+    createRoom(code);
+    console.log(`Room created: ${code}`);
+    res.json({ code });
+});
+
+// Join an existing room
+app.post('/api/room/join', (req, res) => {
+    const { code } = req.body;
+    const room = getRoom(code);
+    if (room) {
+        res.json({ success: true, code: room.code });
+    } else {
+        res.status(404).json({ error: 'Room not found. Check the code and try again.' });
+    }
+});
+
+// Get room data
+app.get('/api/room/:code/data', (req, res) => {
+    const room = getRoom(req.params.code);
+    if (!room) {
+        return res.status(404).json({ error: 'Room not found' });
+    }
     res.json({
-        teams,
-        players,
-        auctionState,
+        teams: room.teams,
+        players: room.players,
+        auctionState: room.auctionState,
         config: { initialBudget: INITIAL_BUDGET }
     });
 });
 
-// Admin login (no password required)
-app.post('/api/admin/login', (req, res) => {
-    res.json({ success: true });
-});
+// Create team in room
+app.post('/api/room/:code/teams', (req, res) => {
+    const room = getRoom(req.params.code);
+    if (!room) {
+        return res.status(404).json({ error: 'Room not found' });
+    }
 
-// Create team (admin only)
-app.post('/api/teams', (req, res) => {
     const { name, ownerName } = req.body;
     if (!name) {
         return res.status(400).json({ error: 'Team name required' });
@@ -66,49 +120,59 @@ app.post('/api/teams', (req, res) => {
         players: []
     };
 
-    teams.push(team);
-    io.emit('teamsUpdated', teams);
+    room.teams.push(team);
+    io.to(room.code).emit('teamsUpdated', room.teams);
     res.json(team);
 });
 
-// Update player base price
-app.post('/api/players/:id/price', (req, res) => {
+// Update player base price in room
+app.post('/api/room/:code/players/:id/price', (req, res) => {
+    const room = getRoom(req.params.code);
+    if (!room) {
+        return res.status(404).json({ error: 'Room not found' });
+    }
+
     const id = parseInt(req.params.id);
     const { basePrice } = req.body;
 
-    const playerIndex = players.findIndex(p => p.id === id);
+    const playerIndex = room.players.findIndex(p => p.id === id);
     if (playerIndex !== -1) {
-        players[playerIndex].basePrice = basePrice;
-        io.emit('playersUpdated', players);
+        room.players[playerIndex].basePrice = basePrice;
+        io.to(room.code).emit('playersUpdated', room.players);
         res.json({ success: true });
     } else {
         res.status(404).json({ error: 'Player not found' });
     }
 });
 
-// Get all players
-app.get('/api/players', (req, res) => {
-    res.json(players);
-});
+// Delete team from room
+app.delete('/api/room/:code/teams/:id', (req, res) => {
+    const room = getRoom(req.params.code);
+    if (!room) {
+        return res.status(404).json({ error: 'Room not found' });
+    }
 
-// Delete team
-app.delete('/api/teams/:id', (req, res) => {
     const id = parseInt(req.params.id);
-    teams = teams.filter(t => t.id !== id);
-    io.emit('teamsUpdated', teams);
+    room.teams = room.teams.filter(t => t.id !== id);
+    io.to(room.code).emit('teamsUpdated', room.teams);
     res.json({ success: true });
 });
 
-// Reset auction
-app.post('/api/reset', (req, res) => {
+// Reset auction in room
+app.post('/api/room/:code/reset', (req, res) => {
+    const room = getRoom(req.params.code);
+    if (!room) {
+        return res.status(404).json({ error: 'Room not found' });
+    }
+
     // Reset all players
-    players = players.map(p => ({ ...p, status: 'available', soldTo: null, soldPrice: null }));
+    room.players = room.players.map(p => ({ ...p, status: 'available', soldTo: null, soldPrice: null }));
 
     // Reset teams
-    teams = teams.map(t => ({ ...t, budget: INITIAL_BUDGET, players: [] }));
+    room.teams = room.teams.map(t => ({ ...t, budget: INITIAL_BUDGET, players: [] }));
 
     // Reset auction state
-    auctionState = {
+    room.auctionState = {
         status: 'waiting',
         currentPlayer: null,
         currentBid: 0,
@@ -117,7 +181,7 @@ app.post('/api/reset', (req, res) => {
         unsoldPlayers: []
     };
 
-    io.emit('fullUpdate', { teams, players, auctionState });
+    io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState });
     res.json({ success: true });
 });
 
@@ -125,103 +189,123 @@ app.post('/api/reset', (req, res) => {
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
-    // Send current state on connect
-    socket.emit('fullUpdate', { teams, players, auctionState });
+    // Join a room
+    socket.on('joinRoom', (code) => {
+        const room = getRoom(code);
+        if (room) {
+            socket.join(room.code);
+            socket.roomCode = room.code;
+            console.log(`Socket ${socket.id} joined room ${room.code}`);
+            socket.emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState });
+        }
+    });
 
     // Admin: Select player for auction
     socket.on('selectPlayer', (playerId) => {
-        const player = players.find(p => p.id === playerId);
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+
+        const player = room.players.find(p => p.id === playerId);
         if (player && player.status === 'available') {
-            auctionState.currentPlayer = player;
-            auctionState.currentBid = player.basePrice;
-            auctionState.currentBidder = null;
-            auctionState.status = 'bidding';
-            io.emit('auctionUpdate', auctionState);
+            room.auctionState.currentPlayer = player;
+            room.auctionState.currentBid = player.basePrice;
+            room.auctionState.currentBidder = null;
+            room.auctionState.status = 'bidding';
+            io.to(room.code).emit('auctionUpdate', room.auctionState);
         }
     });
 
     // Admin: Update bid
     socket.on('updateBid', ({ amount, teamId }) => {
-        const team = teams.find(t => t.id === teamId);
-        if (team && amount <= team.budget && auctionState.status === 'bidding') {
-            auctionState.currentBid = amount;
-            auctionState.currentBidder = team;
-            io.emit('auctionUpdate', auctionState);
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+
+        const team = room.teams.find(t => t.id === teamId);
+        if (team && amount <= team.budget && room.auctionState.status === 'bidding') {
+            room.auctionState.currentBid = amount;
+            room.auctionState.currentBidder = team;
+            io.to(room.code).emit('auctionUpdate', room.auctionState);
         }
     });
 
     // Admin: Mark as sold
     socket.on('markSold', () => {
-        if (auctionState.currentPlayer && auctionState.currentBidder) {
-            const player = auctionState.currentPlayer;
-            const team = auctionState.currentBidder;
-            const price = auctionState.currentBid;
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+
+        if (room.auctionState.currentPlayer && room.auctionState.currentBidder) {
+            const player = room.auctionState.currentPlayer;
+            const team = room.auctionState.currentBidder;
+            const price = room.auctionState.currentBid;
 
             // Update player
-            const playerIndex = players.findIndex(p => p.id === player.id);
-            players[playerIndex].status = 'sold';
-            players[playerIndex].soldTo = team.id;
-            players[playerIndex].soldToName = team.name;
-            players[playerIndex].soldPrice = price;
+            const playerIndex = room.players.findIndex(p => p.id === player.id);
+            room.players[playerIndex].status = 'sold';
+            room.players[playerIndex].soldTo = team.id;
+            room.players[playerIndex].soldToName = team.name;
+            room.players[playerIndex].soldPrice = price;
 
             // Update team
-            const teamIndex = teams.findIndex(t => t.id === team.id);
-            teams[teamIndex].budget -= price;
-            teams[teamIndex].players.push({
-                ...players[playerIndex],
+            const teamIndex = room.teams.findIndex(t => t.id === team.id);
+            room.teams[teamIndex].budget -= price;
+            room.teams[teamIndex].players.push({
+                ...room.players[playerIndex],
                 soldPrice: price
             });
 
             // Update auction state
-            auctionState.soldPlayers.push({
-                ...players[playerIndex],
+            room.auctionState.soldPlayers.push({
+                ...room.players[playerIndex],
                 soldPrice: price,
                 soldToName: team.name
             });
 
-            auctionState.status = 'sold';
+            room.auctionState.status = 'sold';
 
-            io.emit('playerSold', {
-                player: players[playerIndex],
-                team: teams[teamIndex],
+            io.to(room.code).emit('playerSold', {
+                player: room.players[playerIndex],
+                team: room.teams[teamIndex],
                 price
             });
 
-            io.emit('fullUpdate', { teams, players, auctionState });
+            io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState });
 
             // Reset after 3 seconds
             setTimeout(() => {
-                auctionState.status = 'waiting';
-                auctionState.currentPlayer = null;
-                auctionState.currentBid = 0;
-                auctionState.currentBidder = null;
-                io.emit('auctionUpdate', auctionState);
+                room.auctionState.status = 'waiting';
+                room.auctionState.currentPlayer = null;
+                room.auctionState.currentBid = 0;
+                room.auctionState.currentBidder = null;
+                io.to(room.code).emit('auctionUpdate', room.auctionState);
             }, 3000);
         }
     });
 
     // Admin: Mark as unsold
     socket.on('markUnsold', () => {
-        if (auctionState.currentPlayer) {
-            const player = auctionState.currentPlayer;
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+
+        if (room.auctionState.currentPlayer) {
+            const player = room.auctionState.currentPlayer;
 
             // Update player
-            const playerIndex = players.findIndex(p => p.id === player.id);
-            players[playerIndex].status = 'unsold';
+            const playerIndex = room.players.findIndex(p => p.id === player.id);
+            room.players[playerIndex].status = 'unsold';
 
             // Update auction state
-            auctionState.unsoldPlayers.push(players[playerIndex]);
-            auctionState.status = 'unsold';
+            room.auctionState.unsoldPlayers.push(room.players[playerIndex]);
+            room.auctionState.status = 'unsold';
 
-            io.emit('fullUpdate', { teams, players, auctionState });
+            io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState });
 
             // Reset after 2 seconds
             setTimeout(() => {
-                auctionState.status = 'waiting';
-                auctionState.currentPlayer = null;
-                auctionState.currentBid = 0;
-                auctionState.currentBidder = null;
-                io.emit('auctionUpdate', auctionState);
+                room.auctionState.status = 'waiting';
+                room.auctionState.currentPlayer = null;
+                room.auctionState.currentBid = 0;
+                room.auctionState.currentBidder = null;
+                io.to(room.code).emit('auctionUpdate', room.auctionState);
             }, 2000);
         }
     });
@@ -239,7 +323,7 @@ httpServer.listen(PORT, () => {
     ║     IPL 2026 Fantasy Auction          ║
     ║     Server running on port ${PORT}        ║
     ╠═══════════════════════════════════════╣
-    ║  Admin Password: ${ADMIN_PASSWORD.padEnd(20)}║
+    ║  Create/Join rooms with unique codes  ║
     ╚═══════════════════════════════════════╝
 
     Open http://localhost:${PORT} in your browser

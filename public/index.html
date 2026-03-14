@@ -30,6 +30,196 @@
             min-height: 100vh;
         }
 
+        /* Landing Page Styles */
+        .landing-page {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, var(--dark) 0%, #1a1a2e 100%);
+            padding: 2rem;
+        }
+
+        .landing-logo {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            text-align: center;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+        }
+
+        .landing-subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 3rem;
+            font-size: 1.2rem;
+        }
+
+        .landing-card {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 2.5rem;
+            max-width: 450px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        .landing-section {
+            margin-bottom: 2rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .landing-section:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .landing-section h2 {
+            color: var(--accent);
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .landing-section p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .room-code-input {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .room-code-input input {
+            flex: 1;
+            padding: 1rem;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3rem;
+            text-align: center;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            background: var(--dark);
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .room-code-input input:focus {
+            outline: none;
+            border-color: var(--primary-light);
+        }
+
+        .btn-large {
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .btn-large:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+
+        .btn-create {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+        }
+
+        .btn-join {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .room-code-display {
+            display: none;
+            text-align: center;
+            padding: 1.5rem;
+            background: rgba(255, 215, 0, 0.1);
+            border: 2px dashed var(--accent);
+            border-radius: 12px;
+            margin-top: 1rem;
+        }
+
+        .room-code-display.show {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .room-code-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: 0.5rem;
+            color: var(--accent);
+            font-family: monospace;
+        }
+
+        .room-code-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .copy-btn {
+            background: var(--border);
+            color: var(--text);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .copy-btn:hover {
+            background: var(--primary-light);
+        }
+
+        .error-msg {
+            color: var(--danger);
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+            display: none;
+        }
+
+        .error-msg.show {
+            display: block;
+        }
+
+        .enter-btn {
+            margin-top: 1rem;
+            background: var(--success);
+            color: white;
+        }
+
+        /* Room Code Badge in Header */
+        .room-badge {
+            background: rgba(255, 215, 0, 0.2);
+            color: var(--accent);
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-weight: 600;
+            font-family: monospace;
+            letter-spacing: 0.1rem;
+            font-size: 0.9rem;
+        }
+
         .header {
             background: linear-gradient(135deg, var(--primary), var(--primary-light));
             padding: 1rem 2rem;
@@ -39,8 +229,14 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         }
 
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
         .logo { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
-        .nav-btns { display: flex; gap: 0.5rem; }
+        .nav-btns { display: flex; gap: 0.5rem; align-items: center; }
 
         .btn {
             padding: 0.6rem 1.2rem;
@@ -240,19 +436,6 @@
         .category-btn.home { border-left: 4px solid var(--success); }
         .category-btn.overseas { border-left: 4px solid var(--warning); }
 
-        .category-section { margin-bottom: 1.5rem; }
-        .category-title {
-            font-size: 1rem;
-            color: var(--accent);
-            margin-bottom: 0.5rem;
-            padding: 0.5rem;
-            background: rgba(255, 215, 0, 0.1);
-            border-radius: 6px;
-            display: flex;
-            justify-content: space-between;
-        }
-        .category-count { color: var(--text-secondary); font-size: 0.85rem; }
-
         .price-select {
             padding: 0.4rem 0.6rem;
             border: 1px solid var(--border);
@@ -332,13 +515,13 @@
         .sold-content .team { font-size: 1.5rem; color: var(--primary-light); }
         .sold-content .price { font-size: 1.3rem; color: white; }
 
-        .export-btn { margin-top: 1rem; width: 100%; }
-
         @media (max-width: 900px) {
             .main-layout { grid-template-columns: 1fr; }
             .admin-grid { grid-template-columns: 1fr; }
             .history-stats { grid-template-columns: repeat(2, 1fr); }
             .bid-info { flex-direction: column; gap: 1rem; }
+            .landing-logo { font-size: 2rem; }
+            .category-buttons { grid-template-columns: repeat(2, 1fr); }
         }
 
         ::-webkit-scrollbar { width: 8px; }
@@ -347,141 +530,179 @@
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="logo">IPL 2026 Fantasy Auction</div>
-        <div class="nav-btns">
-            <button class="btn btn-secondary" onclick="showView('auction')">Live Auction</button>
-            <button class="btn btn-secondary" onclick="showView('history')">History</button>
-            <button class="btn btn-success" onclick="exportToExcel()">Export Excel</button>
-            <button class="btn btn-primary" onclick="showView('admin')">Admin</button>
-        </div>
-    </header>
+    <!-- Landing Page -->
+    <div id="landing-page" class="landing-page">
+        <h1 class="landing-logo">IPL 2026 Fantasy Auction</h1>
+        <p class="landing-subtitle">Create or join an auction room with friends</p>
 
-    <!-- Auction View -->
-    <div id="auction-view" class="view active">
-        <div class="main-layout">
-            <div>
-                <div class="auction-display" id="auction-display">
-                    <span class="status-badge status-waiting" id="status-badge">Waiting</span>
-                    <div id="auction-content">
-                        <div class="player-name">Waiting for Auction</div>
-                        <div class="player-details">Admin will start the auction shortly</div>
-                    </div>
+        <div class="landing-card">
+            <div class="landing-section">
+                <h2>Create New Auction</h2>
+                <p>Start a new auction room and share the code with your friends</p>
+                <button class="btn-large btn-create" onclick="createRoom()">Create Auction Room</button>
+
+                <div class="room-code-display" id="created-room-display">
+                    <div class="room-code-label">Share this code with friends:</div>
+                    <div class="room-code-value" id="created-room-code"></div>
+                    <button class="copy-btn" onclick="copyRoomCode()">Copy Code</button>
+                    <button class="btn-large enter-btn" onclick="enterRoom()">Enter Auction (Admin)</button>
                 </div>
             </div>
-            <div class="card">
-                <h3 class="card-title">Teams & Budgets</h3>
-                <div class="teams-list" id="teams-display"></div>
+
+            <div class="landing-section">
+                <h2>Join Existing Auction</h2>
+                <p>Enter the 6-character room code shared by the admin</p>
+                <div class="room-code-input">
+                    <input type="text" id="join-code-input" maxlength="6" placeholder="ABCD12" oninput="this.value = this.value.toUpperCase()">
+                    <button class="btn-large btn-join" style="width: auto; padding: 1rem 1.5rem;" onclick="joinRoom()">Join</button>
+                </div>
+                <div class="error-msg" id="join-error"></div>
             </div>
         </div>
     </div>
 
-    <!-- Admin View -->
-    <div id="admin-view" class="view">
-        <div class="admin-grid">
-            <div class="card">
-                <div class="tabs" style="margin-bottom: 1rem;">
-                    <button class="tab active" onclick="showAdminTab('auction', this)">Run Auction</button>
-                    <button class="tab" onclick="showAdminTab('prices', this)">Set Prices</button>
-                </div>
+    <!-- Main App -->
+    <div id="main-app" style="display: none;">
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">IPL 2026 Fantasy Auction</div>
+                <span class="room-badge" id="room-code-badge"></span>
+            </div>
+            <div class="nav-btns">
+                <button class="btn btn-secondary" onclick="showView('auction')">Live Auction</button>
+                <button class="btn btn-secondary" onclick="showView('history')">History</button>
+                <button class="btn btn-success" onclick="exportToExcel()">Export Excel</button>
+                <button class="btn btn-primary" onclick="showView('admin')">Admin</button>
+                <button class="btn btn-danger" onclick="leaveRoom()">Leave</button>
+            </div>
+        </header>
 
-                <div id="admin-auction-tab">
-                    <h3 class="card-title">Select Auction Category</h3>
-                    <div class="category-buttons" id="category-buttons"></div>
-                    <h3 class="card-title" style="margin-top: 1rem;">Players in Category</h3>
-                    <div class="players-list" id="players-list"></div>
-                </div>
-
-                <div id="admin-prices-tab" style="display: none;">
-                    <h3 class="card-title">Set Base Prices for Players</h3>
-                    <div class="filters">
-                        <select id="filter-role-price" onchange="filterPlayersPrice()">
-                            <option value="">All Roles</option>
-                            <option value="Batsman">Batsman</option>
-                            <option value="Bowler">Bowler</option>
-                            <option value="All-rounder">All-rounder</option>
-                            <option value="Wicket-keeper">Wicket-keeper</option>
-                        </select>
-                        <input type="text" id="search-player-price" placeholder="Search..." oninput="filterPlayersPrice()">
+        <!-- Auction View -->
+        <div id="auction-view" class="view active">
+            <div class="main-layout">
+                <div>
+                    <div class="auction-display" id="auction-display">
+                        <span class="status-badge status-waiting" id="status-badge">Waiting</span>
+                        <div id="auction-content">
+                            <div class="player-name">Waiting for Auction</div>
+                            <div class="player-details">Admin will start the auction shortly</div>
+                        </div>
                     </div>
-                    <div class="players-list" id="players-price-list" style="max-height: 500px;"></div>
+                </div>
+                <div class="card">
+                    <h3 class="card-title">Teams & Budgets</h3>
+                    <div class="teams-list" id="teams-display"></div>
                 </div>
             </div>
+        </div>
 
-            <div>
-                <div class="card" style="margin-bottom: 1rem;">
-                    <h3 class="card-title">Current Player</h3>
-                    <div class="auction-display" id="admin-current-player" style="min-height: 200px; padding: 1.5rem;">
-                        <div class="player-name" style="font-size: 1.8rem;">No Player Selected</div>
+        <!-- Admin View -->
+        <div id="admin-view" class="view">
+            <div class="admin-grid">
+                <div class="card">
+                    <div class="tabs" style="margin-bottom: 1rem;">
+                        <button class="tab active" onclick="showAdminTab('auction', this)">Run Auction</button>
+                        <button class="tab" onclick="showAdminTab('prices', this)">Set Prices</button>
+                    </div>
+
+                    <div id="admin-auction-tab">
+                        <h3 class="card-title">Select Auction Category</h3>
+                        <div class="category-buttons" id="category-buttons"></div>
+                        <h3 class="card-title" style="margin-top: 1rem;">Players in Category</h3>
+                        <div class="players-list" id="players-list"></div>
+                    </div>
+
+                    <div id="admin-prices-tab" style="display: none;">
+                        <h3 class="card-title">Set Base Prices for Players</h3>
+                        <div class="filters">
+                            <select id="filter-role-price" onchange="filterPlayersPrice()">
+                                <option value="">All Roles</option>
+                                <option value="Batsman">Batsman</option>
+                                <option value="Bowler">Bowler</option>
+                                <option value="All-rounder">All-rounder</option>
+                                <option value="Wicketkeeper">Wicketkeeper</option>
+                            </select>
+                            <input type="text" id="search-player-price" placeholder="Search..." oninput="filterPlayersPrice()">
+                        </div>
+                        <div class="players-list" id="players-price-list" style="max-height: 500px;"></div>
                     </div>
                 </div>
 
-                <div class="card" style="margin-bottom: 1rem;">
-                    <h3 class="card-title">Bid Controls</h3>
-                    <div class="bid-controls">
-                        <div class="form-group">
-                            <label>Current Bid (Cr)</label>
-                            <input type="number" id="bid-amount" step="0.1" min="0">
+                <div>
+                    <div class="card" style="margin-bottom: 1rem;">
+                        <h3 class="card-title">Current Player</h3>
+                        <div class="auction-display" id="admin-current-player" style="min-height: 200px; padding: 1.5rem;">
+                            <div class="player-name" style="font-size: 1.8rem;">No Player Selected</div>
                         </div>
-                        <div class="form-group">
-                            <label>Bidding Team</label>
-                            <select id="bid-team"></select>
+                    </div>
+
+                    <div class="card" style="margin-bottom: 1rem;">
+                        <h3 class="card-title">Bid Controls</h3>
+                        <div class="bid-controls">
+                            <div class="form-group">
+                                <label>Current Bid (Cr)</label>
+                                <input type="number" id="bid-amount" step="0.1" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label>Bidding Team</label>
+                                <select id="bid-team"></select>
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-warning" onclick="updateBid()">Update Bid</button>
+                                <button class="btn btn-success" onclick="markSold()">SOLD!</button>
+                                <button class="btn btn-danger" onclick="markUnsold()">Unsold</button>
+                            </div>
                         </div>
-                        <div class="btn-group">
-                            <button class="btn btn-warning" onclick="updateBid()">Update Bid</button>
-                            <button class="btn btn-success" onclick="markSold()">SOLD!</button>
-                            <button class="btn btn-danger" onclick="markUnsold()">Unsold</button>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="card-title">Team Management</h3>
+                        <div class="team-form">
+                            <input type="text" id="new-team-name" placeholder="Team name">
+                            <button class="btn btn-primary" onclick="addTeam()">Add Team</button>
                         </div>
+                        <div id="team-management-list"></div>
+                        <button class="btn btn-danger" style="width: 100%; margin-top: 1rem;" onclick="resetAuction()">Reset Auction</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- History View -->
+        <div id="history-view" class="view">
+            <div style="padding: 1.5rem; max-width: 1200px; margin: 0 auto;">
+                <div class="history-stats">
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-sold">0</div>
+                        <div class="stat-label">Players Sold</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-unsold">0</div>
+                        <div class="stat-label">Unsold</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-total">0 Cr</div>
+                        <div class="stat-label">Total Spent</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-highest">0 Cr</div>
+                        <div class="stat-label">Highest Bid</div>
                     </div>
                 </div>
 
                 <div class="card">
-                    <h3 class="card-title">Team Management</h3>
-                    <div class="team-form">
-                        <input type="text" id="new-team-name" placeholder="Team name">
-                        <button class="btn btn-primary" onclick="addTeam()">Add Team</button>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <div class="tabs" style="margin-bottom: 0;">
+                            <button class="tab active" onclick="showHistoryTab('sold', this)">Sold Players</button>
+                            <button class="tab" onclick="showHistoryTab('unsold', this)">Unsold Players</button>
+                            <button class="tab" onclick="showHistoryTab('teams', this)">Team Squads</button>
+                        </div>
+                        <button class="btn btn-success" onclick="exportToExcel()">Export Excel</button>
                     </div>
-                    <div id="team-management-list"></div>
-                    <button class="btn btn-danger" style="width: 100%; margin-top: 1rem;" onclick="resetAuction()">Reset Auction</button>
+                    <div class="history-list" id="sold-history"></div>
+                    <div class="history-list" id="unsold-history" style="display: none;"></div>
+                    <div class="history-list" id="teams-history" style="display: none;"></div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- History View -->
-    <div id="history-view" class="view">
-        <div style="padding: 1.5rem; max-width: 1200px; margin: 0 auto;">
-            <div class="history-stats">
-                <div class="stat-box">
-                    <div class="stat-value" id="stat-sold">0</div>
-                    <div class="stat-label">Players Sold</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="stat-unsold">0</div>
-                    <div class="stat-label">Unsold</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="stat-total">0 Cr</div>
-                    <div class="stat-label">Total Spent</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="stat-highest">0 Cr</div>
-                    <div class="stat-label">Highest Bid</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <div class="tabs" style="margin-bottom: 0;">
-                        <button class="tab active" onclick="showHistoryTab('sold', this)">Sold Players</button>
-                        <button class="tab" onclick="showHistoryTab('unsold', this)">Unsold Players</button>
-                        <button class="tab" onclick="showHistoryTab('teams', this)">Team Squads</button>
-                    </div>
-                    <button class="btn btn-success" onclick="exportToExcel()">Export Excel</button>
-                </div>
-                <div class="history-list" id="sold-history"></div>
-                <div class="history-list" id="unsold-history" style="display: none;"></div>
-                <div class="history-list" id="teams-history" style="display: none;"></div>
             </div>
         </div>
     </div>
@@ -497,10 +718,11 @@
     </div>
 
     <script>
-        const socket = io();
+        let socket = null;
         let state = { teams: [], players: [], auctionState: {} };
         let selectedPlayer = null;
         let currentCategory = '2cr-home';
+        let roomCode = null;
 
         const PRICE_CATEGORIES = [
             { key: '2cr-home', label: '2 Cr HOME', price: 2, country: 'India' },
@@ -513,12 +735,98 @@
             { key: '20l-overseas', label: '20L OVERSEAS', price: 0.2, country: 'overseas' },
         ];
 
-        socket.on('fullUpdate', (data) => { state = data; renderAll(); });
-        socket.on('auctionUpdate', (auctionState) => { state.auctionState = auctionState; renderAuction(); });
-        socket.on('teamsUpdated', (teams) => { state.teams = teams; renderTeams(); });
-        socket.on('playerSold', ({ player, team, price }) => showSoldOverlay(player, team, price));
-        socket.on('playersUpdated', (players) => { state.players = players; renderPlayers(); renderPlayersPrice(); });
+        // ============ ROOM MANAGEMENT ============
+        async function createRoom() {
+            try {
+                const res = await fetch('/api/room/create', { method: 'POST' });
+                const data = await res.json();
+                roomCode = data.code;
+                document.getElementById('created-room-code').textContent = data.code;
+                document.getElementById('created-room-display').classList.add('show');
+            } catch (err) {
+                alert('Failed to create room. Please try again.');
+            }
+        }
 
+        async function joinRoom() {
+            const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+            if (code.length !== 6) {
+                showJoinError('Please enter a 6-character code');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/room/join', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    roomCode = data.code;
+                    enterAuction();
+                } else {
+                    const err = await res.json();
+                    showJoinError(err.error);
+                }
+            } catch (err) {
+                showJoinError('Connection failed. Please try again.');
+            }
+        }
+
+        function showJoinError(msg) {
+            const el = document.getElementById('join-error');
+            el.textContent = msg;
+            el.classList.add('show');
+            setTimeout(() => el.classList.remove('show'), 3000);
+        }
+
+        function copyRoomCode() {
+            navigator.clipboard.writeText(roomCode).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy Code', 2000);
+            });
+        }
+
+        function enterRoom() {
+            if (roomCode) {
+                enterAuction();
+            }
+        }
+
+        function enterAuction() {
+            // Hide landing, show app
+            document.getElementById('landing-page').style.display = 'none';
+            document.getElementById('main-app').style.display = 'block';
+            document.getElementById('room-code-badge').textContent = 'Room: ' + roomCode;
+
+            // Initialize socket and join room
+            socket = io();
+            socket.on('connect', () => {
+                socket.emit('joinRoom', roomCode);
+            });
+
+            socket.on('fullUpdate', (data) => { state = data; renderAll(); });
+            socket.on('auctionUpdate', (auctionState) => { state.auctionState = auctionState; renderAuction(); });
+            socket.on('teamsUpdated', (teams) => { state.teams = teams; renderTeams(); });
+            socket.on('playerSold', ({ player, team, price }) => showSoldOverlay(player, team, price));
+            socket.on('playersUpdated', (players) => { state.players = players; renderPlayers(); renderPlayersPrice(); });
+        }
+
+        function leaveRoom() {
+            if (confirm('Leave this auction room?')) {
+                if (socket) socket.disconnect();
+                roomCode = null;
+                document.getElementById('main-app').style.display = 'none';
+                document.getElementById('landing-page').style.display = 'flex';
+                document.getElementById('created-room-display').classList.remove('show');
+                document.getElementById('join-code-input').value = '';
+            }
+        }
+
+        // ============ RENDERING ============
         function renderAll() {
             renderAuction();
             renderTeams();
@@ -697,7 +1005,7 @@
         function filterPlayersPrice() { renderPlayersPrice(); }
 
         function updatePlayerPrice(playerId, price) {
-            fetch('/api/players/' + playerId + '/price', {
+            fetch('/api/room/' + roomCode + '/players/' + playerId + '/price', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ basePrice: parseFloat(price) })
@@ -784,17 +1092,17 @@
         function addTeam() {
             const name = document.getElementById('new-team-name').value.trim();
             if (name) {
-                fetch('/api/teams', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+                fetch('/api/room/' + roomCode + '/teams', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
                 document.getElementById('new-team-name').value = '';
             }
         }
 
         function deleteTeam(id) {
-            if (confirm('Delete this team?')) fetch('/api/teams/' + id, { method: 'DELETE' });
+            if (confirm('Delete this team?')) fetch('/api/room/' + roomCode + '/teams/' + id, { method: 'DELETE' });
         }
 
         function resetAuction() {
-            if (confirm('Reset entire auction?')) fetch('/api/reset', { method: 'POST' });
+            if (confirm('Reset entire auction?')) fetch('/api/room/' + roomCode + '/reset', { method: 'POST' });
         }
 
         function showView(view) {
@@ -867,8 +1175,13 @@
                 }
             });
 
-            XLSX.writeFile(wb, 'IPL_Auction_Results.xlsx');
+            XLSX.writeFile(wb, 'IPL_Auction_' + roomCode + '.xlsx');
         }
+
+        // Handle Enter key for join code
+        document.getElementById('join-code-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') joinRoom();
+        });
     </script>
 </body>
 </html>
