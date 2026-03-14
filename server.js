@@ -2,6 +2,7 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const httpServer = createServer(app);
@@ -11,15 +12,72 @@ const io = new Server(httpServer);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ============ DATA STORE (In-Memory) ============
+// ============ DATA STORE (Persistent) ============
 const INITIAL_BUDGET = 100;
+const ROOMS_FILE = path.join(__dirname, 'data', 'rooms.json');
 
 // Store multiple auction rooms
-const rooms = new Map();
+let rooms = new Map();
 
 // Load players data
 const playersData = require('./data/players.json');
 console.log(`Loaded ${playersData.length} players from players.json`);
+
+// ============ PERSISTENCE FUNCTIONS ============
+
+// Save rooms to file
+function saveRooms() {
+    try {
+        // Convert Map to array of [key, value] pairs for JSON serialization
+        const roomsArray = Array.from(rooms.entries());
+        fs.writeFileSync(ROOMS_FILE, JSON.stringify(roomsArray, null, 2));
+        console.log(`Saved ${rooms.size} rooms to disk`);
+    } catch (err) {
+        console.error('Error saving rooms:', err);
+    }
+}
+
+// Load rooms from file
+function loadRooms() {
+    try {
+        // Ensure data directory exists
+        const dataDir = path.dirname(ROOMS_FILE);
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+
+        // Create rooms file if it doesn't exist
+        if (!fs.existsSync(ROOMS_FILE)) {
+            fs.writeFileSync(ROOMS_FILE, '[]');
+            console.log('Created new rooms.json file');
+        }
+
+        const data = fs.readFileSync(ROOMS_FILE, 'utf8');
+        const roomsArray = JSON.parse(data);
+        rooms = new Map(roomsArray);
+        console.log(`Loaded ${rooms.size} rooms from disk`);
+
+        // Clean up old rooms (older than 7 days)
+        const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        let cleaned = 0;
+        for (const [code, room] of rooms) {
+            if (room.createdAt < weekAgo) {
+                rooms.delete(code);
+                cleaned++;
+            }
+        }
+        if (cleaned > 0) {
+            console.log(`Cleaned up ${cleaned} old rooms`);
+            saveRooms();
+        }
+    } catch (err) {
+        console.error('Error loading rooms:', err);
+        rooms = new Map();
+    }
+}
+
+// Load existing rooms on startup
+loadRooms();
 
 // Generate random 6-character room code
 function generateRoomCode() {
@@ -54,6 +112,7 @@ function createRoom(code) {
         }
     });
 
+    saveRooms(); // Save immediately after creating room
     return rooms.get(code);
 }
 
@@ -130,6 +189,7 @@ app.post('/api/room/:code/teams', (req, res) => {
         };
 
         room.teams.push(team);
+        saveRooms(); // Save after team creation
         console.log(`Team "${team.name}" added to room ${room.code}. Total teams: ${room.teams.length}`);
         io.to(room.code).emit('teamsUpdated', room.teams);
         res.json(team);
@@ -152,6 +212,7 @@ app.post('/api/room/:code/players/:id/price', (req, res) => {
     const playerIndex = room.players.findIndex(p => p.id === id);
     if (playerIndex !== -1) {
         room.players[playerIndex].basePrice = basePrice;
+        saveRooms(); // Save after price update
         io.to(room.code).emit('playersUpdated', room.players);
         res.json({ success: true });
     } else {
@@ -168,6 +229,7 @@ app.delete('/api/room/:code/teams/:id', (req, res) => {
 
     const id = parseInt(req.params.id);
     room.teams = room.teams.filter(t => t.id !== id);
+    saveRooms(); // Save after team deletion
     io.to(room.code).emit('teamsUpdated', room.teams);
     res.json({ success: true });
 });
@@ -195,6 +257,7 @@ app.post('/api/room/:code/reset', (req, res) => {
         unsoldPlayers: []
     };
 
+    saveRooms(); // Save after reset
     io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
     res.json({ success: true });
 });
@@ -230,6 +293,7 @@ io.on('connection', (socket) => {
             room.auctionState.currentBid = player.basePrice;
             room.auctionState.currentBidder = null;
             room.auctionState.status = 'bidding';
+            saveRooms(); // Save when player selected
             io.to(room.code).emit('auctionUpdate', room.auctionState);
         }
     });
@@ -243,6 +307,7 @@ io.on('connection', (socket) => {
         if (team && amount <= team.budget && room.auctionState.status === 'bidding') {
             room.auctionState.currentBid = amount;
             room.auctionState.currentBidder = team;
+            saveRooms(); // Save after each bid
             io.to(room.code).emit('auctionUpdate', room.auctionState);
         }
     });
@@ -281,6 +346,8 @@ io.on('connection', (socket) => {
 
             room.auctionState.status = 'sold';
 
+            saveRooms(); // Save immediately after sale
+
             io.to(room.code).emit('playerSold', {
                 player: room.players[playerIndex],
                 team: room.teams[teamIndex],
@@ -295,6 +362,7 @@ io.on('connection', (socket) => {
                 room.auctionState.currentPlayer = null;
                 room.auctionState.currentBid = 0;
                 room.auctionState.currentBidder = null;
+                saveRooms();
                 io.to(room.code).emit('auctionUpdate', room.auctionState);
             }, 3000);
         }
@@ -316,6 +384,8 @@ io.on('connection', (socket) => {
             room.auctionState.unsoldPlayers.push(room.players[playerIndex]);
             room.auctionState.status = 'unsold';
 
+            saveRooms(); // Save immediately after unsold
+
             io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
 
             // Reset after 2 seconds
@@ -324,6 +394,7 @@ io.on('connection', (socket) => {
                 room.auctionState.currentPlayer = null;
                 room.auctionState.currentBid = 0;
                 room.auctionState.currentBidder = null;
+                saveRooms();
                 io.to(room.code).emit('auctionUpdate', room.auctionState);
             }, 2000);
         }
@@ -342,7 +413,8 @@ httpServer.listen(PORT, () => {
     ║     IPL 2026 Fantasy Auction          ║
     ║     Server running on port ${PORT}        ║
     ╠═══════════════════════════════════════╣
-    ║  Create/Join rooms with unique codes  ║
+    ║  Rooms persist across server restarts ║
+    ║  Data saved to: data/rooms.json       ║
     ╚═══════════════════════════════════════╝
 
     Open http://localhost:${PORT} in your browser
