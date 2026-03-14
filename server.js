@@ -71,6 +71,26 @@ app.post('/api/teams', (req, res) => {
     res.json(team);
 });
 
+// Update player base price
+app.post('/api/players/:id/price', (req, res) => {
+    const id = parseInt(req.params.id);
+    const { basePrice } = req.body;
+
+    const playerIndex = players.findIndex(p => p.id === id);
+    if (playerIndex !== -1) {
+        players[playerIndex].basePrice = basePrice;
+        io.emit('playersUpdated', players);
+        res.json({ success: true });
+    } else {
+        res.status(404).json({ error: 'Player not found' });
+    }
+});
+
+// Get all players
+app.get('/api/players', (req, res) => {
+    res.json(players);
+});
+
 // Delete team
 app.delete('/api/teams/:id', (req, res) => {
     const id = parseInt(req.params.id);

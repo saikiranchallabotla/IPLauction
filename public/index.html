@@ -439,6 +439,44 @@
 
         .tab.active { background: var(--primary-light); color: white; }
 
+        /* Price dropdown in player list */
+        .price-select {
+            padding: 0.4rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--card);
+            color: var(--accent);
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .player-item-admin {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.6rem 0.75rem;
+            background: var(--dark);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            gap: 0.5rem;
+        }
+
+        .player-item-admin .player-info { flex: 1; }
+        .player-item-admin .ipl-team {
+            font-size: 0.75rem;
+            color: var(--warning);
+            font-weight: 500;
+        }
+
+        .ipl-team-badge {
+            background: rgba(255, 111, 0, 0.2);
+            color: var(--warning);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
         /* Responsive */
         @media (max-width: 900px) {
             .main-layout { grid-template-columns: 1fr; }
@@ -488,23 +526,47 @@
         <div class="admin-grid">
             <!-- Left: Player Selection -->
             <div class="card">
-                <h3 class="card-title">Select Player</h3>
-                <div class="filters">
-                    <select id="filter-role" onchange="filterPlayers()">
-                        <option value="">All Roles</option>
-                        <option value="Batsman">Batsman</option>
-                        <option value="Bowler">Bowler</option>
-                        <option value="All-rounder">All-rounder</option>
-                        <option value="Wicket-keeper">Wicket-keeper</option>
-                    </select>
-                    <select id="filter-country" onchange="filterPlayers()">
-                        <option value="">All Countries</option>
-                        <option value="India">India</option>
-                        <option value="overseas">Overseas</option>
-                    </select>
-                    <input type="text" id="search-player" placeholder="Search..." oninput="filterPlayers()">
+                <div class="tabs" style="margin-bottom: 1rem;">
+                    <button class="tab active" onclick="showAdminTab('auction', this)">Run Auction</button>
+                    <button class="tab" onclick="showAdminTab('prices', this)">Set Prices</button>
                 </div>
-                <div class="players-list" id="players-list"></div>
+
+                <!-- Auction Tab -->
+                <div id="admin-auction-tab">
+                    <h3 class="card-title">Select Player</h3>
+                    <div class="filters">
+                        <select id="filter-role" onchange="filterPlayers()">
+                            <option value="">All Roles</option>
+                            <option value="Batsman">Batsman</option>
+                            <option value="Bowler">Bowler</option>
+                            <option value="All-rounder">All-rounder</option>
+                            <option value="Wicket-keeper">Wicket-keeper</option>
+                        </select>
+                        <select id="filter-country" onchange="filterPlayers()">
+                            <option value="">All Countries</option>
+                            <option value="India">India</option>
+                            <option value="overseas">Overseas</option>
+                        </select>
+                        <input type="text" id="search-player" placeholder="Search..." oninput="filterPlayers()">
+                    </div>
+                    <div class="players-list" id="players-list"></div>
+                </div>
+
+                <!-- Set Prices Tab -->
+                <div id="admin-prices-tab" style="display: none;">
+                    <h3 class="card-title">Set Base Prices for Players</h3>
+                    <div class="filters">
+                        <select id="filter-role-price" onchange="filterPlayersPrice()">
+                            <option value="">All Roles</option>
+                            <option value="Batsman">Batsman</option>
+                            <option value="Bowler">Bowler</option>
+                            <option value="All-rounder">All-rounder</option>
+                            <option value="Wicket-keeper">Wicket-keeper</option>
+                        </select>
+                        <input type="text" id="search-player-price" placeholder="Search..." oninput="filterPlayersPrice()">
+                    </div>
+                    <div class="players-list" id="players-price-list" style="max-height: 500px;"></div>
+                </div>
             </div>
 
             <!-- Right: Controls -->
@@ -630,11 +692,18 @@
             showSoldOverlay(player, team, price);
         });
 
+        socket.on('playersUpdated', (players) => {
+            state.players = players;
+            renderPlayers();
+            renderPlayersPrice();
+        });
+
         // Render functions
         function renderAll() {
             renderAuction();
             renderTeams();
             renderPlayers();
+            renderPlayersPrice();
             renderHistory();
         }
 
@@ -651,12 +720,12 @@
                 const p = auctionState.currentPlayer;
                 content.innerHTML = `
                     <div class="player-name">${p.name}</div>
-                    <div class="player-details">${p.role} | ${p.country}</div>
-                    <div class="player-base">Base: <span>${p.basePrice} Cr</span></div>
+                    <div class="player-details">${p.role} | ${p.country} | <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
+                    <div class="player-base">Base: <span>${formatPrice(p.basePrice)}</span></div>
                     <div class="bid-info">
                         <div>
                             <div class="bid-label">Current Bid</div>
-                            <div class="bid-amount">${auctionState.currentBid} Cr</div>
+                            <div class="bid-amount">${formatPrice(auctionState.currentBid)}</div>
                         </div>
                         <div>
                             <div class="bid-label">Leading Team</div>
@@ -667,8 +736,8 @@
 
                 adminPlayer.innerHTML = `
                     <div class="player-name" style="font-size: 1.8rem;">${p.name}</div>
-                    <div class="player-details">${p.role} | ${p.country}</div>
-                    <div class="player-base">Base: <span>${p.basePrice} Cr</span></div>
+                    <div class="player-details">${p.role} | <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
+                    <div class="player-base">Base: <span>${formatPrice(p.basePrice)}</span></div>
                 `;
 
                 document.getElementById('bid-amount').value = auctionState.currentBid;
@@ -737,14 +806,66 @@
             const html = filtered.map(p => `
                 <div class="player-item ${selectedPlayer?.id === p.id ? 'selected' : ''}" onclick="selectPlayer(${p.id})">
                     <div class="player-info">
-                        <div class="name">${p.name}</div>
+                        <div class="name">${p.name} <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
                         <div class="role">${p.role} | ${p.country}</div>
                     </div>
-                    <div class="player-price">${p.basePrice} Cr</div>
+                    <div class="player-price">${formatPrice(p.basePrice)}</div>
                 </div>
             `).join('');
 
             document.getElementById('players-list').innerHTML = html || '<p style="color: var(--text-secondary); padding: 1rem;">No players available</p>';
+        }
+
+        function renderPlayersPrice() {
+            filterPlayersPrice();
+        }
+
+        function filterPlayersPrice() {
+            const role = document.getElementById('filter-role-price')?.value || '';
+            const search = (document.getElementById('search-player-price')?.value || '').toLowerCase();
+
+            let filtered = state.players.filter(p => p.status === 'available');
+
+            if (role) filtered = filtered.filter(p => p.role === role);
+            if (search) filtered = filtered.filter(p => p.name.toLowerCase().includes(search));
+
+            const html = filtered.map(p => `
+                <div class="player-item-admin">
+                    <div class="player-info">
+                        <div class="name">${p.name}</div>
+                        <div class="role">${p.role} | <span class="ipl-team">${p.previousTeam || 'Uncapped'}</span></div>
+                    </div>
+                    <select class="price-select" onchange="updatePlayerPrice(${p.id}, this.value)">
+                        <option value="2" ${p.basePrice == 2 ? 'selected' : ''}>2 Cr</option>
+                        <option value="1" ${p.basePrice == 1 ? 'selected' : ''}>1 Cr</option>
+                        <option value="0.75" ${p.basePrice == 0.75 ? 'selected' : ''}>75 L</option>
+                        <option value="0.5" ${p.basePrice == 0.5 ? 'selected' : ''}>50 L</option>
+                        <option value="0.3" ${p.basePrice == 0.3 ? 'selected' : ''}>30 L</option>
+                        <option value="0.2" ${p.basePrice == 0.2 ? 'selected' : ''}>20 L</option>
+                    </select>
+                </div>
+            `).join('');
+
+            const container = document.getElementById('players-price-list');
+            if (container) {
+                container.innerHTML = html || '<p style="color: var(--text-secondary); padding: 1rem;">No players available</p>';
+            }
+        }
+
+        function updatePlayerPrice(playerId, price) {
+            fetch('/api/players/' + playerId + '/price', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ basePrice: parseFloat(price) })
+            });
+        }
+
+        function formatPrice(price) {
+            if (price >= 1) {
+                return price + ' Cr';
+            } else {
+                return (price * 100) + ' L';
+            }
         }
 
         function renderHistory() {
@@ -754,20 +875,20 @@
             document.getElementById('stat-unsold').textContent = unsoldPlayers.length;
 
             const total = soldPlayers.reduce((sum, p) => sum + (p.soldPrice || 0), 0);
-            document.getElementById('stat-total').textContent = total.toFixed(2) + ' Cr';
+            document.getElementById('stat-total').textContent = formatPrice(total);
 
             const highest = soldPlayers.length ? Math.max(...soldPlayers.map(p => p.soldPrice || 0)) : 0;
-            document.getElementById('stat-highest').textContent = highest.toFixed(2) + ' Cr';
+            document.getElementById('stat-highest').textContent = formatPrice(highest);
 
             document.getElementById('sold-history').innerHTML = soldPlayers.map(p => `
                 <div class="history-item">
                     <div>
-                        <div style="font-weight: 600;">${p.name}</div>
+                        <div style="font-weight: 600;">${p.name} <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
                         <div style="font-size: 0.85rem; color: var(--text-secondary);">${p.role}</div>
                     </div>
                     <div style="text-align: right;">
                         <div style="color: var(--primary-light);">${p.soldToName}</div>
-                        <div style="color: var(--accent); font-weight: 700;">${p.soldPrice} Cr</div>
+                        <div style="color: var(--accent); font-weight: 700;">${formatPrice(p.soldPrice)}</div>
                     </div>
                 </div>
             `).join('') || '<p style="padding: 1rem; color: var(--text-secondary);">No players sold yet</p>';
@@ -775,7 +896,7 @@
             document.getElementById('unsold-history').innerHTML = unsoldPlayers.map(p => `
                 <div class="history-item">
                     <div>
-                        <div style="font-weight: 600;">${p.name}</div>
+                        <div style="font-weight: 600;">${p.name} <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
                         <div style="font-size: 0.85rem; color: var(--text-secondary);">${p.role}</div>
                     </div>
                     <div style="color: var(--danger);">Unsold</div>
@@ -853,6 +974,14 @@
             btn.classList.add('active');
             document.getElementById('sold-history').style.display = tab === 'sold' ? 'block' : 'none';
             document.getElementById('unsold-history').style.display = tab === 'unsold' ? 'block' : 'none';
+        }
+
+        function showAdminTab(tab, btn) {
+            btn.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('admin-auction-tab').style.display = tab === 'auction' ? 'block' : 'none';
+            document.getElementById('admin-prices-tab').style.display = tab === 'prices' ? 'block' : 'none';
+            if (tab === 'prices') renderPlayersPrice();
         }
 
         function showSoldOverlay(player, team, price) {
