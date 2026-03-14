@@ -601,19 +601,37 @@
             <div class="admin-grid">
                 <div class="card">
                     <div class="tabs" style="margin-bottom: 1rem;">
-                        <button class="tab active" onclick="showAdminTab('auction', this)">Run Auction</button>
-                        <button class="tab" onclick="showAdminTab('prices', this)">Set Prices</button>
+                        <button class="tab active" onclick="showAdminTab('teams', this)">1. Setup Teams</button>
+                        <button class="tab" onclick="showAdminTab('prices', this)">2. Set Prices</button>
+                        <button class="tab" onclick="showAdminTab('auction', this)">3. Run Auction</button>
                     </div>
 
-                    <div id="admin-auction-tab">
-                        <h3 class="card-title">Select Auction Category</h3>
-                        <div class="category-buttons" id="category-buttons"></div>
-                        <h3 class="card-title" style="margin-top: 1rem;">Players in Category</h3>
-                        <div class="players-list" id="players-list"></div>
+                    <!-- Step 1: Setup Teams -->
+                    <div id="admin-teams-tab">
+                        <h3 class="card-title">Add Participating Teams</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Add all teams before starting the auction. Each team gets 100 Cr budget.</p>
+
+                        <div class="team-form">
+                            <input type="text" id="new-team-name" placeholder="Enter team name (e.g., Team Virat)" onkeypress="if(event.key==='Enter')addTeam()">
+                            <button class="btn btn-primary" onclick="addTeam()">Add Team</button>
+                        </div>
+
+                        <div style="margin-top: 1rem;">
+                            <h4 style="color: var(--accent); margin-bottom: 0.5rem;">Teams Added (<span id="team-count">0</span>)</h4>
+                            <div id="setup-teams-list"></div>
+                        </div>
+
+                        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                            <button class="btn btn-success" style="width: 100%;" onclick="showAdminTab('prices', document.querySelector('.tab:nth-child(2)'))">
+                                Next: Set Player Prices →
+                            </button>
+                        </div>
                     </div>
 
+                    <!-- Step 2: Set Prices -->
                     <div id="admin-prices-tab" style="display: none;">
                         <h3 class="card-title">Set Base Prices for Players</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Assign base prices (2Cr, 1Cr, 50L, 20L) to categorize players for auction rounds.</p>
                         <div class="filters">
                             <select id="filter-role-price" onchange="filterPlayersPrice()">
                                 <option value="">All Roles</option>
@@ -624,7 +642,24 @@
                             </select>
                             <input type="text" id="search-player-price" placeholder="Search..." oninput="filterPlayersPrice()">
                         </div>
-                        <div class="players-list" id="players-price-list" style="max-height: 500px;"></div>
+                        <div class="players-list" id="players-price-list" style="max-height: 400px;"></div>
+
+                        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); display: flex; gap: 0.5rem;">
+                            <button class="btn btn-secondary" style="flex: 1;" onclick="showAdminTab('teams', document.querySelector('.tab:nth-child(1)'))">
+                                ← Back to Teams
+                            </button>
+                            <button class="btn btn-success" style="flex: 1;" onclick="showAdminTab('auction', document.querySelector('.tab:nth-child(3)'))">
+                                Next: Start Auction →
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Run Auction -->
+                    <div id="admin-auction-tab" style="display: none;">
+                        <h3 class="card-title">Select Auction Category</h3>
+                        <div class="category-buttons" id="category-buttons"></div>
+                        <h3 class="card-title" style="margin-top: 1rem;">Players in Category</h3>
+                        <div class="players-list" id="players-list"></div>
                     </div>
                 </div>
 
@@ -656,13 +691,9 @@
                     </div>
 
                     <div class="card">
-                        <h3 class="card-title">Team Management</h3>
-                        <div class="team-form">
-                            <input type="text" id="new-team-name" placeholder="Team name">
-                            <button class="btn btn-primary" onclick="addTeam()">Add Team</button>
-                        </div>
+                        <h3 class="card-title">Teams Overview</h3>
                         <div id="team-management-list"></div>
-                        <button class="btn btn-danger" style="width: 100%; margin-top: 1rem;" onclick="resetAuction()">Reset Auction</button>
+                        <button class="btn btn-danger" style="width: 100%; margin-top: 1rem;" onclick="resetAuction()">Reset Entire Auction</button>
                     </div>
                 </div>
             </div>
@@ -830,6 +861,7 @@
         function renderAll() {
             renderAuction();
             renderTeams();
+            renderSetupTeams();
             renderCategoryTabs();
             renderPlayers();
             renderPlayersPrice();
@@ -911,6 +943,9 @@
                 </div>
             `).join('');
             document.getElementById('team-management-list').innerHTML = mgmtHtml;
+
+            // Also update setup teams list
+            renderSetupTeams();
         }
 
         function renderCategoryTabs() {
@@ -1140,10 +1175,35 @@
         function showAdminTab(tab, btn) {
             btn.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
-            document.getElementById('admin-auction-tab').style.display = tab === 'auction' ? 'block' : 'none';
+            document.getElementById('admin-teams-tab').style.display = tab === 'teams' ? 'block' : 'none';
             document.getElementById('admin-prices-tab').style.display = tab === 'prices' ? 'block' : 'none';
+            document.getElementById('admin-auction-tab').style.display = tab === 'auction' ? 'block' : 'none';
+            if (tab === 'teams') renderSetupTeams();
             if (tab === 'prices') renderPlayersPrice();
             if (tab === 'auction') renderCategoryTabs();
+        }
+
+        function renderSetupTeams() {
+            const container = document.getElementById('setup-teams-list');
+            const countEl = document.getElementById('team-count');
+            if (countEl) countEl.textContent = state.teams.length;
+
+            if (!container) return;
+
+            if (state.teams.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem; text-align: center;">No teams added yet. Add teams above to start the auction.</p>';
+                return;
+            }
+
+            container.innerHTML = state.teams.map(t => `
+                <div class="team-management-item">
+                    <div>
+                        <div class="team-name">${t.name}</div>
+                        <div style="font-size: 0.8rem; color: var(--accent);">Budget: ${t.budget.toFixed(2)} Cr</div>
+                    </div>
+                    <button class="delete-btn" onclick="deleteTeam(${t.id})" title="Remove team">✕</button>
+                </div>
+            `).join('');
         }
 
         function showSoldOverlay(player, team, price) {
