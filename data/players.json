@@ -1,0 +1,681 @@
+[
+  {
+    "name": "Virat Kohli",
+    "role": "Batsman",
+    "basePrice": 2.0,
+    "previousTeam": "Royal Challengers Bangalore",
+    "country": "India"
+  },
+  {
+    "name": "Rohit Sharma",
+    "role": "Batsman",
+    "basePrice": 2.0,
+    "previousTeam": "Mumbai Indians",
+    "country": "India"
+  },
+  {
+    "name": "MS Dhoni",
+    "role": "Wicket-keeper",
+    "basePrice": 2.0,
+    "previousTeam": "Chennai Super Kings",
+    "country": "India"
+  },
+  {
+    "name": "Jasprit Bumrah",
+    "role": "Bowler",
+    "basePrice": 2.0,
+    "previousTeam": "Mumbai Indians",
+    "country": "India"
+  },
+  {
+    "name": "Hardik Pandya",
+    "role": "All-rounder",
+    "basePrice": 2.0,
+    "previousTeam": "Mumbai Indians",
+    "country": "India"
+  },
+  {
+    "name": "Rishabh Pant",
+    "role": "Wicket-keeper",
+    "basePrice": 2.0,
+    "previousTeam": "Delhi Capitals",
+    "country": "India"
+  },
+  {
+    "name": "KL Rahul",
+    "role": "Wicket-keeper",
+    "basePrice": 2.0,
+    "previousTeam": "Lucknow Super Giants",
+    "country": "India"
+  },
+  {
+    "name": "Shubman Gill",
+    "role": "Batsman",
+    "basePrice": 2.0,
+    "previousTeam": "Gujarat Titans",
+    "country": "India"
+  },
+  {
+    "name": "Ravindra Jadeja",
+    "role": "All-rounder",
+    "basePrice": 2.0,
+    "previousTeam": "Chennai Super Kings",
+    "country": "India"
+  },
+  {
+    "name": "Suryakumar Yadav",
+    "role": "Batsman",
+    "basePrice": 2.0,
+    "previousTeam": "Mumbai Indians",
+    "country": "India"
+  },
+  {
+    "name": "Mohammed Shami",
+    "role": "Bowler",
+    "basePrice": 2.0,
+    "previousTeam": "Gujarat Titans",
+    "country": "India"
+  },
+  {
+    "name": "Yuzvendra Chahal",
+    "role": "Bowler",
+    "basePrice": 1.5,
+    "previousTeam": "Rajasthan Royals",
+    "country": "India"
+  },
+  {
+    "name": "Shreyas Iyer",
+    "role": "Batsman",
+    "basePrice": 2.0,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "India"
+  },
+  {
+    "name": "Sanju Samson",
+    "role": "Wicket-keeper",
+    "basePrice": 2.0,
+    "previousTeam": "Rajasthan Royals",
+    "country": "India"
+  },
+  {
+    "name": "Ruturaj Gaikwad",
+    "role": "Batsman",
+    "basePrice": 1.5,
+    "previousTeam": "Chennai Super Kings",
+    "country": "India"
+  },
+  {
+    "name": "Ishan Kishan",
+    "role": "Wicket-keeper",
+    "basePrice": 1.5,
+    "previousTeam": "Mumbai Indians",
+    "country": "India"
+  },
+  {
+    "name": "Axar Patel",
+    "role": "All-rounder",
+    "basePrice": 1.5,
+    "previousTeam": "Delhi Capitals",
+    "country": "India"
+  },
+  {
+    "name": "Mohammed Siraj",
+    "role": "Bowler",
+    "basePrice": 1.5,
+    "previousTeam": "Royal Challengers Bangalore",
+    "country": "India"
+  },
+  {
+    "name": "Kuldeep Yadav",
+    "role": "Bowler",
+    "basePrice": 1.5,
+    "previousTeam": "Delhi Capitals",
+    "country": "India"
+  },
+  {
+    "name": "Arshdeep Singh",
+    "role": "Bowler",
+    "basePrice": 1.5,
+    "previousTeam": "Punjab Kings",
+    "country": "India"
+  },
+  {
+    "name": "Rahul Tripathi",
+    "role": "Batsman",
+    "basePrice": 1.0,
+    "previousTeam": "Sunrisers Hyderabad",
+    "country": "India"
+  },
+  {
+    "name": "Deepak Chahar",
+    "role": "Bowler",
+    "basePrice": 1.5,
+    "previousTeam": "Chennai Super Kings",
+    "country": "India"
+  },
+  {
+    "name": "Shardul Thakur",
+    "role": "All-rounder",
+    "basePrice": 1.0,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "India"
+  },
+  {
+    "name": "Prithvi Shaw",
+    "role": "Batsman",
+    "basePrice": 1.0,
+    "previousTeam": "Delhi Capitals",
+    "country": "India"
+  },
+  {
+    "name": "Devdutt Padikkal",
+    "role": "Batsman",
+    "basePrice": 1.0,
+    "previousTeam": "Rajasthan Royals",
+    "country": "India"
+  },
+  {
+    "name": "Rinku Singh",
+    "role": "Batsman",
+    "basePrice": 1.0,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "India"
+  },
+  {
+    "name": "Tilak Varma",
+    "role": "Batsman",
+    "basePrice": 1.0,
+    "previousTeam": "Mumbai Indians",
+    "country": "India"
+  },
+  {
+    "name": "Yashasvi Jaiswal",
+    "role": "Batsman",
+    "basePrice": 1.5,
+    "previousTeam": "Rajasthan Royals",
+    "country": "India"
+  },
+  {
+    "name": "Shivam Dube",
+    "role": "All-rounder",
+    "basePrice": 1.0,
+    "previousTeam": "Chennai Super Kings",
+    "country": "India"
+  },
+  {
+    "name": "Washington Sundar",
+    "role": "All-rounder",
+    "basePrice": 1.0,
+    "previousTeam": "Sunrisers Hyderabad",
+    "country": "India"
+  },
+  {
+    "name": "Umran Malik",
+    "role": "Bowler",
+    "basePrice": 0.75,
+    "previousTeam": "Sunrisers Hyderabad",
+    "country": "India"
+  },
+  {
+    "name": "Mukesh Kumar",
+    "role": "Bowler",
+    "basePrice": 0.5,
+    "previousTeam": "Delhi Capitals",
+    "country": "India"
+  },
+  {
+    "name": "Avesh Khan",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Lucknow Super Giants",
+    "country": "India"
+  },
+  {
+    "name": "Ravi Bishnoi",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Lucknow Super Giants",
+    "country": "India"
+  },
+  {
+    "name": "Varun Chakravarthy",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "India"
+  },
+  {
+    "name": "Pat Cummins",
+    "role": "Bowler",
+    "basePrice": 2.0,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "Australia"
+  },
+  {
+    "name": "Mitchell Starc",
+    "role": "Bowler",
+    "basePrice": 2.0,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "Australia"
+  },
+  {
+    "name": "Glenn Maxwell",
+    "role": "All-rounder",
+    "basePrice": 2.0,
+    "previousTeam": "Royal Challengers Bangalore",
+    "country": "Australia"
+  },
+  {
+    "name": "David Warner",
+    "role": "Batsman",
+    "basePrice": 2.0,
+    "previousTeam": "Delhi Capitals",
+    "country": "Australia"
+  },
+  {
+    "name": "Travis Head",
+    "role": "Batsman",
+    "basePrice": 1.5,
+    "previousTeam": "Sunrisers Hyderabad",
+    "country": "Australia"
+  },
+  {
+    "name": "Marcus Stoinis",
+    "role": "All-rounder",
+    "basePrice": 1.5,
+    "previousTeam": "Lucknow Super Giants",
+    "country": "Australia"
+  },
+  {
+    "name": "Josh Hazlewood",
+    "role": "Bowler",
+    "basePrice": 1.5,
+    "previousTeam": "Royal Challengers Bangalore",
+    "country": "Australia"
+  },
+  {
+    "name": "Cameron Green",
+    "role": "All-rounder",
+    "basePrice": 2.0,
+    "previousTeam": "Mumbai Indians",
+    "country": "Australia"
+  },
+  {
+    "name": "Mitchell Marsh",
+    "role": "All-rounder",
+    "basePrice": 1.5,
+    "previousTeam": "Delhi Capitals",
+    "country": "Australia"
+  },
+  {
+    "name": "Adam Zampa",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Rajasthan Royals",
+    "country": "Australia"
+  },
+  {
+    "name": "Jos Buttler",
+    "role": "Wicket-keeper",
+    "basePrice": 2.0,
+    "previousTeam": "Rajasthan Royals",
+    "country": "England"
+  },
+  {
+    "name": "Ben Stokes",
+    "role": "All-rounder",
+    "basePrice": 2.0,
+    "previousTeam": "Chennai Super Kings",
+    "country": "England"
+  },
+  {
+    "name": "Jofra Archer",
+    "role": "Bowler",
+    "basePrice": 2.0,
+    "previousTeam": "Mumbai Indians",
+    "country": "England"
+  },
+  {
+    "name": "Liam Livingstone",
+    "role": "All-rounder",
+    "basePrice": 1.5,
+    "previousTeam": "Punjab Kings",
+    "country": "England"
+  },
+  {
+    "name": "Sam Curran",
+    "role": "All-rounder",
+    "basePrice": 2.0,
+    "previousTeam": "Punjab Kings",
+    "country": "England"
+  },
+  {
+    "name": "Jonny Bairstow",
+    "role": "Wicket-keeper",
+    "basePrice": 1.5,
+    "previousTeam": "Punjab Kings",
+    "country": "England"
+  },
+  {
+    "name": "Moeen Ali",
+    "role": "All-rounder",
+    "basePrice": 1.5,
+    "previousTeam": "Chennai Super Kings",
+    "country": "England"
+  },
+  {
+    "name": "Adil Rashid",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Gujarat Titans",
+    "country": "England"
+  },
+  {
+    "name": "Harry Brook",
+    "role": "Batsman",
+    "basePrice": 1.5,
+    "previousTeam": "Sunrisers Hyderabad",
+    "country": "England"
+  },
+  {
+    "name": "Mark Wood",
+    "role": "Bowler",
+    "basePrice": 1.5,
+    "previousTeam": "Lucknow Super Giants",
+    "country": "England"
+  },
+  {
+    "name": "Heinrich Klaasen",
+    "role": "Wicket-keeper",
+    "basePrice": 1.5,
+    "previousTeam": "Sunrisers Hyderabad",
+    "country": "South Africa"
+  },
+  {
+    "name": "Quinton de Kock",
+    "role": "Wicket-keeper",
+    "basePrice": 1.5,
+    "previousTeam": "Lucknow Super Giants",
+    "country": "South Africa"
+  },
+  {
+    "name": "Aiden Markram",
+    "role": "Batsman",
+    "basePrice": 1.5,
+    "previousTeam": "Sunrisers Hyderabad",
+    "country": "South Africa"
+  },
+  {
+    "name": "Kagiso Rabada",
+    "role": "Bowler",
+    "basePrice": 2.0,
+    "previousTeam": "Punjab Kings",
+    "country": "South Africa"
+  },
+  {
+    "name": "Anrich Nortje",
+    "role": "Bowler",
+    "basePrice": 1.5,
+    "previousTeam": "Delhi Capitals",
+    "country": "South Africa"
+  },
+  {
+    "name": "Lungi Ngidi",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Delhi Capitals",
+    "country": "South Africa"
+  },
+  {
+    "name": "David Miller",
+    "role": "Batsman",
+    "basePrice": 1.5,
+    "previousTeam": "Gujarat Titans",
+    "country": "South Africa"
+  },
+  {
+    "name": "Gerald Coetzee",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Mumbai Indians",
+    "country": "South Africa"
+  },
+  {
+    "name": "Rashid Khan",
+    "role": "Bowler",
+    "basePrice": 2.0,
+    "previousTeam": "Gujarat Titans",
+    "country": "Afghanistan"
+  },
+  {
+    "name": "Mujeeb Ur Rahman",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Sunrisers Hyderabad",
+    "country": "Afghanistan"
+  },
+  {
+    "name": "Trent Boult",
+    "role": "Bowler",
+    "basePrice": 2.0,
+    "previousTeam": "Rajasthan Royals",
+    "country": "New Zealand"
+  },
+  {
+    "name": "Kane Williamson",
+    "role": "Batsman",
+    "basePrice": 2.0,
+    "previousTeam": "Gujarat Titans",
+    "country": "New Zealand"
+  },
+  {
+    "name": "Devon Conway",
+    "role": "Batsman",
+    "basePrice": 1.5,
+    "previousTeam": "Chennai Super Kings",
+    "country": "New Zealand"
+  },
+  {
+    "name": "Daryl Mitchell",
+    "role": "All-rounder",
+    "basePrice": 1.5,
+    "previousTeam": "Chennai Super Kings",
+    "country": "New Zealand"
+  },
+  {
+    "name": "Tim Southee",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "New Zealand"
+  },
+  {
+    "name": "Rachin Ravindra",
+    "role": "All-rounder",
+    "basePrice": 1.0,
+    "previousTeam": "Chennai Super Kings",
+    "country": "New Zealand"
+  },
+  {
+    "name": "Lockie Ferguson",
+    "role": "Bowler",
+    "basePrice": 1.5,
+    "previousTeam": "Gujarat Titans",
+    "country": "New Zealand"
+  },
+  {
+    "name": "Sunil Narine",
+    "role": "All-rounder",
+    "basePrice": 2.0,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "West Indies"
+  },
+  {
+    "name": "Andre Russell",
+    "role": "All-rounder",
+    "basePrice": 2.0,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "West Indies"
+  },
+  {
+    "name": "Nicholas Pooran",
+    "role": "Wicket-keeper",
+    "basePrice": 1.5,
+    "previousTeam": "Lucknow Super Giants",
+    "country": "West Indies"
+  },
+  {
+    "name": "Shimron Hetmyer",
+    "role": "Batsman",
+    "basePrice": 1.0,
+    "previousTeam": "Rajasthan Royals",
+    "country": "West Indies"
+  },
+  {
+    "name": "Kyle Mayers",
+    "role": "All-rounder",
+    "basePrice": 0.75,
+    "previousTeam": "Lucknow Super Giants",
+    "country": "West Indies"
+  },
+  {
+    "name": "Romario Shepherd",
+    "role": "All-rounder",
+    "basePrice": 0.75,
+    "previousTeam": "Lucknow Super Giants",
+    "country": "West Indies"
+  },
+  {
+    "name": "Alzarri Joseph",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Gujarat Titans",
+    "country": "West Indies"
+  },
+  {
+    "name": "Shaheen Afridi",
+    "role": "Bowler",
+    "basePrice": 2.0,
+    "previousTeam": "None",
+    "country": "Pakistan"
+  },
+  {
+    "name": "Babar Azam",
+    "role": "Batsman",
+    "basePrice": 2.0,
+    "previousTeam": "None",
+    "country": "Pakistan"
+  },
+  {
+    "name": "Mohammad Rizwan",
+    "role": "Wicket-keeper",
+    "basePrice": 2.0,
+    "previousTeam": "None",
+    "country": "Pakistan"
+  },
+  {
+    "name": "Fakhar Zaman",
+    "role": "Batsman",
+    "basePrice": 1.5,
+    "previousTeam": "None",
+    "country": "Pakistan"
+  },
+  {
+    "name": "Wanindu Hasaranga",
+    "role": "All-rounder",
+    "basePrice": 1.5,
+    "previousTeam": "Royal Challengers Bangalore",
+    "country": "Sri Lanka"
+  },
+  {
+    "name": "Matheesha Pathirana",
+    "role": "Bowler",
+    "basePrice": 1.5,
+    "previousTeam": "Chennai Super Kings",
+    "country": "Sri Lanka"
+  },
+  {
+    "name": "Maheesh Theekshana",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Chennai Super Kings",
+    "country": "Sri Lanka"
+  },
+  {
+    "name": "Dushmantha Chameera",
+    "role": "Bowler",
+    "basePrice": 0.75,
+    "previousTeam": "Royal Challengers Bangalore",
+    "country": "Sri Lanka"
+  },
+  {
+    "name": "Mustafizur Rahman",
+    "role": "Bowler",
+    "basePrice": 1.0,
+    "previousTeam": "Chennai Super Kings",
+    "country": "Bangladesh"
+  },
+  {
+    "name": "Shakib Al Hasan",
+    "role": "All-rounder",
+    "basePrice": 1.5,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "Bangladesh"
+  },
+  {
+    "name": "Abhishek Sharma",
+    "role": "Batsman",
+    "basePrice": 0.75,
+    "previousTeam": "Sunrisers Hyderabad",
+    "country": "India"
+  },
+  {
+    "name": "Sai Sudharsan",
+    "role": "Batsman",
+    "basePrice": 0.5,
+    "previousTeam": "Gujarat Titans",
+    "country": "India"
+  },
+  {
+    "name": "Nitish Reddy",
+    "role": "All-rounder",
+    "basePrice": 0.5,
+    "previousTeam": "Sunrisers Hyderabad",
+    "country": "India"
+  },
+  {
+    "name": "Dhruv Jurel",
+    "role": "Wicket-keeper",
+    "basePrice": 0.5,
+    "previousTeam": "Rajasthan Royals",
+    "country": "India"
+  },
+  {
+    "name": "Naman Dhir",
+    "role": "Batsman",
+    "basePrice": 0.3,
+    "previousTeam": "Gujarat Titans",
+    "country": "India"
+  },
+  {
+    "name": "Harshit Rana",
+    "role": "Bowler",
+    "basePrice": 0.5,
+    "previousTeam": "Kolkata Knight Riders",
+    "country": "India"
+  },
+  {
+    "name": "Akash Deep",
+    "role": "Bowler",
+    "basePrice": 0.5,
+    "previousTeam": "Royal Challengers Bangalore",
+    "country": "India"
+  },
+  {
+    "name": "Anshul Kamboj",
+    "role": "Bowler",
+    "basePrice": 0.3,
+    "previousTeam": "Chennai Super Kings",
+    "country": "India"
+  }
+]

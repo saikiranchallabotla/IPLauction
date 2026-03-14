@@ -1,0 +1,17 @@
+{
+  "name": "ipl-auction-2026",
+  "version": "1.0.0",
+  "description": "IPL 2026 Fantasy Auction Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
