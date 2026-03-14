@@ -1051,7 +1051,11 @@
         function leaveRoom() {
             if (confirm('Leave this auction room?')) {
                 if (socket) socket.disconnect();
+                socket = null;
                 roomCode = null;
+                state = { teams: [], players: [], auctionState: {} };
+                selectedPlayer = null;
+                currentCategory = '2cr-home';
                 document.getElementById('main-app').style.display = 'none';
                 document.getElementById('landing-page').style.display = 'flex';
                 document.getElementById('created-room-display').classList.remove('show');
@@ -1383,7 +1387,7 @@
 
         function selectPlayer(id) {
             selectedPlayer = state.players.find(p => p.id === id);
-            socket.emit('selectPlayer', id);
+            if (socket) socket.emit('selectPlayer', id);
             renderPlayers();
         }
 
@@ -1493,7 +1497,7 @@
             updateStepIndicator();
 
             // Emit to server
-            socket.emit('updateBid', { amount: newBid, teamId: teamId });
+            if (socket) socket.emit('updateBid', { amount: newBid, teamId: teamId });
 
             // Update button states
             renderTeams();
@@ -1514,8 +1518,8 @@
             document.getElementById('auction-popup').classList.remove('active');
         }
 
-        function markSold() { socket.emit('markSold'); }
-        function markUnsold() { socket.emit('markUnsold'); }
+        function markSold() { if (socket) socket.emit('markSold'); }
+        function markUnsold() { if (socket) socket.emit('markUnsold'); }
 
         function addTeam() {
             const name = document.getElementById('new-team-name').value.trim();
@@ -1548,10 +1552,12 @@
         }
 
         function deleteTeam(id) {
+            if (!roomCode) { alert('Not connected to a room. Please refresh.'); return; }
             if (confirm('Delete this team?')) fetch('/api/room/' + roomCode + '/teams/' + id, { method: 'DELETE' });
         }
 
         function resetAuction() {
+            if (!roomCode) { alert('Not connected to a room. Please refresh.'); return; }
             if (confirm('Reset entire auction?')) fetch('/api/room/' + roomCode + '/reset', { method: 'POST' });
         }
 
