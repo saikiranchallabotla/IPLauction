@@ -25,12 +25,19 @@ console.log(`Loaded ${playersData.length} players from players.json`);
 
 // ============ PERSISTENCE FUNCTIONS ============
 
+// Debounce save to prevent too many writes
+let saveTimeout = null;
+function saveRoomsDebounced() {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => saveRooms(), 500);
+}
+
 // Save rooms to file
 function saveRooms() {
     try {
         // Convert Map to array of [key, value] pairs for JSON serialization
         const roomsArray = Array.from(rooms.entries());
-        fs.writeFileSync(ROOMS_FILE, JSON.stringify(roomsArray, null, 2));
+        fs.writeFileSync(ROOMS_FILE, JSON.stringify(roomsArray));
         console.log(`Saved ${rooms.size} rooms to disk`);
     } catch (err) {
         console.error('Error saving rooms:', err);
@@ -181,7 +188,7 @@ app.post('/api/room/:code/teams', (req, res) => {
         }
 
         const team = {
-            id: Date.now() + Math.random(), // Add random to avoid ID collision
+            id: `team_${Date.now()}_${Math.floor(Math.random() * 1000)}`, // String ID for safety
             name: name.trim(),
             ownerName: ownerName || '',
             budget: INITIAL_BUDGET,
@@ -189,7 +196,7 @@ app.post('/api/room/:code/teams', (req, res) => {
         };
 
         room.teams.push(team);
-        saveRooms(); // Save after team creation
+        saveRoomsDebounced(); // Use debounced save
         console.log(`Team "${team.name}" added to room ${room.code}. Total teams: ${room.teams.length}`);
         io.to(room.code).emit('teamsUpdated', room.teams);
         res.json(team);
@@ -227,9 +234,9 @@ app.delete('/api/room/:code/teams/:id', (req, res) => {
         return res.status(404).json({ error: 'Room not found' });
     }
 
-    const id = parseInt(req.params.id);
+    const id = req.params.id; // String ID
     room.teams = room.teams.filter(t => t.id !== id);
-    saveRooms(); // Save after team deletion
+    saveRoomsDebounced(); // Save after team deletion
     io.to(room.code).emit('teamsUpdated', room.teams);
     res.json({ success: true });
 });

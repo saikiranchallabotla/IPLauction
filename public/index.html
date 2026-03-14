@@ -996,7 +996,7 @@
                 return `
                     <button class="team-bid-btn ${isCurrentBidder ? 'active-bidder' : ''} ${!canAfford ? 'disabled' : ''}"
                             data-team-id="${t.id}"
-                            onclick="teamBid(${t.id})"
+                            onclick="teamBid('${t.id}')"
                             ${!canAfford ? 'disabled' : ''}>
                         <span class="team-bid-name">${t.name}</span>
                         <span class="team-bid-budget">${t.budget.toFixed(2)} Cr</span>
@@ -1012,7 +1012,7 @@
                         <div class="team-name">${t.name}</div>
                         <div style="font-size: 0.8rem; color: var(--text-secondary);">${t.budget.toFixed(2)} Cr remaining</div>
                     </div>
-                    <button class="delete-btn" onclick="deleteTeam(${t.id})">✕</button>
+                    <button class="delete-btn" onclick="deleteTeam('${t.id}')">✕</button>
                 </div>
             `).join('');
             document.getElementById('team-management-list').innerHTML = mgmtHtml;
