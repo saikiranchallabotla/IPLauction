@@ -702,6 +702,62 @@
         .admin-sold-item .team-name { font-size: 0.65rem; color: var(--primary-light); white-space: nowrap; }
         .admin-sold-item .sold-price { color: var(--accent); font-weight: 700; white-space: nowrap; margin-left: 0.3rem; }
 
+        /* ============ ACTIVE ROOMS ============ */
+        .room-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.8rem 1rem;
+            background: var(--dark-elevated);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .room-list-item:hover {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+            transform: translateX(4px);
+            box-shadow: 0 0 12px var(--accent-glow);
+        }
+        .room-list-item .room-code {
+            font-weight: 700;
+            font-family: 'Outfit', monospace;
+            letter-spacing: 0.15rem;
+            color: var(--accent);
+            font-size: 1.05rem;
+        }
+        .room-list-item .room-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.15rem;
+        }
+        .room-list-item .room-join-btn {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            border: none;
+            padding: 0.4rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-family: 'Outfit', sans-serif;
+            transition: all 0.25s ease;
+        }
+        .room-list-item .room-join-btn:hover {
+            box-shadow: 0 2px 12px var(--primary-glow);
+            transform: translateY(-1px);
+        }
+        .room-status-dot {
+            display: inline-block;
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            margin-right: 0.3rem;
+        }
+        .room-status-dot.live { background: var(--success); box-shadow: 0 0 6px var(--success-glow); }
+        .room-status-dot.idle { background: var(--text-secondary); }
+
         /* ============ SCROLLBAR ============ */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -738,6 +794,11 @@
                     <button class="btn-large btn-join" style="width: auto; padding: 1rem 1.5rem;" onclick="joinRoom()">Join</button>
                 </div>
                 <div class="error-msg" id="join-error"></div>
+            </div>
+
+            <div class="landing-section" id="active-rooms-section" style="display: none;">
+                <h2>Active Rooms</h2>
+                <div id="active-rooms-list"></div>
             </div>
         </div>
     </div>
@@ -1044,7 +1105,66 @@
             }
         }
 
+        // Fetch and display active rooms on landing page
+        let roomsRefreshInterval = null;
+
+        async function loadActiveRooms() {
+            try {
+                const res = await fetch('/api/rooms');
+                const rooms = await res.json();
+                const section = document.getElementById('active-rooms-section');
+                const list = document.getElementById('active-rooms-list');
+
+                if (rooms.length === 0) {
+                    section.style.display = 'none';
+                    return;
+                }
+
+                section.style.display = 'block';
+                list.innerHTML = rooms.map(r => {
+                    const isLive = r.status === 'bidding';
+                    const age = getTimeAgo(r.createdAt);
+                    return `
+                        <div class="room-list-item" onclick="quickJoin('${r.code}')">
+                            <div>
+                                <div class="room-code">
+                                    <span class="room-status-dot ${isLive ? 'live' : 'idle'}"></span>
+                                    ${r.code}
+                                </div>
+                                <div class="room-meta">${r.teamCount} teams | ${r.playersSold} sold | ${age}</div>
+                            </div>
+                            <button class="room-join-btn" onclick="event.stopPropagation(); quickJoin('${r.code}')">Join</button>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                // Silently fail - rooms list is optional
+            }
+        }
+
+        function getTimeAgo(timestamp) {
+            const diff = Date.now() - timestamp;
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return mins + 'm ago';
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return hrs + 'h ago';
+            return Math.floor(hrs / 24) + 'd ago';
+        }
+
+        function quickJoin(code) {
+            roomCode = code;
+            enterAuction();
+        }
+
+        // Load rooms on page load and refresh every 10 seconds
+        loadActiveRooms();
+        roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
+
         function enterAuction() {
+            // Stop refreshing rooms list
+            if (roomsRefreshInterval) { clearInterval(roomsRefreshInterval); roomsRefreshInterval = null; }
+
             // Hide landing, show app
             document.getElementById('landing-page').style.display = 'none';
             document.getElementById('main-app').style.display = 'block';
@@ -1075,6 +1195,9 @@
                 document.getElementById('landing-page').style.display = 'flex';
                 document.getElementById('created-room-display').classList.remove('show');
                 document.getElementById('join-code-input').value = '';
+                // Restart rooms list refresh
+                loadActiveRooms();
+                roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
             }
         }
 

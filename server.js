@@ -130,6 +130,23 @@ function getRoom(code) {
 
 // ============ REST API ============
 
+// List all active rooms (for landing page)
+app.get('/api/rooms', (req, res) => {
+    const roomList = [];
+    for (const [code, room] of rooms) {
+        roomList.push({
+            code: room.code,
+            teamCount: room.teams.length,
+            playersSold: room.auctionState.soldPlayers.length,
+            status: room.auctionState.status,
+            createdAt: room.createdAt
+        });
+    }
+    // Sort by most recently created first
+    roomList.sort((a, b) => b.createdAt - a.createdAt);
+    res.json(roomList);
+});
+
 // Create a new auction room
 app.post('/api/room/create', (req, res) => {
     let code = generateRoomCode();
