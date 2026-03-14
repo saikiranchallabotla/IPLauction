@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPL 2026 Fantasy Auction</title>
     <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         :root {
             --primary: #1a237e;
@@ -29,7 +30,6 @@
             min-height: 100vh;
         }
 
-        /* Header */
         .header {
             background: linear-gradient(135deg, var(--primary), var(--primary-light));
             padding: 1rem 2rem;
@@ -39,12 +39,7 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         }
 
-        .logo {
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: var(--accent);
-        }
-
+        .logo { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
         .nav-btns { display: flex; gap: 0.5rem; }
 
         .btn {
@@ -63,11 +58,9 @@
         .btn-warning { background: var(--warning); color: #fff; }
         .btn:hover { transform: translateY(-2px); opacity: 0.9; }
 
-        /* Views */
         .view { display: none; }
         .view.active { display: block; }
 
-        /* Main Layout */
         .main-layout {
             display: grid;
             grid-template-columns: 1fr 350px;
@@ -91,7 +84,6 @@
             border-bottom: 2px solid var(--border);
         }
 
-        /* Auction Display */
         .auction-display {
             background: linear-gradient(135deg, var(--primary), var(--primary-light));
             border-radius: 16px;
@@ -103,7 +95,6 @@
             justify-content: center;
             align-items: center;
             position: relative;
-            overflow: hidden;
         }
 
         .status-badge {
@@ -122,29 +113,11 @@
         .status-sold { background: var(--success); }
         .status-unsold { background: var(--danger); }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
-        .player-name {
-            font-size: 2.8rem;
-            font-weight: 700;
-            color: var(--accent);
-            margin-bottom: 0.5rem;
-        }
-
-        .player-details {
-            font-size: 1.1rem;
-            color: rgba(255,255,255,0.8);
-            margin-bottom: 1rem;
-        }
-
-        .player-base {
-            font-size: 1.3rem;
-            color: white;
-        }
-
+        .player-name { font-size: 2.8rem; font-weight: 700; color: var(--accent); margin-bottom: 0.5rem; }
+        .player-details { font-size: 1.1rem; color: rgba(255,255,255,0.8); margin-bottom: 1rem; }
+        .player-base { font-size: 1.3rem; color: white; }
         .player-base span { color: var(--accent); font-weight: 700; }
 
         .bid-info {
@@ -157,31 +130,11 @@
             border-radius: 12px;
         }
 
-        .bid-label {
-            font-size: 0.9rem;
-            color: rgba(255,255,255,0.7);
-        }
+        .bid-label { font-size: 0.9rem; color: rgba(255,255,255,0.7); }
+        .bid-amount { font-size: 2.5rem; font-weight: 700; color: var(--accent); }
+        .bid-team { font-size: 1.4rem; font-weight: 600; color: white; }
 
-        .bid-amount {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: var(--accent);
-        }
-
-        .bid-team {
-            font-size: 1.4rem;
-            font-weight: 600;
-            color: white;
-        }
-
-        /* Teams List */
-        .teams-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-            max-height: 500px;
-            overflow-y: auto;
-        }
+        .teams-list { display: flex; flex-direction: column; gap: 0.75rem; max-height: 500px; overflow-y: auto; }
 
         .team-item {
             display: flex;
@@ -193,27 +146,14 @@
             border-left: 4px solid var(--primary-light);
         }
 
-        .team-item.current-bidder {
-            border-left-color: var(--accent);
-            background: rgba(255,215,0,0.1);
-        }
-
+        .team-item.current-bidder { border-left-color: var(--accent); background: rgba(255,215,0,0.1); }
         .team-name { font-weight: 600; }
         .team-budget { color: var(--accent); font-weight: 700; }
         .team-budget.low { color: var(--danger); }
+        .team-spent { font-size: 0.75rem; color: var(--danger); }
 
-        /* Admin Panel */
-        .admin-grid {
-            display: grid;
-            grid-template-columns: 1fr 1.5fr;
-            gap: 1.5rem;
-            padding: 1.5rem;
-        }
-
-        .players-list {
-            max-height: 400px;
-            overflow-y: auto;
-        }
+        .admin-grid { display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem; padding: 1.5rem; }
+        .players-list { max-height: 500px; overflow-y: auto; }
 
         .player-item {
             display: flex;
@@ -230,29 +170,13 @@
 
         .player-item:hover { border-color: var(--primary-light); }
         .player-item.selected { border-color: var(--accent); background: rgba(255,215,0,0.1); }
-
         .player-info .name { font-weight: 600; }
         .player-info .role { font-size: 0.85rem; color: var(--text-secondary); }
         .player-price { color: var(--accent); font-weight: 600; }
 
-        /* Bid Controls */
-        .bid-controls {
-            background: var(--dark);
-            padding: 1.5rem;
-            border-radius: 10px;
-            margin-bottom: 1rem;
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text-secondary);
-        }
-
+        .bid-controls { background: var(--dark); padding: 1.5rem; border-radius: 10px; margin-bottom: 1rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-secondary); }
         .form-group input, .form-group select {
             width: 100%;
             padding: 0.75rem;
@@ -263,22 +187,10 @@
             font-size: 1rem;
         }
 
-        .btn-group {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-
+        .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .btn-group .btn { flex: 1; min-width: 100px; }
 
-        /* Filters */
-        .filters {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-        }
-
+        .filters { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
         .filters select, .filters input {
             padding: 0.5rem;
             border: 1px solid var(--border);
@@ -289,110 +201,65 @@
             min-width: 120px;
         }
 
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-
-        .modal.active { display: flex; }
-
-        .modal-content {
-            background: var(--card);
-            padding: 2rem;
-            border-radius: 16px;
-            width: 90%;
-            max-width: 400px;
-        }
-
-        .modal-title {
-            font-size: 1.5rem;
-            color: var(--accent);
-            margin-bottom: 1.5rem;
-            text-align: center;
-        }
-
-        /* Sold Overlay */
-        .sold-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.9);
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-
-        .sold-overlay.active { display: flex; }
-
-        .sold-content {
-            text-align: center;
-            animation: soldPop 0.5s ease-out;
-        }
-
-        @keyframes soldPop {
-            from { transform: scale(0.5); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
-
-        .sold-content h1 {
-            font-size: 5rem;
-            color: var(--success);
-            text-shadow: 0 0 30px rgba(46,125,50,0.5);
-        }
-
-        .sold-content .player { font-size: 2rem; color: var(--accent); margin: 0.5rem 0; }
-        .sold-content .team { font-size: 1.5rem; color: var(--primary-light); }
-        .sold-content .price { font-size: 1.3rem; color: white; }
-
-        /* History */
-        .history-stats {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .stat-box {
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .tab {
+            padding: 0.5rem 1rem;
             background: var(--dark);
-            padding: 1rem;
+            border: none;
+            color: var(--text-secondary);
             border-radius: 8px;
-            text-align: center;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.85rem;
         }
+        .tab.active { background: var(--primary-light); color: white; }
 
-        .stat-value { font-size: 2rem; font-weight: 700; color: var(--accent); }
-        .stat-label { font-size: 0.85rem; color: var(--text-secondary); }
-
-        .history-list {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .history-item {
+        .category-section { margin-bottom: 1.5rem; }
+        .category-title {
+            font-size: 1rem;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            background: rgba(255, 215, 0, 0.1);
+            border-radius: 6px;
             display: flex;
             justify-content: space-between;
-            padding: 1rem;
-            border-bottom: 1px solid var(--border);
+        }
+        .category-count { color: var(--text-secondary); font-size: 0.85rem; }
+
+        .price-select {
+            padding: 0.4rem 0.6rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--card);
+            color: var(--accent);
+            font-weight: 600;
+            cursor: pointer;
+            min-width: 80px;
         }
 
-        /* Team Management */
-        .team-form {
+        .player-item-admin {
             display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.6rem 0.75rem;
+            background: var(--dark);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
             gap: 0.5rem;
-            margin-bottom: 1rem;
+        }
+        .player-item-admin .player-info { flex: 1; }
+
+        .ipl-team-badge {
+            background: rgba(255, 111, 0, 0.2);
+            color: var(--warning);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
         }
 
+        .team-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
         .team-form input {
             flex: 1;
             padding: 0.75rem;
@@ -411,73 +278,36 @@
             border-radius: 8px;
             margin-bottom: 0.5rem;
         }
+        .delete-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 1.2rem; }
 
-        .delete-btn {
-            background: none;
-            border: none;
-            color: var(--danger);
-            cursor: pointer;
-            font-size: 1.2rem;
-        }
+        .history-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-box { background: var(--dark); padding: 1rem; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 2rem; font-weight: 700; color: var(--accent); }
+        .stat-label { font-size: 0.85rem; color: var(--text-secondary); }
 
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
+        .history-list { max-height: 400px; overflow-y: auto; }
+        .history-item { display: flex; justify-content: space-between; padding: 1rem; border-bottom: 1px solid var(--border); }
 
-        .tab {
-            padding: 0.75rem 1.5rem;
-            background: var(--dark);
-            border: none;
-            color: var(--text-secondary);
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 500;
-        }
-
-        .tab.active { background: var(--primary-light); color: white; }
-
-        /* Price dropdown in player list */
-        .price-select {
-            padding: 0.4rem;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            background: var(--card);
-            color: var(--accent);
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .player-item-admin {
-            display: flex;
-            justify-content: space-between;
+        .sold-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            justify-content: center;
             align-items: center;
-            padding: 0.6rem 0.75rem;
-            background: var(--dark);
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
-            gap: 0.5rem;
+            z-index: 2000;
         }
+        .sold-overlay.active { display: flex; }
+        .sold-content { text-align: center; animation: soldPop 0.5s ease-out; }
+        @keyframes soldPop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .sold-content h1 { font-size: 5rem; color: var(--success); text-shadow: 0 0 30px rgba(46,125,50,0.5); }
+        .sold-content .player { font-size: 2rem; color: var(--accent); margin: 0.5rem 0; }
+        .sold-content .team { font-size: 1.5rem; color: var(--primary-light); }
+        .sold-content .price { font-size: 1.3rem; color: white; }
 
-        .player-item-admin .player-info { flex: 1; }
-        .player-item-admin .ipl-team {
-            font-size: 0.75rem;
-            color: var(--warning);
-            font-weight: 500;
-        }
+        .export-btn { margin-top: 1rem; width: 100%; }
 
-        .ipl-team-badge {
-            background: rgba(255, 111, 0, 0.2);
-            color: var(--warning);
-            padding: 0.15rem 0.4rem;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            font-weight: 600;
-        }
-
-        /* Responsive */
         @media (max-width: 900px) {
             .main-layout { grid-template-columns: 1fr; }
             .admin-grid { grid-template-columns: 1fr; }
@@ -485,20 +315,19 @@
             .bid-info { flex-direction: column; gap: 1rem; }
         }
 
-        /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--dark); }
         ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
     </style>
 </head>
 <body>
-    <!-- Header -->
     <header class="header">
         <div class="logo">IPL 2026 Fantasy Auction</div>
         <div class="nav-btns">
             <button class="btn btn-secondary" onclick="showView('auction')">Live Auction</button>
             <button class="btn btn-secondary" onclick="showView('history')">History</button>
-            <button class="btn btn-primary" onclick="showAdminModal()">Admin</button>
+            <button class="btn btn-success" onclick="exportToExcel()">Export Excel</button>
+            <button class="btn btn-primary" onclick="showView('admin')">Admin</button>
         </div>
     </header>
 
@@ -524,35 +353,18 @@
     <!-- Admin View -->
     <div id="admin-view" class="view">
         <div class="admin-grid">
-            <!-- Left: Player Selection -->
             <div class="card">
                 <div class="tabs" style="margin-bottom: 1rem;">
                     <button class="tab active" onclick="showAdminTab('auction', this)">Run Auction</button>
                     <button class="tab" onclick="showAdminTab('prices', this)">Set Prices</button>
                 </div>
 
-                <!-- Auction Tab -->
                 <div id="admin-auction-tab">
-                    <h3 class="card-title">Select Player</h3>
-                    <div class="filters">
-                        <select id="filter-role" onchange="filterPlayers()">
-                            <option value="">All Roles</option>
-                            <option value="Batsman">Batsman</option>
-                            <option value="Bowler">Bowler</option>
-                            <option value="All-rounder">All-rounder</option>
-                            <option value="Wicket-keeper">Wicket-keeper</option>
-                        </select>
-                        <select id="filter-country" onchange="filterPlayers()">
-                            <option value="">All Countries</option>
-                            <option value="India">India</option>
-                            <option value="overseas">Overseas</option>
-                        </select>
-                        <input type="text" id="search-player" placeholder="Search..." oninput="filterPlayers()">
-                    </div>
+                    <h3 class="card-title">Select Player by Category</h3>
+                    <div class="tabs" id="category-tabs"></div>
                     <div class="players-list" id="players-list"></div>
                 </div>
 
-                <!-- Set Prices Tab -->
                 <div id="admin-prices-tab" style="display: none;">
                     <h3 class="card-title">Set Base Prices for Players</h3>
                     <div class="filters">
@@ -569,7 +381,6 @@
                 </div>
             </div>
 
-            <!-- Right: Controls -->
             <div>
                 <div class="card" style="margin-bottom: 1rem;">
                     <h3 class="card-title">Current Player</h3>
@@ -633,26 +444,18 @@
             </div>
 
             <div class="card">
-                <div class="tabs">
-                    <button class="tab active" onclick="showHistoryTab('sold', this)">Sold Players</button>
-                    <button class="tab" onclick="showHistoryTab('unsold', this)">Unsold Players</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div class="tabs" style="margin-bottom: 0;">
+                        <button class="tab active" onclick="showHistoryTab('sold', this)">Sold Players</button>
+                        <button class="tab" onclick="showHistoryTab('unsold', this)">Unsold Players</button>
+                        <button class="tab" onclick="showHistoryTab('teams', this)">Team Squads</button>
+                    </div>
+                    <button class="btn btn-success" onclick="exportToExcel()">Export Excel</button>
                 </div>
                 <div class="history-list" id="sold-history"></div>
                 <div class="history-list" id="unsold-history" style="display: none;"></div>
+                <div class="history-list" id="teams-history" style="display: none;"></div>
             </div>
-        </div>
-    </div>
-
-    <!-- Admin Login Modal -->
-    <div class="modal" id="admin-modal">
-        <div class="modal-content">
-            <h2 class="modal-title">Admin Login</h2>
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="admin-password" placeholder="Enter admin password">
-            </div>
-            <button class="btn btn-primary" style="width: 100%;" onclick="adminLogin()">Login</button>
-            <button class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem;" onclick="closeModal()">Cancel</button>
         </div>
     </div>
 
@@ -670,38 +473,29 @@
         const socket = io();
         let state = { teams: [], players: [], auctionState: {} };
         let selectedPlayer = null;
-        let isAdmin = false;
+        let currentCategory = 'all';
 
-        // Socket events
-        socket.on('fullUpdate', (data) => {
-            state = data;
-            renderAll();
-        });
+        const PRICE_CATEGORIES = [
+            { key: '2cr-indian', label: '2 Cr - Indian', price: 2, country: 'India' },
+            { key: '2cr-overseas', label: '2 Cr - Overseas', price: 2, country: 'overseas' },
+            { key: '1cr-indian', label: '1 Cr - Indian', price: 1, country: 'India' },
+            { key: '1cr-overseas', label: '1 Cr - Overseas', price: 1, country: 'overseas' },
+            { key: '50l-indian', label: '50L - Indian', price: 0.5, country: 'India' },
+            { key: '50l-overseas', label: '50L - Overseas', price: 0.5, country: 'overseas' },
+            { key: '20l-indian', label: '20L - Indian', price: 0.2, country: 'India' },
+            { key: '20l-overseas', label: '20L - Overseas', price: 0.2, country: 'overseas' },
+        ];
 
-        socket.on('auctionUpdate', (auctionState) => {
-            state.auctionState = auctionState;
-            renderAuction();
-        });
+        socket.on('fullUpdate', (data) => { state = data; renderAll(); });
+        socket.on('auctionUpdate', (auctionState) => { state.auctionState = auctionState; renderAuction(); });
+        socket.on('teamsUpdated', (teams) => { state.teams = teams; renderTeams(); });
+        socket.on('playerSold', ({ player, team, price }) => showSoldOverlay(player, team, price));
+        socket.on('playersUpdated', (players) => { state.players = players; renderPlayers(); renderPlayersPrice(); });
 
-        socket.on('teamsUpdated', (teams) => {
-            state.teams = teams;
-            renderTeams();
-        });
-
-        socket.on('playerSold', ({ player, team, price }) => {
-            showSoldOverlay(player, team, price);
-        });
-
-        socket.on('playersUpdated', (players) => {
-            state.players = players;
-            renderPlayers();
-            renderPlayersPrice();
-        });
-
-        // Render functions
         function renderAll() {
             renderAuction();
             renderTeams();
+            renderCategoryTabs();
             renderPlayers();
             renderPlayersPrice();
             renderHistory();
@@ -733,48 +527,45 @@
                         </div>
                     </div>
                 `;
-
                 adminPlayer.innerHTML = `
                     <div class="player-name" style="font-size: 1.8rem;">${p.name}</div>
                     <div class="player-details">${p.role} | <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
                     <div class="player-base">Base: <span>${formatPrice(p.basePrice)}</span></div>
                 `;
-
                 document.getElementById('bid-amount').value = auctionState.currentBid;
             } else {
-                content.innerHTML = `
-                    <div class="player-name">Waiting for Auction</div>
-                    <div class="player-details">Admin will start the auction shortly</div>
-                `;
+                content.innerHTML = `<div class="player-name">Waiting for Auction</div><div class="player-details">Admin will start the auction shortly</div>`;
                 adminPlayer.innerHTML = `<div class="player-name" style="font-size: 1.8rem;">No Player Selected</div>`;
             }
 
-            // Highlight current bidder
             document.querySelectorAll('.team-item').forEach(item => {
-                item.classList.toggle('current-bidder',
-                    auctionState.currentBidder && item.dataset.id == auctionState.currentBidder.id);
+                item.classList.toggle('current-bidder', auctionState.currentBidder && item.dataset.id == auctionState.currentBidder.id);
             });
         }
 
         function renderTeams() {
-            const html = state.teams.map(t => `
+            const initialBudget = state.config?.initialBudget || 100;
+            const html = state.teams.map(t => {
+                const spent = initialBudget - t.budget;
+                return `
                 <div class="team-item" data-id="${t.id}">
                     <div>
                         <div class="team-name">${t.name}</div>
                         <div style="font-size: 0.8rem; color: var(--text-secondary);">${t.players?.length || 0} players</div>
                     </div>
-                    <div class="team-budget ${t.budget < 10 ? 'low' : ''}">${t.budget.toFixed(2)} Cr</div>
+                    <div style="text-align: right;">
+                        <div class="team-budget ${t.budget < 10 ? 'low' : ''}">${t.budget.toFixed(2)} Cr</div>
+                        <div class="team-spent">Spent: ${spent.toFixed(2)} Cr</div>
+                    </div>
                 </div>
-            `).join('');
+            `}).join('');
 
             document.getElementById('teams-display').innerHTML = html || '<p style="color: var(--text-secondary);">No teams yet</p>';
 
-            // Update team dropdown
             const select = document.getElementById('bid-team');
             select.innerHTML = '<option value="">Select Team</option>' +
                 state.teams.map(t => `<option value="${t.id}">${t.name} (${t.budget.toFixed(2)} Cr)</option>`).join('');
 
-            // Team management list
             const mgmtHtml = state.teams.map(t => `
                 <div class="team-management-item">
                     <div>
@@ -787,21 +578,48 @@
             document.getElementById('team-management-list').innerHTML = mgmtHtml;
         }
 
-        function renderPlayers() {
-            filterPlayers();
+        function renderCategoryTabs() {
+            const container = document.getElementById('category-tabs');
+            if (!container) return;
+
+            let html = '<button class="tab ' + (currentCategory === 'all' ? 'active' : '') + '" onclick="setCategory(\'all\', this)">All</button>';
+
+            PRICE_CATEGORIES.forEach(cat => {
+                const count = getPlayersInCategory(cat).length;
+                if (count > 0) {
+                    html += `<button class="tab ${currentCategory === cat.key ? 'active' : ''}" onclick="setCategory('${cat.key}', this)">${cat.label} (${count})</button>`;
+                }
+            });
+            container.innerHTML = html;
         }
 
-        function filterPlayers() {
-            const role = document.getElementById('filter-role').value;
-            const country = document.getElementById('filter-country').value;
-            const search = document.getElementById('search-player').value.toLowerCase();
+        function getPlayersInCategory(cat) {
+            return state.players.filter(p => {
+                if (p.status !== 'available') return false;
+                const priceMatch = Math.abs(p.basePrice - cat.price) < 0.01 ||
+                                   (cat.price === 0.5 && p.basePrice >= 0.3 && p.basePrice <= 0.75) ||
+                                   (cat.price === 0.2 && p.basePrice <= 0.3);
+                const countryMatch = cat.country === 'India' ? p.country === 'India' : p.country !== 'India';
+                return priceMatch && countryMatch;
+            });
+        }
 
+        function setCategory(cat, btn) {
+            currentCategory = cat;
+            document.querySelectorAll('#category-tabs .tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            renderPlayers();
+        }
+
+        function renderPlayers() {
             let filtered = state.players.filter(p => p.status === 'available');
 
-            if (role) filtered = filtered.filter(p => p.role === role);
-            if (country === 'India') filtered = filtered.filter(p => p.country === 'India');
-            if (country === 'overseas') filtered = filtered.filter(p => p.country !== 'India');
-            if (search) filtered = filtered.filter(p => p.name.toLowerCase().includes(search));
+            if (currentCategory !== 'all') {
+                const cat = PRICE_CATEGORIES.find(c => c.key === currentCategory);
+                if (cat) {
+                    filtered = getPlayersInCategory(cat);
+                }
+            }
 
             const html = filtered.map(p => `
                 <div class="player-item ${selectedPlayer?.id === p.id ? 'selected' : ''}" onclick="selectPlayer(${p.id})">
@@ -813,27 +631,22 @@
                 </div>
             `).join('');
 
-            document.getElementById('players-list').innerHTML = html || '<p style="color: var(--text-secondary); padding: 1rem;">No players available</p>';
+            document.getElementById('players-list').innerHTML = html || '<p style="color: var(--text-secondary); padding: 1rem;">No players in this category</p>';
         }
 
         function renderPlayersPrice() {
-            filterPlayersPrice();
-        }
-
-        function filterPlayersPrice() {
             const role = document.getElementById('filter-role-price')?.value || '';
             const search = (document.getElementById('search-player-price')?.value || '').toLowerCase();
 
             let filtered = state.players.filter(p => p.status === 'available');
-
             if (role) filtered = filtered.filter(p => p.role === role);
             if (search) filtered = filtered.filter(p => p.name.toLowerCase().includes(search));
 
             const html = filtered.map(p => `
                 <div class="player-item-admin">
                     <div class="player-info">
-                        <div class="name">${p.name}</div>
-                        <div class="role">${p.role} | <span class="ipl-team">${p.previousTeam || 'Uncapped'}</span></div>
+                        <div class="name">${p.name} <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
+                        <div class="role">${p.role} | ${p.country}</div>
                     </div>
                     <select class="price-select" onchange="updatePlayerPrice(${p.id}, this.value)">
                         <option value="2" ${p.basePrice == 2 ? 'selected' : ''}>2 Cr</option>
@@ -847,25 +660,22 @@
             `).join('');
 
             const container = document.getElementById('players-price-list');
-            if (container) {
-                container.innerHTML = html || '<p style="color: var(--text-secondary); padding: 1rem;">No players available</p>';
-            }
+            if (container) container.innerHTML = html || '<p style="color: var(--text-secondary); padding: 1rem;">No players available</p>';
         }
+
+        function filterPlayersPrice() { renderPlayersPrice(); }
 
         function updatePlayerPrice(playerId, price) {
             fetch('/api/players/' + playerId + '/price', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ basePrice: parseFloat(price) })
-            });
+            }).then(() => renderCategoryTabs());
         }
 
         function formatPrice(price) {
-            if (price >= 1) {
-                return price + ' Cr';
-            } else {
-                return (price * 100) + ' L';
-            }
+            if (price >= 1) return price + ' Cr';
+            return (price * 100) + ' L';
         }
 
         function renderHistory() {
@@ -884,7 +694,7 @@
                 <div class="history-item">
                     <div>
                         <div style="font-weight: 600;">${p.name} <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
-                        <div style="font-size: 0.85rem; color: var(--text-secondary);">${p.role}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary);">${p.role} | ${p.country}</div>
                     </div>
                     <div style="text-align: right;">
                         <div style="color: var(--primary-light);">${p.soldToName}</div>
@@ -902,9 +712,29 @@
                     <div style="color: var(--danger);">Unsold</div>
                 </div>
             `).join('') || '<p style="padding: 1rem; color: var(--text-secondary);">No unsold players</p>';
+
+            // Team squads
+            const teamsHtml = state.teams.map(t => {
+                const teamPlayers = (t.players || []).map(p => `
+                    <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
+                        <span>${p.name} (${p.role})</span>
+                        <span style="color: var(--accent);">${formatPrice(p.soldPrice)}</span>
+                    </div>
+                `).join('');
+                const spent = (state.config?.initialBudget || 100) - t.budget;
+                return `
+                    <div style="margin-bottom: 1.5rem;">
+                        <div style="display: flex; justify-content: space-between; padding: 0.5rem; background: var(--primary-light); border-radius: 6px; margin-bottom: 0.5rem;">
+                            <strong>${t.name}</strong>
+                            <span>Budget: ${t.budget.toFixed(2)} Cr | Spent: ${spent.toFixed(2)} Cr</span>
+                        </div>
+                        ${teamPlayers || '<p style="color: var(--text-secondary); padding: 0.5rem;">No players yet</p>'}
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('teams-history').innerHTML = teamsHtml || '<p style="padding: 1rem; color: var(--text-secondary);">No teams yet</p>';
         }
 
-        // Actions
         function selectPlayer(id) {
             selectedPlayer = state.players.find(p => p.id === id);
             socket.emit('selectPlayer', id);
@@ -914,66 +744,39 @@
         function updateBid() {
             const amount = parseFloat(document.getElementById('bid-amount').value);
             const teamId = parseInt(document.getElementById('bid-team').value);
-            if (amount && teamId) {
-                socket.emit('updateBid', { amount, teamId });
-            }
+            if (amount && teamId) socket.emit('updateBid', { amount, teamId });
         }
 
-        function markSold() {
-            socket.emit('markSold');
-        }
-
-        function markUnsold() {
-            socket.emit('markUnsold');
-        }
+        function markSold() { socket.emit('markSold'); }
+        function markUnsold() { socket.emit('markUnsold'); }
 
         function addTeam() {
             const name = document.getElementById('new-team-name').value.trim();
             if (name) {
-                fetch('/api/teams', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name })
-                });
+                fetch('/api/teams', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
                 document.getElementById('new-team-name').value = '';
             }
         }
 
         function deleteTeam(id) {
-            if (confirm('Delete this team?')) {
-                fetch('/api/teams/' + id, { method: 'DELETE' });
-            }
+            if (confirm('Delete this team?')) fetch('/api/teams/' + id, { method: 'DELETE' });
         }
 
         function resetAuction() {
-            if (confirm('Reset entire auction? This will restore all budgets and make all players available again.')) {
-                fetch('/api/reset', { method: 'POST' });
-            }
+            if (confirm('Reset entire auction?')) fetch('/api/reset', { method: 'POST' });
         }
 
-        // View management
         function showView(view) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(view + '-view').classList.add('active');
         }
 
-        function showAdminModal() {
-            showView('admin');
-        }
-
-        function closeModal() {
-            document.getElementById('admin-modal').classList.remove('active');
-        }
-
-        async function adminLogin() {
-            showView('admin');
-        }
-
         function showHistoryTab(tab, btn) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            btn.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById('sold-history').style.display = tab === 'sold' ? 'block' : 'none';
             document.getElementById('unsold-history').style.display = tab === 'unsold' ? 'block' : 'none';
+            document.getElementById('teams-history').style.display = tab === 'teams' ? 'block' : 'none';
         }
 
         function showAdminTab(tab, btn) {
@@ -982,23 +785,59 @@
             document.getElementById('admin-auction-tab').style.display = tab === 'auction' ? 'block' : 'none';
             document.getElementById('admin-prices-tab').style.display = tab === 'prices' ? 'block' : 'none';
             if (tab === 'prices') renderPlayersPrice();
+            if (tab === 'auction') renderCategoryTabs();
         }
 
         function showSoldOverlay(player, team, price) {
             document.getElementById('sold-player').textContent = player.name;
             document.getElementById('sold-team').textContent = 'to ' + team.name;
-            document.getElementById('sold-price').textContent = 'for ' + price + ' Cr';
+            document.getElementById('sold-price').textContent = 'for ' + formatPrice(price);
             document.getElementById('sold-overlay').classList.add('active');
-
-            setTimeout(() => {
-                document.getElementById('sold-overlay').classList.remove('active');
-            }, 3000);
+            setTimeout(() => document.getElementById('sold-overlay').classList.remove('active'), 3000);
         }
 
-        // Enter key for password
-        document.getElementById('admin-password').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') adminLogin();
-        });
+        function exportToExcel() {
+            const wb = XLSX.utils.book_new();
+
+            // Sheet 1: All Teams Summary
+            const teamsData = state.teams.map(t => ({
+                'Team Name': t.name,
+                'Budget Remaining (Cr)': t.budget.toFixed(2),
+                'Budget Spent (Cr)': ((state.config?.initialBudget || 100) - t.budget).toFixed(2),
+                'Players Count': (t.players || []).length
+            }));
+            const ws1 = XLSX.utils.json_to_sheet(teamsData);
+            XLSX.utils.book_append_sheet(wb, ws1, 'Teams Summary');
+
+            // Sheet 2: All Sold Players
+            const soldData = (state.auctionState.soldPlayers || []).map(p => ({
+                'Player Name': p.name,
+                'Role': p.role,
+                'Country': p.country,
+                'IPL Team': p.previousTeam || 'Uncapped',
+                'Sold To': p.soldToName,
+                'Price (Cr)': p.soldPrice
+            }));
+            const ws2 = XLSX.utils.json_to_sheet(soldData);
+            XLSX.utils.book_append_sheet(wb, ws2, 'Sold Players');
+
+            // Individual team sheets
+            state.teams.forEach(t => {
+                const teamPlayers = (t.players || []).map(p => ({
+                    'Player Name': p.name,
+                    'Role': p.role,
+                    'Country': p.country,
+                    'IPL Team': p.previousTeam || 'Uncapped',
+                    'Price (Cr)': p.soldPrice
+                }));
+                if (teamPlayers.length > 0) {
+                    const ws = XLSX.utils.json_to_sheet(teamPlayers);
+                    XLSX.utils.book_append_sheet(wb, ws, t.name.substring(0, 30));
+                }
+            });
+
+            XLSX.writeFile(wb, 'IPL_Auction_Results.xlsx');
+        }
     </script>
 </body>
 </html>
