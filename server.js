@@ -205,7 +205,7 @@ app.post('/api/room/:code/teams', (req, res) => {
         }
 
         const team = {
-            id: `team_${Date.now()}_${Math.floor(Math.random() * 1000)}`, // String ID for safety
+            id: `team_${Date.now()}_${Math.floor(Math.random() * 100000)}`, // String ID for safety
             name: name.trim(),
             ownerName: ownerName || '',
             budget: INITIAL_BUDGET,

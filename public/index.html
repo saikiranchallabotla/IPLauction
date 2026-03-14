@@ -1190,11 +1190,11 @@
                 socket.emit('joinRoom', roomCode);
             });
 
-            socket.on('fullUpdate', (data) => { state = data; renderAll(); });
-            socket.on('auctionUpdate', (auctionState) => { state.auctionState = auctionState; renderAuction(); });
-            socket.on('teamsUpdated', (teams) => { state.teams = teams; renderTeams(); });
-            socket.on('playerSold', ({ player, team, price }) => showSoldOverlay(player, team, price));
-            socket.on('playersUpdated', (players) => { state.players = players; renderPlayers(); renderPlayersPrice(); });
+            socket.on('fullUpdate', (data) => { try { state = data; renderAll(); } catch(e) { console.error('fullUpdate render error:', e); } });
+            socket.on('auctionUpdate', (auctionState) => { try { state.auctionState = auctionState; renderAuction(); } catch(e) { console.error('auctionUpdate render error:', e); } });
+            socket.on('teamsUpdated', (teams) => { try { state.teams = teams; renderTeams(); } catch(e) { console.error('teamsUpdated render error:', e); } });
+            socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
+            socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); } catch(e) { console.error('playersUpdated render error:', e); } });
             socket.on('roomError', (msg) => {
                 alert(msg);
                 forceLeaveRoom();
@@ -1209,21 +1209,17 @@
 
         // ============ RENDERING ============
         function renderAll() {
-            renderAuction();
-            renderTeams();
-            renderSetupTeams();
-            renderCategoryTabs();
-            renderPlayers();
-            renderPlayersPrice();
-            renderHistory();
-            renderAdminSoldList();
+            const fns = [renderAuction, renderTeams, renderSetupTeams, renderCategoryTabs, renderPlayers, renderPlayersPrice, renderHistory, renderAdminSoldList];
+            fns.forEach(fn => { try { fn(); } catch(e) { console.error('Render error in ' + fn.name + ':', e); } });
         }
 
         function renderAuction() {
-            const { auctionState } = state;
+            const auctionState = state.auctionState || {};
             const badge = document.getElementById('status-badge');
             const content = document.getElementById('auction-content');
             const adminPlayer = document.getElementById('admin-current-player');
+
+            if (!badge || !content || !adminPlayer) return;
 
             badge.className = 'status-badge status-' + (auctionState.status || 'waiting');
             badge.textContent = (auctionState.status || 'waiting').toUpperCase();
@@ -1274,16 +1270,18 @@
 
         function renderTeams() {
             const initialBudget = state.config?.initialBudget || 100;
-            const html = state.teams.map(t => {
-                const spent = initialBudget - t.budget;
+            const teams = state.teams || [];
+            const html = teams.map(t => {
+                const budget = t.budget != null ? t.budget : initialBudget;
+                const spent = initialBudget - budget;
                 return `
                 <div class="team-item" data-id="${t.id}">
                     <div>
                         <div class="team-name">${t.name}</div>
-                        <div style="font-size: 0.8rem; color: var(--text-secondary);">${t.players?.length || 0} players</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">${(t.players || []).length} players</div>
                     </div>
                     <div style="text-align: right;">
-                        <div class="team-budget ${t.budget < 10 ? 'low' : ''}">${t.budget.toFixed(2)} Cr</div>
+                        <div class="team-budget ${budget < 10 ? 'low' : ''}">${budget.toFixed(2)} Cr</div>
                         <div class="team-spent">Spent: ${spent.toFixed(2)} Cr</div>
                     </div>
                 </div>
@@ -1295,8 +1293,9 @@
             const currentBid = parseFloat(document.getElementById('bid-amount').value) || 0.2;
             const nextBid = currentBid + getBidStep(currentBid);
             const auctionPlayer = state.auctionState?.currentPlayer;
-            const bidBtnsHtml = state.teams.map(t => {
-                const canAfford = t.budget >= nextBid;
+            const bidBtnsHtml = teams.map(t => {
+                const budget = t.budget != null ? t.budget : initialBudget;
+                const canAfford = budget >= nextBid;
                 const isCurrentBidder = state.auctionState?.currentBidder?.id === t.id;
                 const playerCount = (t.players || []).length;
                 const overseasCount = (t.players || []).filter(p => p.country !== 'India').length;
@@ -1312,22 +1311,24 @@
                             onclick="teamBid('${t.id}')"
                             ${isDisabled ? 'disabled' : ''}>
                         <span class="team-bid-name">${t.name}</span>
-                        <span class="team-bid-budget">${t.budget.toFixed(2)} Cr <span style="font-size:0.7rem;color:var(--text-secondary);">(${playerCount}/16, OS:${overseasCount}/6)</span></span>
+                        <span class="team-bid-budget">${budget.toFixed(2)} Cr <span style="font-size:0.7rem;color:var(--text-secondary);">(${playerCount}/16, OS:${overseasCount}/6)</span></span>
                         <span class="team-bid-action">${statusLabel || (isCurrentBidder ? '✓ Leading' : '+ Bid')}</span>
                     </button>
                 `;
             }).join('');
             document.getElementById('team-bid-buttons').innerHTML = bidBtnsHtml || '<p style="color: var(--text-secondary);">No teams created yet</p>';
 
-            const mgmtHtml = state.teams.map(t => `
+            const mgmtHtml = teams.map(t => {
+                const budget = t.budget != null ? t.budget : initialBudget;
+                return `
                 <div class="team-management-item">
                     <div>
                         <div class="team-name">${t.name}</div>
-                        <div style="font-size: 0.8rem; color: var(--text-secondary);">${t.budget.toFixed(2)} Cr remaining</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">${budget.toFixed(2)} Cr remaining</div>
                     </div>
                     <button class="delete-btn" onclick="deleteTeam('${t.id}')">✕</button>
                 </div>
-            `).join('');
+            `}).join('');
             document.getElementById('team-management-list').innerHTML = mgmtHtml;
 
             // Also update setup teams list
@@ -1483,15 +1484,16 @@
                 const teamPlayers = (t.players || []).map(p => `
                     <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
                         <span>${p.name} (${p.role})</span>
-                        <span style="color: var(--accent);">${formatPrice(p.soldPrice)}</span>
+                        <span style="color: var(--accent);">${formatPrice(p.soldPrice || 0)}</span>
                     </div>
                 `).join('');
-                const spent = (state.config?.initialBudget || 100) - t.budget;
+                const budget = t.budget != null ? t.budget : (state.config?.initialBudget || 100);
+                const spent = (state.config?.initialBudget || 100) - budget;
                 return `
                     <div style="margin-bottom: 1.5rem;">
                         <div style="display: flex; justify-content: space-between; padding: 0.5rem; background: var(--primary-light); border-radius: 6px; margin-bottom: 0.5rem;">
                             <strong>${t.name}</strong>
-                            <span>Budget: ${t.budget.toFixed(2)} Cr | Spent: ${spent.toFixed(2)} Cr</span>
+                            <span>Budget: ${budget.toFixed(2)} Cr | Spent: ${spent.toFixed(2)} Cr</span>
                         </div>
                         ${teamPlayers || '<p style="color: var(--text-secondary); padding: 0.5rem;">No players yet</p>'}
                     </div>
@@ -1581,11 +1583,12 @@
         // Team bid button click - auto increment and set bidder
         function teamBid(teamId) {
             const team = state.teams.find(t => t.id === teamId);
-            if (!team) return;
+            if (!team) { console.error('Team not found:', teamId); return; }
 
             const MAX_PLAYERS = 16;
             const MIN_PLAYERS = 12;
             const MAX_OVERSEAS = 6;
+            const budget = team.budget != null ? team.budget : 0;
 
             // Check max 16 players
             const currentPlayerCount = (team.players || []).length;
@@ -1615,13 +1618,13 @@
             }
 
             // Check if team can afford
-            if (team.budget < newBid) {
-                showAuctionPopup('Insufficient Budget', `${team.name} cannot afford ${formatPrice(newBid)}. Remaining budget: ${formatPrice(team.budget)}.`);
+            if (budget < newBid) {
+                showAuctionPopup('Insufficient Budget', `${team.name} cannot afford ${formatPrice(newBid)}. Remaining budget: ${formatPrice(budget)}.`);
                 return;
             }
 
             // Check if remaining budget after this bid can accommodate minimum 12 players
-            const remainingBudgetAfterBid = team.budget - newBid;
+            const remainingBudgetAfterBid = budget - newBid;
             const playersNeededAfterThis = MIN_PLAYERS - (currentPlayerCount + 1);
             if (playersNeededAfterThis > 0) {
                 const minPricePerPlayer = 0.2; // 20L minimum base price
@@ -1682,13 +1685,18 @@
                 body: JSON.stringify({ name })
             })
             .then(async res => {
-                const data = await res.json();
+                if (res.status === 404) {
+                    alert('Room no longer exists. Returning to home page.');
+                    forceLeaveRoom();
+                    return;
+                }
+                let data;
+                try {
+                    data = await res.json();
+                } catch (parseErr) {
+                    throw new Error('Server returned an invalid response. Please try again.');
+                }
                 if (!res.ok) {
-                    if (res.status === 404) {
-                        alert('Room no longer exists. Returning to home page.');
-                        forceLeaveRoom();
-                        return;
-                    }
                     throw new Error(data.error || 'Failed to create team');
                 }
                 return data;
@@ -1753,24 +1761,27 @@
         function renderSetupTeams() {
             const container = document.getElementById('setup-teams-list');
             const countEl = document.getElementById('team-count');
-            if (countEl) countEl.textContent = state.teams.length;
+            const teams = state.teams || [];
+            if (countEl) countEl.textContent = teams.length;
 
             if (!container) return;
 
-            if (state.teams.length === 0) {
+            if (teams.length === 0) {
                 container.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem; text-align: center;">No teams added yet. Add teams above to start the auction.</p>';
                 return;
             }
 
-            container.innerHTML = state.teams.map(t => `
+            container.innerHTML = teams.map(t => {
+                const budget = t.budget != null ? t.budget : (state.config?.initialBudget || 100);
+                return `
                 <div class="team-management-item">
                     <div>
                         <div class="team-name">${t.name}</div>
-                        <div style="font-size: 0.8rem; color: var(--accent);">Budget: ${t.budget.toFixed(2)} Cr</div>
+                        <div style="font-size: 0.8rem; color: var(--accent);">Budget: ${budget.toFixed(2)} Cr</div>
                     </div>
                     <button class="delete-btn" onclick="deleteTeam('${t.id}')" title="Remove team">✕</button>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         function showSoldOverlay(player, team, price) {
@@ -1787,8 +1798,8 @@
             // Sheet 1: All Teams Summary
             const teamsData = state.teams.map(t => ({
                 'Team Name': t.name,
-                'Budget Remaining (Cr)': t.budget.toFixed(2),
-                'Budget Spent (Cr)': ((state.config?.initialBudget || 100) - t.budget).toFixed(2),
+                'Budget Remaining (Cr)': (t.budget || 0).toFixed(2),
+                'Budget Spent (Cr)': ((state.config?.initialBudget || 100) - (t.budget || 0)).toFixed(2),
                 'Players Count': (t.players || []).length
             }));
             const ws1 = XLSX.utils.json_to_sheet(teamsData);
