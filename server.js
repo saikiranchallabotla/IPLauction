@@ -346,55 +346,60 @@ io.on('connection', (socket) => {
         const room = getRoom(socket.roomCode);
         if (!room) return;
 
-        if (room.auctionState.currentPlayer && room.auctionState.currentBidder) {
-            const player = room.auctionState.currentPlayer;
-            const team = room.auctionState.currentBidder;
-            const price = room.auctionState.currentBid;
+        // Prevent double-click: only process if status is 'bidding'
+        if (room.auctionState.status !== 'bidding') return;
+        if (!room.auctionState.currentPlayer || !room.auctionState.currentBidder) return;
 
-            // Update player
-            const playerIndex = room.players.findIndex(p => p.id === player.id);
-            room.players[playerIndex].status = 'sold';
-            room.players[playerIndex].soldTo = team.id;
-            room.players[playerIndex].soldToName = team.name;
-            room.players[playerIndex].soldPrice = price;
+        const player = room.auctionState.currentPlayer;
+        const team = room.auctionState.currentBidder;
+        const price = room.auctionState.currentBid;
 
-            // Update team
-            const teamIndex = room.teams.findIndex(t => t.id === team.id);
-            room.teams[teamIndex].budget -= price;
-            room.teams[teamIndex].players.push({
-                ...room.players[playerIndex],
-                soldPrice: price
-            });
+        // Find player and team with bounds check
+        const playerIndex = room.players.findIndex(p => p.id === player.id);
+        const teamIndex = room.teams.findIndex(t => t.id === team.id);
+        if (playerIndex === -1 || teamIndex === -1) return;
 
-            // Update auction state
-            room.auctionState.soldPlayers.push({
-                ...room.players[playerIndex],
-                soldPrice: price,
-                soldToName: team.name
-            });
+        // Update player
+        room.players[playerIndex].status = 'sold';
+        room.players[playerIndex].soldTo = team.id;
+        room.players[playerIndex].soldToName = team.name;
+        room.players[playerIndex].soldPrice = price;
 
-            room.auctionState.status = 'sold';
+        // Update team
+        room.teams[teamIndex].budget -= price;
+        room.teams[teamIndex].players.push({
+            ...room.players[playerIndex],
+            soldPrice: price
+        });
 
-            saveRooms(); // Save immediately after sale
+        // Update auction state
+        room.auctionState.soldPlayers.push({
+            ...room.players[playerIndex],
+            soldPrice: price,
+            soldToName: team.name
+        });
 
-            io.to(room.code).emit('playerSold', {
-                player: room.players[playerIndex],
-                team: room.teams[teamIndex],
-                price
-            });
+        room.auctionState.status = 'sold';
 
-            io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+        saveRooms(); // Save immediately after sale
 
-            // Reset after 3 seconds
-            setTimeout(() => {
-                room.auctionState.status = 'waiting';
-                room.auctionState.currentPlayer = null;
-                room.auctionState.currentBid = 0;
-                room.auctionState.currentBidder = null;
-                saveRooms();
-                io.to(room.code).emit('auctionUpdate', room.auctionState);
-            }, 3000);
-        }
+        io.to(room.code).emit('playerSold', {
+            player: room.players[playerIndex],
+            team: room.teams[teamIndex],
+            price
+        });
+
+        io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+
+        // Reset after 3 seconds
+        setTimeout(() => {
+            room.auctionState.status = 'waiting';
+            room.auctionState.currentPlayer = null;
+            room.auctionState.currentBid = 0;
+            room.auctionState.currentBidder = null;
+            saveRooms();
+            io.to(room.code).emit('auctionUpdate', room.auctionState);
+        }, 3000);
     });
 
     // Admin: Mark as unsold
@@ -402,31 +407,35 @@ io.on('connection', (socket) => {
         const room = getRoom(socket.roomCode);
         if (!room) return;
 
-        if (room.auctionState.currentPlayer) {
-            const player = room.auctionState.currentPlayer;
+        // Prevent double-click: only process if status is 'bidding'
+        if (room.auctionState.status !== 'bidding') return;
+        if (!room.auctionState.currentPlayer) return;
 
-            // Update player
-            const playerIndex = room.players.findIndex(p => p.id === player.id);
-            room.players[playerIndex].status = 'unsold';
+        const player = room.auctionState.currentPlayer;
 
-            // Update auction state
-            room.auctionState.unsoldPlayers.push(room.players[playerIndex]);
-            room.auctionState.status = 'unsold';
+        // Find player with bounds check
+        const playerIndex = room.players.findIndex(p => p.id === player.id);
+        if (playerIndex === -1) return;
 
-            saveRooms(); // Save immediately after unsold
+        room.players[playerIndex].status = 'unsold';
 
-            io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+        // Update auction state
+        room.auctionState.unsoldPlayers.push(room.players[playerIndex]);
+        room.auctionState.status = 'unsold';
 
-            // Reset after 2 seconds
-            setTimeout(() => {
-                room.auctionState.status = 'waiting';
-                room.auctionState.currentPlayer = null;
-                room.auctionState.currentBid = 0;
-                room.auctionState.currentBidder = null;
-                saveRooms();
-                io.to(room.code).emit('auctionUpdate', room.auctionState);
-            }, 2000);
-        }
+        saveRooms(); // Save immediately after unsold
+
+        io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+
+        // Reset after 2 seconds
+        setTimeout(() => {
+            room.auctionState.status = 'waiting';
+            room.auctionState.currentPlayer = null;
+            room.auctionState.currentBid = 0;
+            room.auctionState.currentBidder = null;
+            saveRooms();
+            io.to(room.code).emit('auctionUpdate', room.auctionState);
+        }, 2000);
     });
 
     socket.on('disconnect', () => {

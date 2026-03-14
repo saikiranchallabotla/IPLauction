@@ -788,7 +788,7 @@
                         </div>
 
                         <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-                            <button class="btn btn-success" style="width: 100%;" onclick="showAdminTab('prices', document.querySelector('.tab:nth-child(2)'))">
+                            <button class="btn btn-success" style="width: 100%;" onclick="showAdminTab('prices', document.querySelector('#admin-view .tab:nth-child(2)'))">
                                 Next: Set Player Prices →
                             </button>
                         </div>
@@ -811,10 +811,10 @@
                         <div class="players-list" id="players-price-list" style="max-height: 400px;"></div>
 
                         <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); display: flex; gap: 0.5rem;">
-                            <button class="btn btn-secondary" style="flex: 1;" onclick="showAdminTab('teams', document.querySelector('.tab:nth-child(1)'))">
+                            <button class="btn btn-secondary" style="flex: 1;" onclick="showAdminTab('teams', document.querySelector('#admin-view .tab:nth-child(1)'))">
                                 ← Back to Teams
                             </button>
-                            <button class="btn btn-success" style="flex: 1;" onclick="showAdminTab('auction', document.querySelector('.tab:nth-child(3)'))">
+                            <button class="btn btn-success" style="flex: 1;" onclick="showAdminTab('auction', document.querySelector('#admin-view .tab:nth-child(3)'))">
                                 Next: Start Auction →
                             </button>
                         </div>
@@ -1286,6 +1286,7 @@
         function filterPlayersPrice() { renderPlayersPrice(); }
 
         function updatePlayerPrice(playerId, price) {
+            if (!roomCode) return;
             fetch('/api/room/' + roomCode + '/players/' + playerId + '/price', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
