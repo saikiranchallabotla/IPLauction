@@ -422,20 +422,8 @@
         .team-spent { font-size: 0.75rem; color: var(--danger); }
 
         /* ============ ADMIN ============ */
-        .admin-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; padding: 1rem; }
+        .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem; }
         .admin-right-panel { display: flex; flex-direction: column; gap: 0.5rem; }
-        .admin-sold-panel { display: flex; flex-direction: column; gap: 0; max-height: calc(100vh - 80px); }
-        .admin-sold-panel .sold-panel-header {
-            padding: 0.8rem 1rem; background: linear-gradient(135deg, #0d1226, #1a237e);
-            border-bottom: 1px solid rgba(245, 197, 24, 0.15); border-radius: 12px 12px 0 0;
-        }
-        .admin-sold-panel .sold-panel-header h3 {
-            color: var(--accent); font-size: 0.95rem; font-weight: 700; margin: 0;
-        }
-        .admin-sold-panel .sold-panel-body {
-            flex: 1; overflow-y: auto; background: var(--glass);
-            border-radius: 0 0 12px 12px; border: 1px solid var(--glass-border); border-top: none;
-        }
         .players-list { max-height: 500px; overflow-y: auto; }
 
         .player-item {
@@ -568,51 +556,9 @@
             padding: 0.5rem 0.7rem; background: var(--dark-elevated);
             border-radius: 8px; margin-bottom: 0.3rem;
             border: 1px solid var(--border); transition: all 0.2s ease;
-            cursor: pointer; font-size: 0.85rem;
+            font-size: 0.85rem;
         }
-        .team-management-item:hover { border-color: var(--border-light); background: rgba(63,81,181,0.08); }
-        .team-management-item.selected { border-color: var(--accent); background: var(--accent-dim); }
-
-        /* Team Detail Panel */
-        .team-detail-panel {
-            margin-top: 0.5rem; padding: 0.6rem;
-            background: rgba(0,0,0,0.25); border-radius: 8px;
-            border: 1px solid var(--border);
-        }
-        .team-detail-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 0.5rem; padding-bottom: 0.4rem;
-            border-bottom: 1px solid var(--border);
-        }
-        .team-detail-header h4 { color: var(--accent); font-size: 0.82rem; margin: 0; }
-        .team-detail-header .team-stats {
-            font-size: 0.7rem; color: var(--text-secondary);
-        }
-        .team-player-row {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 0.3rem 0.4rem; border-radius: 5px;
-            font-size: 0.75rem; margin-bottom: 0.15rem;
-            border-bottom: 1px solid rgba(255,255,255,0.03);
-        }
-        .team-player-row:hover { background: rgba(255,255,255,0.03); }
-        .team-player-row .player-name-col { flex: 1; font-weight: 500; }
-        .team-player-row .ipl-col {
-            font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 4px;
-            background: rgba(26, 35, 126, 0.5); color: var(--primary-light);
-            margin: 0 0.4rem; white-space: nowrap;
-        }
-        .team-player-row .tag-home {
-            font-size: 0.6rem; padding: 0.1rem 0.3rem; border-radius: 3px;
-            background: rgba(0,200,83,0.15); color: #69f0ae; margin-right: 0.3rem;
-        }
-        .team-player-row .tag-overseas {
-            font-size: 0.6rem; padding: 0.1rem 0.3rem; border-radius: 3px;
-            background: rgba(233,30,99,0.15); color: #f48fb1; margin-right: 0.3rem;
-        }
-        .team-player-row .price-col {
-            color: var(--accent); font-weight: 700; white-space: nowrap;
-        }
-        .team-detail-empty { color: var(--text-secondary); font-size: 0.75rem; text-align: center; padding: 0.5rem; }
+        .team-management-item:hover { border-color: var(--border-light); }
 
         .delete-btn {
             background: none; border: none; color: var(--danger);
@@ -720,7 +666,6 @@
             .main-layout { grid-template-columns: 1fr; }
             .admin-grid { grid-template-columns: 1fr; }
             .admin-right-panel { flex-direction: column; }
-            .admin-sold-panel { max-height: 400px; }
             .history-stats { grid-template-columns: repeat(2, 1fr); }
             .bid-info { flex-direction: column; gap: 1rem; }
             .landing-logo { font-size: 2rem; }
@@ -968,38 +913,31 @@
                     <!-- Team Bid Buttons -->
                     <div class="card" style="margin-bottom: 0;">
                         <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Click Team to Bid</h3>
-                        <div id="team-bid-buttons" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.4rem; max-height: 150px; overflow-y: auto;"></div>
+                        <div id="team-bid-buttons" style="display: flex; flex-wrap: wrap; gap: 0.3rem;"></div>
                     </div>
 
-                    <!-- Teams Overview -->
+                    <!-- Sold Players (toggle) -->
                     <div class="card" style="margin-bottom: 0;">
-                        <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Teams Overview <span style="font-size:0.75rem;color:var(--text-secondary);">(click to view squad)</span></h3>
-                        <div id="team-management-list" style="max-height: 160px; overflow-y: auto;"></div>
-                        <div id="team-detail-container"></div>
-                        <div style="margin-top: 0.5rem;">
-                            <button class="btn btn-danger" style="width: 100%; padding: 0.4rem; font-size: 0.85rem;" onclick="resetAuction()">Reset Auction</button>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-success" style="flex: 1; padding: 0.4rem; font-size: 0.85rem;" onclick="toggleSoldPanel()">
+                                Sold Players <span id="admin-sold-count" style="background:rgba(0,0,0,0.2);padding:0.1rem 0.45rem;border-radius:10px;font-size:0.78rem;">0</span>
+                            </button>
+                            <button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;" onclick="resetAuction()">Reset</button>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Pane 3: Sold Players -->
-                <div class="admin-sold-panel">
-                    <div class="sold-panel-header">
-                        <h3>Players Sold (<span id="admin-sold-count">0</span>)</h3>
-                    </div>
-                    <div class="sold-panel-body">
-                        <table class="sold-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Player</th>
-                                    <th>IPL Team</th>
-                                    <th>Bought By</th>
-                                    <th>Price</th>
-                                </tr>
-                            </thead>
-                            <tbody id="sold-table-body"></tbody>
-                        </table>
+                        <div id="sold-panel-inline" style="display:none; margin-top: 0.5rem; max-height: 250px; overflow-y: auto;">
+                            <table class="sold-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Player</th>
+                                        <th>IPL Team</th>
+                                        <th>Bought By</th>
+                                        <th>Price</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sold-table-body"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1354,78 +1292,13 @@
             }).join('');
             document.getElementById('team-bid-buttons').innerHTML = bidBtnsHtml || '<p style="color: var(--text-secondary);">No teams created yet</p>';
 
-            const mgmtHtml = teams.map(t => {
-                const budget = t.budget != null ? t.budget : initialBudget;
-                const playerCount = (t.players || []).length;
-                return `
-                <div class="team-management-item" onclick="showTeamDetail('${t.id}')" data-team-mgmt="${t.id}">
-                    <div>
-                        <div class="team-name" style="font-size:0.82rem;">${t.name}</div>
-                        <div style="font-size: 0.7rem; color: var(--text-secondary);">${budget.toFixed(2)} Cr | ${playerCount} players</div>
-                    </div>
-                    <button class="delete-btn" onclick="event.stopPropagation(); deleteTeam('${t.id}')">✕</button>
-                </div>
-            `}).join('');
-            document.getElementById('team-management-list').innerHTML = mgmtHtml;
-
-            // Re-highlight selected team if any
-            if (selectedTeamId) showTeamDetail(selectedTeamId, true);
-
             // Also update setup teams list
             renderSetupTeams();
         }
 
-        let selectedTeamId = null;
-
-        function showTeamDetail(teamId, skipToggle) {
-            const container = document.getElementById('team-detail-container');
-            if (!container) return;
-
-            // Toggle: clicking same team again hides the detail
-            if (!skipToggle && selectedTeamId === teamId) {
-                selectedTeamId = null;
-                container.innerHTML = '';
-                document.querySelectorAll('.team-management-item').forEach(el => el.classList.remove('selected'));
-                return;
-            }
-
-            selectedTeamId = teamId;
-            const team = (state.teams || []).find(t => t.id === teamId);
-            if (!team) { container.innerHTML = ''; return; }
-
-            // Highlight selected
-            document.querySelectorAll('.team-management-item').forEach(el => {
-                el.classList.toggle('selected', el.dataset.teamMgmt === teamId);
-            });
-
-            const players = team.players || [];
-            const homeCount = players.filter(p => p.country === 'India').length;
-            const overseasCount = players.length - homeCount;
-            const budget = team.budget != null ? team.budget : (state.config?.initialBudget || 100);
-
-            let playersHtml;
-            if (players.length === 0) {
-                playersHtml = '<div class="team-detail-empty">No players purchased yet</div>';
-            } else {
-                playersHtml = players.map(p => `
-                    <div class="team-player-row">
-                        <span class="${p.country === 'India' ? 'tag-home' : 'tag-overseas'}">${p.country === 'India' ? 'HOME' : 'OS'}</span>
-                        <span class="player-name-col">${p.name}</span>
-                        <span class="ipl-col">${p.previousTeam || 'Uncapped'}</span>
-                        <span class="price-col">${formatPrice(p.soldPrice || 0)}</span>
-                    </div>
-                `).join('');
-            }
-
-            container.innerHTML = `
-                <div class="team-detail-panel">
-                    <div class="team-detail-header">
-                        <h4>${team.name}</h4>
-                        <span class="team-stats">${players.length}/16 players | ${budget.toFixed(2)} Cr | Home: ${homeCount} | OS: ${overseasCount}/6</span>
-                    </div>
-                    ${playersHtml}
-                </div>
-            `;
+        function toggleSoldPanel() {
+            const panel = document.getElementById('sold-panel-inline');
+            if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
         }
 
         function renderCategoryTabs() {
