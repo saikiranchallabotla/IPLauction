@@ -102,27 +102,40 @@ app.get('/api/room/:code/data', (req, res) => {
 
 // Create team in room
 app.post('/api/room/:code/teams', (req, res) => {
-    const room = getRoom(req.params.code);
-    if (!room) {
-        return res.status(404).json({ error: 'Room not found' });
+    try {
+        const room = getRoom(req.params.code);
+        if (!room) {
+            console.log(`Team creation failed: Room ${req.params.code} not found`);
+            return res.status(404).json({ error: 'Room not found. Please refresh and rejoin.' });
+        }
+
+        const { name, ownerName } = req.body;
+        if (!name || !name.trim()) {
+            return res.status(400).json({ error: 'Team name required' });
+        }
+
+        // Check for duplicate team names
+        const existingTeam = room.teams.find(t => t.name.toLowerCase() === name.trim().toLowerCase());
+        if (existingTeam) {
+            return res.status(400).json({ error: 'A team with this name already exists' });
+        }
+
+        const team = {
+            id: Date.now() + Math.random(), // Add random to avoid ID collision
+            name: name.trim(),
+            ownerName: ownerName || '',
+            budget: INITIAL_BUDGET,
+            players: []
+        };
+
+        room.teams.push(team);
+        console.log(`Team "${team.name}" added to room ${room.code}. Total teams: ${room.teams.length}`);
+        io.to(room.code).emit('teamsUpdated', room.teams);
+        res.json(team);
+    } catch (err) {
+        console.error('Error creating team:', err);
+        res.status(500).json({ error: 'Server error creating team' });
     }
-
-    const { name, ownerName } = req.body;
-    if (!name) {
-        return res.status(400).json({ error: 'Team name required' });
-    }
-
-    const team = {
-        id: Date.now(),
-        name,
-        ownerName: ownerName || '',
-        budget: INITIAL_BUDGET,
-        players: []
-    };
-
-    room.teams.push(team);
-    io.to(room.code).emit('teamsUpdated', room.teams);
-    res.json(team);
 });
 
 // Update player base price in room

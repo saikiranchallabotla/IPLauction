@@ -1139,9 +1139,12 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name })
             })
-            .then(res => {
-                if (!res.ok) throw new Error('Failed to create team');
-                return res.json();
+            .then(async res => {
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || 'Failed to create team');
+                }
+                return data;
             })
             .then(() => {
                 document.getElementById('new-team-name').value = '';
