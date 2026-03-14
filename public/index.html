@@ -214,6 +214,32 @@
         }
         .tab.active { background: var(--primary-light); color: white; }
 
+        .category-buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .category-btn {
+            padding: 0.75rem 0.5rem;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-align: center;
+            transition: all 0.2s;
+            background: var(--dark);
+            color: var(--text);
+        }
+
+        .category-btn:hover { border-color: var(--primary-light); }
+        .category-btn.active { border-color: var(--accent); background: rgba(255, 215, 0, 0.15); color: var(--accent); }
+        .category-btn .count { display: block; font-size: 1.2rem; color: var(--accent); margin-top: 0.25rem; }
+        .category-btn.home { border-left: 4px solid var(--success); }
+        .category-btn.overseas { border-left: 4px solid var(--warning); }
+
         .category-section { margin-bottom: 1.5rem; }
         .category-title {
             font-size: 1rem;
@@ -360,8 +386,9 @@
                 </div>
 
                 <div id="admin-auction-tab">
-                    <h3 class="card-title">Select Player by Category</h3>
-                    <div class="tabs" id="category-tabs"></div>
+                    <h3 class="card-title">Select Auction Category</h3>
+                    <div class="category-buttons" id="category-buttons"></div>
+                    <h3 class="card-title" style="margin-top: 1rem;">Players in Category</h3>
                     <div class="players-list" id="players-list"></div>
                 </div>
 
@@ -473,17 +500,17 @@
         const socket = io();
         let state = { teams: [], players: [], auctionState: {} };
         let selectedPlayer = null;
-        let currentCategory = 'all';
+        let currentCategory = '2cr-home';
 
         const PRICE_CATEGORIES = [
-            { key: '2cr-indian', label: '2 Cr - Indian', price: 2, country: 'India' },
-            { key: '2cr-overseas', label: '2 Cr - Overseas', price: 2, country: 'overseas' },
-            { key: '1cr-indian', label: '1 Cr - Indian', price: 1, country: 'India' },
-            { key: '1cr-overseas', label: '1 Cr - Overseas', price: 1, country: 'overseas' },
-            { key: '50l-indian', label: '50L - Indian', price: 0.5, country: 'India' },
-            { key: '50l-overseas', label: '50L - Overseas', price: 0.5, country: 'overseas' },
-            { key: '20l-indian', label: '20L - Indian', price: 0.2, country: 'India' },
-            { key: '20l-overseas', label: '20L - Overseas', price: 0.2, country: 'overseas' },
+            { key: '2cr-home', label: '2 Cr HOME', price: 2, country: 'India' },
+            { key: '2cr-overseas', label: '2 Cr OVERSEAS', price: 2, country: 'overseas' },
+            { key: '1cr-home', label: '1 Cr HOME', price: 1, country: 'India' },
+            { key: '1cr-overseas', label: '1 Cr OVERSEAS', price: 1, country: 'overseas' },
+            { key: '50l-home', label: '50L HOME', price: 0.5, country: 'India' },
+            { key: '50l-overseas', label: '50L OVERSEAS', price: 0.5, country: 'overseas' },
+            { key: '20l-home', label: '20L HOME', price: 0.2, country: 'India' },
+            { key: '20l-overseas', label: '20L OVERSEAS', price: 0.2, country: 'overseas' },
         ];
 
         socket.on('fullUpdate', (data) => { state = data; renderAll(); });
@@ -579,16 +606,20 @@
         }
 
         function renderCategoryTabs() {
-            const container = document.getElementById('category-tabs');
+            const container = document.getElementById('category-buttons');
             if (!container) return;
 
-            let html = '<button class="tab ' + (currentCategory === 'all' ? 'active' : '') + '" onclick="setCategory(\'all\', this)">All</button>';
-
+            let html = '';
             PRICE_CATEGORIES.forEach(cat => {
                 const count = getPlayersInCategory(cat).length;
-                if (count > 0) {
-                    html += `<button class="tab ${currentCategory === cat.key ? 'active' : ''}" onclick="setCategory('${cat.key}', this)">${cat.label} (${count})</button>`;
-                }
+                const isHome = cat.country === 'India';
+                html += `
+                    <button class="category-btn ${isHome ? 'home' : 'overseas'} ${currentCategory === cat.key ? 'active' : ''}"
+                            onclick="setCategory('${cat.key}')">
+                        ${cat.label}
+                        <span class="count">${count}</span>
+                    </button>
+                `;
             });
             container.innerHTML = html;
         }
@@ -596,30 +627,30 @@
         function getPlayersInCategory(cat) {
             return state.players.filter(p => {
                 if (p.status !== 'available') return false;
-                const priceMatch = Math.abs(p.basePrice - cat.price) < 0.01 ||
-                                   (cat.price === 0.5 && p.basePrice >= 0.3 && p.basePrice <= 0.75) ||
-                                   (cat.price === 0.2 && p.basePrice <= 0.3);
+
+                // Price matching
+                let priceMatch = false;
+                if (cat.price === 2) priceMatch = p.basePrice === 2;
+                else if (cat.price === 1) priceMatch = p.basePrice === 1;
+                else if (cat.price === 0.5) priceMatch = p.basePrice === 0.5 || p.basePrice === 0.75 || p.basePrice === 0.3;
+                else if (cat.price === 0.2) priceMatch = p.basePrice === 0.2;
+
+                // Country matching
                 const countryMatch = cat.country === 'India' ? p.country === 'India' : p.country !== 'India';
+
                 return priceMatch && countryMatch;
             });
         }
 
-        function setCategory(cat, btn) {
+        function setCategory(cat) {
             currentCategory = cat;
-            document.querySelectorAll('#category-tabs .tab').forEach(t => t.classList.remove('active'));
-            btn.classList.add('active');
+            renderCategoryTabs();
             renderPlayers();
         }
 
         function renderPlayers() {
-            let filtered = state.players.filter(p => p.status === 'available');
-
-            if (currentCategory !== 'all') {
-                const cat = PRICE_CATEGORIES.find(c => c.key === currentCategory);
-                if (cat) {
-                    filtered = getPlayersInCategory(cat);
-                }
-            }
+            const cat = PRICE_CATEGORIES.find(c => c.key === currentCategory);
+            let filtered = cat ? getPlayersInCategory(cat) : state.players.filter(p => p.status === 'available');
 
             const html = filtered.map(p => `
                 <div class="player-item ${selectedPlayer?.id === p.id ? 'selected' : ''}" onclick="selectPlayer(${p.id})">
@@ -631,7 +662,7 @@
                 </div>
             `).join('');
 
-            document.getElementById('players-list').innerHTML = html || '<p style="color: var(--text-secondary); padding: 1rem;">No players in this category</p>';
+            document.getElementById('players-list').innerHTML = html || '<p style="color: var(--text-secondary); padding: 1rem;">No players in this category. Set prices first in "Set Prices" tab.</p>';
         }
 
         function renderPlayersPrice() {
