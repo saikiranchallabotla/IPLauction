@@ -46,14 +46,9 @@ app.get('/api/data', (req, res) => {
     });
 });
 
-// Admin login
+// Admin login (no password required)
 app.post('/api/admin/login', (req, res) => {
-    const { password } = req.body;
-    if (password === ADMIN_PASSWORD) {
-        res.json({ success: true });
-    } else {
-        res.status(401).json({ success: false, message: 'Invalid password' });
-    }
+    res.json({ success: true });
 });
 
 // Create team (admin only)

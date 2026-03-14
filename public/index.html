@@ -837,11 +837,7 @@
         }
 
         function showAdminModal() {
-            if (isAdmin) {
-                showView('admin');
-            } else {
-                document.getElementById('admin-modal').classList.add('active');
-            }
+            showView('admin');
         }
 
         function closeModal() {
@@ -849,20 +845,7 @@
         }
 
         async function adminLogin() {
-            const password = document.getElementById('admin-password').value;
-            const res = await fetch('/api/admin/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password })
-            });
-
-            if (res.ok) {
-                isAdmin = true;
-                closeModal();
-                showView('admin');
-            } else {
-                alert('Invalid password');
-            }
+            showView('admin');
         }
 
         function showHistoryTab(tab, btn) {
