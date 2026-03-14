@@ -1197,32 +1197,13 @@
             socket.on('playersUpdated', (players) => { state.players = players; renderPlayers(); renderPlayersPrice(); });
             socket.on('roomError', (msg) => {
                 alert(msg);
-                if (socket) socket.disconnect();
-                socket = null;
-                roomCode = null;
-                state = { teams: [], players: [], auctionState: {} };
-                document.getElementById('main-app').style.display = 'none';
-                document.getElementById('landing-page').style.display = 'flex';
-                loadActiveRooms();
-                roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
+                forceLeaveRoom();
             });
         }
 
         function leaveRoom() {
             if (confirm('Leave this auction room?')) {
-                if (socket) socket.disconnect();
-                socket = null;
-                roomCode = null;
-                state = { teams: [], players: [], auctionState: {} };
-                selectedPlayer = null;
-                currentCategory = '2cr-home';
-                document.getElementById('main-app').style.display = 'none';
-                document.getElementById('landing-page').style.display = 'flex';
-                document.getElementById('created-room-display').classList.remove('show');
-                document.getElementById('join-code-input').value = '';
-                // Restart rooms list refresh
-                loadActiveRooms();
-                roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
+                forceLeaveRoom();
             }
         }
 
@@ -1703,16 +1684,36 @@
             .then(async res => {
                 const data = await res.json();
                 if (!res.ok) {
+                    if (res.status === 404) {
+                        alert('Room no longer exists. Returning to home page.');
+                        forceLeaveRoom();
+                        return;
+                    }
                     throw new Error(data.error || 'Failed to create team');
                 }
                 return data;
             })
-            .then(() => {
-                document.getElementById('new-team-name').value = '';
+            .then((data) => {
+                if (data) document.getElementById('new-team-name').value = '';
             })
             .catch(err => {
                 alert('Error creating team: ' + err.message);
             });
+        }
+
+        function forceLeaveRoom() {
+            if (socket) socket.disconnect();
+            socket = null;
+            roomCode = null;
+            state = { teams: [], players: [], auctionState: {} };
+            selectedPlayer = null;
+            currentCategory = '2cr-home';
+            document.getElementById('main-app').style.display = 'none';
+            document.getElementById('landing-page').style.display = 'flex';
+            document.getElementById('created-room-display').classList.remove('show');
+            document.getElementById('join-code-input').value = '';
+            loadActiveRooms();
+            roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
         }
 
         function deleteTeam(id) {
