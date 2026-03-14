@@ -675,8 +675,12 @@
                         <h3 class="card-title">Bid Controls</h3>
                         <div class="bid-controls">
                             <div class="form-group">
-                                <label>Current Bid (Cr)</label>
-                                <input type="number" id="bid-amount" step="0.1" min="0">
+                                <label>Current Bid (Cr) <span id="step-indicator" style="color: var(--accent); font-size: 0.85rem;">(Step: 10L)</span></label>
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <button class="btn btn-danger" onclick="decrementBid()" style="padding: 0.5rem 1rem; font-size: 1.5rem; font-weight: bold;">−</button>
+                                    <input type="number" id="bid-amount" step="0.1" min="0" style="flex: 1; text-align: center; font-size: 1.3rem; font-weight: bold;">
+                                    <button class="btn btn-success" onclick="incrementBid()" style="padding: 0.5rem 1rem; font-size: 1.5rem; font-weight: bold;">+</button>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label>Bidding Team</label>
@@ -900,6 +904,7 @@
                     <div class="player-base">Base: <span>${formatPrice(p.basePrice)}</span></div>
                 `;
                 document.getElementById('bid-amount').value = auctionState.currentBid;
+                if (typeof updateStepIndicator === 'function') updateStepIndicator();
             } else {
                 content.innerHTML = `<div class="player-name">Waiting for Auction</div><div class="player-details">Admin will start the auction shortly</div>`;
                 adminPlayer.innerHTML = `<div class="player-name" style="font-size: 1.8rem;">No Player Selected</div>`;
@@ -1119,10 +1124,53 @@
             renderPlayers();
         }
 
+        // Dynamic bid step based on current bid amount
+        // 20L to 1Cr: step = 10L (0.1 Cr)
+        // 1Cr to 2Cr: step = 20L (0.2 Cr)
+        // Above 2Cr: step = 50L (0.5 Cr)
+        function getBidStep(currentBid) {
+            if (currentBid < 1) return 0.1;  // 10 lakhs
+            if (currentBid < 2) return 0.2;  // 20 lakhs
+            return 0.5;  // 50 lakhs
+        }
+
+        function getStepLabel(step) {
+            if (step === 0.1) return '10L';
+            if (step === 0.2) return '20L';
+            return '50L';
+        }
+
+        function updateStepIndicator() {
+            const currentBid = parseFloat(document.getElementById('bid-amount').value) || 0;
+            const step = getBidStep(currentBid);
+            const indicator = document.getElementById('step-indicator');
+            if (indicator) {
+                indicator.textContent = `(Step: ${getStepLabel(step)})`;
+            }
+        }
+
+        function incrementBid() {
+            const input = document.getElementById('bid-amount');
+            const currentBid = parseFloat(input.value) || 0;
+            const step = getBidStep(currentBid);
+            input.value = (currentBid + step).toFixed(2);
+            updateStepIndicator();
+        }
+
+        function decrementBid() {
+            const input = document.getElementById('bid-amount');
+            const currentBid = parseFloat(input.value) || 0;
+            // Use step for the lower bracket when decrementing
+            const newBid = currentBid - getBidStep(currentBid - 0.01);
+            input.value = Math.max(0.2, newBid).toFixed(2);  // Minimum 20 lakhs
+            updateStepIndicator();
+        }
+
         function updateBid() {
             const amount = parseFloat(document.getElementById('bid-amount').value);
             const teamId = parseInt(document.getElementById('bid-team').value);
             if (amount && teamId) socket.emit('updateBid', { amount, teamId });
+            updateStepIndicator();
         }
 
         function markSold() { socket.emit('markSold'); }
@@ -1268,6 +1316,9 @@
         document.getElementById('join-code-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') joinRoom();
         });
+
+        // Update step indicator when bid amount changes manually
+        document.getElementById('bid-amount').addEventListener('input', updateStepIndicator);
     </script>
 </body>
 </html>
