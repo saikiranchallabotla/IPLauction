@@ -1597,7 +1597,7 @@
                         <div class="team-name">${t.name}</div>
                         <div style="font-size: 0.8rem; color: var(--accent);">Budget: ${t.budget.toFixed(2)} Cr</div>
                     </div>
-                    <button class="delete-btn" onclick="deleteTeam(${t.id})" title="Remove team">✕</button>
+                    <button class="delete-btn" onclick="deleteTeam('${t.id}')" title="Remove team">✕</button>
                 </div>
             `).join('');
         }
