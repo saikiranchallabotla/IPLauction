@@ -303,6 +303,8 @@ io.on('connection', (socket) => {
                 auctionState: room.auctionState,
                 config: { initialBudget: INITIAL_BUDGET }
             });
+        } else {
+            socket.emit('roomError', 'Room not found. It may have been lost after a server restart. Please create a new room.');
         }
     });
 

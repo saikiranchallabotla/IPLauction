@@ -1152,9 +1152,23 @@
             return Math.floor(hrs / 24) + 'd ago';
         }
 
-        function quickJoin(code) {
-            roomCode = code;
-            enterAuction();
+        async function quickJoin(code) {
+            try {
+                const res = await fetch('/api/room/join', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+                if (res.ok) {
+                    roomCode = code;
+                    enterAuction();
+                } else {
+                    alert('Room no longer exists. It may have been lost after a server restart.');
+                    loadActiveRooms();
+                }
+            } catch (err) {
+                alert('Connection failed. Please try again.');
+            }
         }
 
         // Load rooms on page load and refresh every 10 seconds
@@ -1181,6 +1195,17 @@
             socket.on('teamsUpdated', (teams) => { state.teams = teams; renderTeams(); });
             socket.on('playerSold', ({ player, team, price }) => showSoldOverlay(player, team, price));
             socket.on('playersUpdated', (players) => { state.players = players; renderPlayers(); renderPlayersPrice(); });
+            socket.on('roomError', (msg) => {
+                alert(msg);
+                if (socket) socket.disconnect();
+                socket = null;
+                roomCode = null;
+                state = { teams: [], players: [], auctionState: {} };
+                document.getElementById('main-app').style.display = 'none';
+                document.getElementById('landing-page').style.display = 'flex';
+                loadActiveRooms();
+                roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
+            });
         }
 
         function leaveRoom() {
