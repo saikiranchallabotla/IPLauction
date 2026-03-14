@@ -348,7 +348,9 @@
         .team-budget.low { color: var(--danger); }
         .team-spent { font-size: 0.75rem; color: var(--danger); }
 
-        .admin-grid { display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem; padding: 1.5rem; }
+        .admin-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem; padding: 1rem; }
+        .admin-right-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .admin-right-full { grid-column: 1 / -1; }
         .players-list { max-height: 500px; overflow-y: auto; }
 
         .player-item {
@@ -556,11 +558,31 @@
         @media (max-width: 900px) {
             .main-layout { grid-template-columns: 1fr; }
             .admin-grid { grid-template-columns: 1fr; }
+            .admin-right-panel { grid-template-columns: 1fr; }
             .history-stats { grid-template-columns: repeat(2, 1fr); }
             .bid-info { flex-direction: column; gap: 1rem; }
             .landing-logo { font-size: 2rem; }
             .category-buttons { grid-template-columns: repeat(2, 1fr); }
         }
+
+        /* Sold player item in admin panel */
+        .admin-sold-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.4rem 0.6rem;
+            background: rgba(46,204,113,0.1);
+            border-radius: 6px;
+            margin-bottom: 0.3rem;
+            font-size: 0.85rem;
+        }
+        .admin-sold-item .player-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .admin-sold-item .player-name { font-weight: 600; color: var(--text); }
+        .admin-sold-item .team-name { font-size: 0.75rem; color: var(--primary-light); }
+        .admin-sold-item .sold-price { color: var(--accent); font-weight: 700; }
 
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--dark); }
@@ -701,47 +723,56 @@
                     </div>
                 </div>
 
-                <div>
-                    <div class="card" style="margin-bottom: 1rem;">
-                        <h3 class="card-title">Current Player</h3>
-                        <div class="auction-display" id="admin-current-player" style="min-height: 200px; padding: 1.5rem;">
-                            <div class="player-name" style="font-size: 1.8rem;">No Player Selected</div>
+                <div class="admin-right-panel">
+                    <!-- Current Player - Compact -->
+                    <div class="card" style="margin-bottom: 0;">
+                        <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Current Player</h3>
+                        <div class="auction-display" id="admin-current-player" style="min-height: 100px; padding: 0.75rem;">
+                            <div class="player-name" style="font-size: 1.2rem;">No Player Selected</div>
                         </div>
                     </div>
 
-                    <div class="card" style="margin-bottom: 1rem;">
-                        <h3 class="card-title">Bidding Panel</h3>
-                        <div class="bid-controls">
+                    <!-- Bidding Panel - Compact -->
+                    <div class="card" style="margin-bottom: 0;">
+                        <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Bidding</h3>
+                        <div class="bid-controls" style="padding: 0.75rem;">
                             <!-- Current Bid Display -->
-                            <div style="text-align: center; margin-bottom: 1rem; padding: 1rem; background: rgba(255,215,0,0.1); border-radius: 10px;">
-                                <div style="font-size: 0.9rem; color: rgba(255,255,255,0.7);">Current Bid <span id="step-indicator" style="color: var(--accent);">(Step: 10L)</span></div>
-                                <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 0.5rem;">
-                                    <button class="btn btn-danger" onclick="decrementBid()" style="padding: 0.5rem 1rem; font-size: 1.5rem; font-weight: bold;">−</button>
-                                    <div id="current-bid-display" style="font-size: 2.5rem; font-weight: 700; color: var(--accent);">0.20 Cr</div>
-                                    <button class="btn btn-success" onclick="incrementBid()" style="padding: 0.5rem 1rem; font-size: 1.5rem; font-weight: bold;">+</button>
+                            <div style="text-align: center; margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(255,215,0,0.1); border-radius: 8px;">
+                                <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Current Bid <span id="step-indicator" style="color: var(--accent);">(Step: 10L)</span></div>
+                                <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+                                    <button class="btn btn-danger" onclick="decrementBid()" style="padding: 0.25rem 0.5rem; font-size: 1.2rem; font-weight: bold;">−</button>
+                                    <div id="current-bid-display" style="font-size: 1.8rem; font-weight: 700; color: var(--accent);">0.20 Cr</div>
+                                    <button class="btn btn-success" onclick="incrementBid()" style="padding: 0.25rem 0.5rem; font-size: 1.2rem; font-weight: bold;">+</button>
                                 </div>
-                                <div id="current-bidder-display" style="font-size: 1.2rem; color: white; margin-top: 0.5rem;">No bids yet</div>
+                                <div id="current-bidder-display" style="font-size: 1rem; color: white; margin-top: 0.25rem;">No bids yet</div>
                                 <input type="hidden" id="bid-amount" value="0.2">
                             </div>
 
-                            <!-- Team Bid Buttons -->
-                            <div style="margin-bottom: 1rem;">
-                                <div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 0.5rem;">Click team to place bid:</div>
-                                <div id="team-bid-buttons" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
-                            </div>
-
                             <!-- SOLD / UNSOLD Buttons -->
-                            <div style="display: flex; gap: 1rem;">
-                                <button class="btn btn-success" onclick="markSold()" style="flex: 1; padding: 1rem; font-size: 1.3rem; font-weight: bold;">SOLD!</button>
-                                <button class="btn btn-danger" onclick="markUnsold()" style="flex: 1; padding: 1rem; font-size: 1.3rem; font-weight: bold;">UNSOLD</button>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button class="btn btn-success" onclick="markSold()" style="flex: 1; padding: 0.5rem; font-size: 1rem; font-weight: bold;">SOLD!</button>
+                                <button class="btn btn-danger" onclick="markUnsold()" style="flex: 1; padding: 0.5rem; font-size: 1rem; font-weight: bold;">UNSOLD</button>
                             </div>
                         </div>
                     </div>
 
-                    <div class="card">
-                        <h3 class="card-title">Friend Teams Overview</h3>
-                        <div id="team-management-list"></div>
-                        <button class="btn btn-danger" style="width: 100%; margin-top: 1rem;" onclick="resetAuction()">Reset Entire Auction</button>
+                    <!-- Team Bid Buttons - Full Width -->
+                    <div class="card admin-right-full" style="margin-bottom: 0;">
+                        <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Click Team to Bid</h3>
+                        <div id="team-bid-buttons" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; max-height: 150px; overflow-y: auto;"></div>
+                    </div>
+
+                    <!-- Sold Players List - Full Width -->
+                    <div class="card admin-right-full" style="margin-bottom: 0;">
+                        <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Sold Players (<span id="admin-sold-count">0</span>)</h3>
+                        <div id="admin-sold-list" style="max-height: 200px; overflow-y: auto;"></div>
+                    </div>
+
+                    <!-- Teams Overview - Full Width -->
+                    <div class="card admin-right-full">
+                        <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Teams Overview</h3>
+                        <div id="team-management-list" style="max-height: 150px; overflow-y: auto;"></div>
+                        <button class="btn btn-danger" style="width: 100%; margin-top: 0.5rem; padding: 0.5rem; font-size: 0.9rem;" onclick="resetAuction()">Reset Auction</button>
                     </div>
                 </div>
             </div>
@@ -913,6 +944,7 @@
             renderPlayers();
             renderPlayersPrice();
             renderHistory();
+            renderAdminSoldList();
         }
 
         function renderAuction() {
@@ -1184,6 +1216,26 @@
                 `;
             }).join('');
             document.getElementById('teams-history').innerHTML = teamsHtml || '<p style="padding: 1rem; color: var(--text-secondary);">No teams yet</p>';
+        }
+
+        function renderAdminSoldList() {
+            const { soldPlayers = [] } = state.auctionState;
+            const container = document.getElementById('admin-sold-list');
+            const countEl = document.getElementById('admin-sold-count');
+
+            if (countEl) countEl.textContent = soldPlayers.length;
+
+            if (container) {
+                container.innerHTML = soldPlayers.slice().reverse().map(p => `
+                    <div class="admin-sold-item">
+                        <div class="player-info">
+                            <span class="player-name">${p.name}</span>
+                            <span class="team-name">→ ${p.soldToName}</span>
+                        </div>
+                        <span class="sold-price">${formatPrice(p.soldPrice)}</span>
+                    </div>
+                `).join('') || '<p style="padding: 0.5rem; color: var(--text-secondary); font-size: 0.85rem;">No players sold yet</p>';
+            }
         }
 
         function selectPlayer(id) {
