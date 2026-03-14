@@ -311,12 +311,34 @@ io.on('connection', (socket) => {
         if (!room) return;
 
         const team = room.teams.find(t => t.id === teamId);
-        if (team && amount <= team.budget && room.auctionState.status === 'bidding') {
-            room.auctionState.currentBid = amount;
-            room.auctionState.currentBidder = team;
-            saveRooms(); // Save after each bid
-            io.to(room.code).emit('auctionUpdate', room.auctionState);
+        if (!team || room.auctionState.status !== 'bidding') return;
+
+        // Budget check
+        if (amount > team.budget) return;
+
+        // Max 16 players check
+        const playerCount = (team.players || []).length;
+        if (playerCount >= 16) return;
+
+        // Overseas limit check (max 6)
+        const currentPlayer = room.auctionState.currentPlayer;
+        if (currentPlayer && currentPlayer.country !== 'India') {
+            const overseasCount = (team.players || []).filter(p => p.country !== 'India').length;
+            if (overseasCount >= 6) return;
         }
+
+        // Min 12 players budget check - ensure remaining budget can fill squad
+        const remainingBudgetAfterBid = team.budget - amount;
+        const playersNeededAfterThis = 12 - (playerCount + 1);
+        if (playersNeededAfterThis > 0) {
+            const minBudgetNeeded = playersNeededAfterThis * 0.2; // 20L minimum per player
+            if (remainingBudgetAfterBid < minBudgetNeeded) return;
+        }
+
+        room.auctionState.currentBid = amount;
+        room.auctionState.currentBidder = team;
+        saveRooms(); // Save after each bid
+        io.to(room.code).emit('auctionUpdate', room.auctionState);
     });
 
     // Admin: Mark as sold

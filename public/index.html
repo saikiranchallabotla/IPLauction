@@ -349,8 +349,7 @@
         .team-spent { font-size: 0.75rem; color: var(--danger); }
 
         .admin-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem; padding: 1rem; }
-        .admin-right-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        .admin-right-full { grid-column: 1 / -1; }
+        .admin-right-panel { display: flex; flex-direction: column; gap: 0.5rem; }
         .players-list { max-height: 500px; overflow-y: auto; }
 
         .player-item {
@@ -555,10 +554,113 @@
         .sold-content .team { font-size: 1.5rem; color: var(--primary-light); }
         .sold-content .price { font-size: 1.3rem; color: white; }
 
+        /* Warning popup modal */
+        .auction-popup-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+        .auction-popup-overlay.active { display: flex; }
+        .auction-popup {
+            background: var(--card);
+            border: 2px solid var(--warning);
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 450px;
+            width: 90%;
+            text-align: center;
+        }
+        .auction-popup h3 { color: var(--warning); font-size: 1.3rem; margin-bottom: 1rem; }
+        .auction-popup p { color: var(--text); margin-bottom: 1.5rem; line-height: 1.5; }
+        .auction-popup .popup-btn {
+            padding: 0.6rem 2rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
+            background: var(--warning);
+            color: #000;
+        }
+
+        /* Sold players overlay panel */
+        .sold-list-overlay {
+            display: none;
+            position: fixed;
+            top: 0; right: 0;
+            width: 380px;
+            height: 100%;
+            background: var(--card);
+            box-shadow: -5px 0 30px rgba(0,0,0,0.5);
+            z-index: 2500;
+            flex-direction: column;
+            animation: slideIn 0.3s ease-out;
+        }
+        .sold-list-overlay.active { display: flex; }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .sold-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.2rem;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            border-bottom: 2px solid var(--border);
+        }
+        .sold-list-header h3 { color: var(--accent); font-size: 1.1rem; }
+        .sold-list-header .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.2rem 0.5rem;
+        }
+        .sold-list-body { flex: 1; overflow-y: auto; padding: 0.5rem; }
+        .sold-list-backdrop {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 2499;
+        }
+        .sold-list-backdrop.active { display: block; }
+
+        /* Sold players button */
+        .btn-sold-toggle {
+            background: linear-gradient(135deg, var(--success), #388e3c);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            width: 100%;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .btn-sold-toggle:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn-sold-toggle .sold-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 0.15rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+        }
+
         @media (max-width: 900px) {
             .main-layout { grid-template-columns: 1fr; }
             .admin-grid { grid-template-columns: 1fr; }
-            .admin-right-panel { grid-template-columns: 1fr; }
+            .admin-right-panel { flex-direction: column; }
+            .sold-list-overlay { width: 100%; }
             .history-stats { grid-template-columns: repeat(2, 1fr); }
             .bid-info { flex-direction: column; gap: 1rem; }
             .landing-logo { font-size: 2rem; }
@@ -727,7 +829,7 @@
                     <!-- Current Player - Compact -->
                     <div class="card" style="margin-bottom: 0;">
                         <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Current Player</h3>
-                        <div class="auction-display" id="admin-current-player" style="min-height: 100px; padding: 0.75rem;">
+                        <div class="auction-display" id="admin-current-player" style="min-height: 80px; padding: 0.5rem;">
                             <div class="player-name" style="font-size: 1.2rem;">No Player Selected</div>
                         </div>
                     </div>
@@ -735,44 +837,43 @@
                     <!-- Bidding Panel - Compact -->
                     <div class="card" style="margin-bottom: 0;">
                         <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Bidding</h3>
-                        <div class="bid-controls" style="padding: 0.75rem;">
+                        <div class="bid-controls" style="padding: 0.5rem;">
                             <!-- Current Bid Display -->
-                            <div style="text-align: center; margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(255,215,0,0.1); border-radius: 8px;">
-                                <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Current Bid <span id="step-indicator" style="color: var(--accent);">(Step: 10L)</span></div>
+                            <div style="text-align: center; margin-bottom: 0.5rem; padding: 0.4rem; background: rgba(255,215,0,0.1); border-radius: 8px;">
+                                <div style="font-size: 0.75rem; color: rgba(255,255,255,0.7);">Current Bid <span id="step-indicator" style="color: var(--accent);">(Step: 10L)</span></div>
                                 <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
-                                    <button class="btn btn-danger" onclick="decrementBid()" style="padding: 0.25rem 0.5rem; font-size: 1.2rem; font-weight: bold;">−</button>
-                                    <div id="current-bid-display" style="font-size: 1.8rem; font-weight: 700; color: var(--accent);">0.20 Cr</div>
-                                    <button class="btn btn-success" onclick="incrementBid()" style="padding: 0.25rem 0.5rem; font-size: 1.2rem; font-weight: bold;">+</button>
+                                    <button class="btn btn-danger" onclick="decrementBid()" style="padding: 0.2rem 0.4rem; font-size: 1rem; font-weight: bold;">−</button>
+                                    <div id="current-bid-display" style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">0.20 Cr</div>
+                                    <button class="btn btn-success" onclick="incrementBid()" style="padding: 0.2rem 0.4rem; font-size: 1rem; font-weight: bold;">+</button>
                                 </div>
-                                <div id="current-bidder-display" style="font-size: 1rem; color: white; margin-top: 0.25rem;">No bids yet</div>
+                                <div id="current-bidder-display" style="font-size: 0.9rem; color: white; margin-top: 0.25rem;">No bids yet</div>
                                 <input type="hidden" id="bid-amount" value="0.2">
                             </div>
 
                             <!-- SOLD / UNSOLD Buttons -->
                             <div style="display: flex; gap: 0.5rem;">
-                                <button class="btn btn-success" onclick="markSold()" style="flex: 1; padding: 0.5rem; font-size: 1rem; font-weight: bold;">SOLD!</button>
-                                <button class="btn btn-danger" onclick="markUnsold()" style="flex: 1; padding: 0.5rem; font-size: 1rem; font-weight: bold;">UNSOLD</button>
+                                <button class="btn btn-success" onclick="markSold()" style="flex: 1; padding: 0.4rem; font-size: 0.9rem; font-weight: bold;">SOLD!</button>
+                                <button class="btn btn-danger" onclick="markUnsold()" style="flex: 1; padding: 0.4rem; font-size: 0.9rem; font-weight: bold;">UNSOLD</button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Team Bid Buttons - Full Width -->
-                    <div class="card admin-right-full" style="margin-bottom: 0;">
+                    <!-- Team Bid Buttons -->
+                    <div class="card" style="margin-bottom: 0;">
                         <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Click Team to Bid</h3>
-                        <div id="team-bid-buttons" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; max-height: 150px; overflow-y: auto;"></div>
+                        <div id="team-bid-buttons" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.4rem; max-height: 150px; overflow-y: auto;"></div>
                     </div>
 
-                    <!-- Sold Players List - Full Width -->
-                    <div class="card admin-right-full" style="margin-bottom: 0;">
-                        <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Sold Players (<span id="admin-sold-count">0</span>)</h3>
-                        <div id="admin-sold-list" style="max-height: 200px; overflow-y: auto;"></div>
-                    </div>
-
-                    <!-- Teams Overview - Full Width -->
-                    <div class="card admin-right-full">
+                    <!-- Teams Overview -->
+                    <div class="card" style="margin-bottom: 0;">
                         <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Teams Overview</h3>
-                        <div id="team-management-list" style="max-height: 150px; overflow-y: auto;"></div>
-                        <button class="btn btn-danger" style="width: 100%; margin-top: 0.5rem; padding: 0.5rem; font-size: 0.9rem;" onclick="resetAuction()">Reset Auction</button>
+                        <div id="team-management-list" style="max-height: 120px; overflow-y: auto;"></div>
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                            <button class="btn-sold-toggle" onclick="toggleSoldList()">
+                                Sold Players <span class="sold-badge" id="admin-sold-count">0</span>
+                            </button>
+                            <button class="btn btn-danger" style="flex: 1; padding: 0.4rem; font-size: 0.85rem;" onclick="resetAuction()">Reset Auction</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -814,6 +915,25 @@
                     <div class="history-list" id="teams-history" style="display: none;"></div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Sold Players Slide-out Panel -->
+    <div class="sold-list-backdrop" id="sold-list-backdrop" onclick="toggleSoldList()"></div>
+    <div class="sold-list-overlay" id="sold-list-overlay">
+        <div class="sold-list-header">
+            <h3>Sold Players (<span id="admin-sold-count-overlay">0</span>)</h3>
+            <button class="close-btn" onclick="toggleSoldList()">✕</button>
+        </div>
+        <div class="sold-list-body" id="admin-sold-list"></div>
+    </div>
+
+    <!-- Auction Warning Popup -->
+    <div class="auction-popup-overlay" id="auction-popup">
+        <div class="auction-popup">
+            <h3 id="popup-title">Warning</h3>
+            <p id="popup-message"></p>
+            <button class="popup-btn" onclick="closeAuctionPopup()">OK</button>
         </div>
     </div>
 
@@ -1022,17 +1142,26 @@
             // Render team bid buttons
             const currentBid = parseFloat(document.getElementById('bid-amount').value) || 0.2;
             const nextBid = currentBid + getBidStep(currentBid);
+            const auctionPlayer = state.auctionState?.currentPlayer;
             const bidBtnsHtml = state.teams.map(t => {
                 const canAfford = t.budget >= nextBid;
                 const isCurrentBidder = state.auctionState?.currentBidder?.id === t.id;
+                const playerCount = (t.players || []).length;
+                const overseasCount = (t.players || []).filter(p => p.country !== 'India').length;
+                const isSquadFull = playerCount >= 16;
+                const isOverseasFull = auctionPlayer && auctionPlayer.country !== 'India' && overseasCount >= 6;
+                const isDisabled = !canAfford || isSquadFull || isOverseasFull;
+                let statusLabel = '';
+                if (isSquadFull) statusLabel = 'FULL (16)';
+                else if (isOverseasFull) statusLabel = 'OS FULL (6)';
                 return `
-                    <button class="team-bid-btn ${isCurrentBidder ? 'active-bidder' : ''} ${!canAfford ? 'disabled' : ''}"
+                    <button class="team-bid-btn ${isCurrentBidder ? 'active-bidder' : ''} ${isDisabled ? 'disabled' : ''}"
                             data-team-id="${t.id}"
                             onclick="teamBid('${t.id}')"
-                            ${!canAfford ? 'disabled' : ''}>
+                            ${isDisabled ? 'disabled' : ''}>
                         <span class="team-bid-name">${t.name}</span>
-                        <span class="team-bid-budget">${t.budget.toFixed(2)} Cr</span>
-                        <span class="team-bid-action">${isCurrentBidder ? '✓ Leading' : '+ Bid'}</span>
+                        <span class="team-bid-budget">${t.budget.toFixed(2)} Cr <span style="font-size:0.7rem;color:var(--text-secondary);">(${playerCount}/16, OS:${overseasCount}/6)</span></span>
+                        <span class="team-bid-action">${statusLabel || (isCurrentBidder ? '✓ Leading' : '+ Bid')}</span>
                     </button>
                 `;
             }).join('');
@@ -1222,8 +1351,10 @@
             const { soldPlayers = [] } = state.auctionState;
             const container = document.getElementById('admin-sold-list');
             const countEl = document.getElementById('admin-sold-count');
+            const countOverlay = document.getElementById('admin-sold-count-overlay');
 
             if (countEl) countEl.textContent = soldPlayers.length;
+            if (countOverlay) countOverlay.textContent = soldPlayers.length;
 
             if (container) {
                 container.innerHTML = soldPlayers.slice().reverse().map(p => `
@@ -1236,6 +1367,14 @@
                     </div>
                 `).join('') || '<p style="padding: 0.5rem; color: var(--text-secondary); font-size: 0.85rem;">No players sold yet</p>';
             }
+        }
+
+        function toggleSoldList() {
+            const overlay = document.getElementById('sold-list-overlay');
+            const backdrop = document.getElementById('sold-list-backdrop');
+            const isOpen = overlay.classList.contains('active');
+            overlay.classList.toggle('active', !isOpen);
+            backdrop.classList.toggle('active', !isOpen);
         }
 
         function selectPlayer(id) {
@@ -1291,6 +1430,27 @@
             const team = state.teams.find(t => t.id === teamId);
             if (!team) return;
 
+            const MAX_PLAYERS = 16;
+            const MIN_PLAYERS = 12;
+            const MAX_OVERSEAS = 6;
+
+            // Check max 16 players
+            const currentPlayerCount = (team.players || []).length;
+            if (currentPlayerCount >= MAX_PLAYERS) {
+                showAuctionPopup('Squad Full', `${team.name} already has ${MAX_PLAYERS} players (maximum limit). Cannot bid for more players.`);
+                return;
+            }
+
+            // Check overseas limit (max 6)
+            const currentPlayer = state.auctionState?.currentPlayer;
+            if (currentPlayer && currentPlayer.country !== 'India') {
+                const overseasCount = (team.players || []).filter(p => p.country !== 'India').length;
+                if (overseasCount >= MAX_OVERSEAS) {
+                    showAuctionPopup('Overseas Limit Reached', `${team.name} already has ${MAX_OVERSEAS} overseas players (maximum allowed). Cannot bid for ${currentPlayer.name} who is from ${currentPlayer.country}.`);
+                    return;
+                }
+            }
+
             let currentBid = parseFloat(document.getElementById('bid-amount').value) || 0.2;
             let newBid = currentBid;
 
@@ -1303,8 +1463,24 @@
 
             // Check if team can afford
             if (team.budget < newBid) {
-                alert(`${team.name} cannot afford ${formatPrice(newBid)}. Budget: ${formatPrice(team.budget)}`);
+                showAuctionPopup('Insufficient Budget', `${team.name} cannot afford ${formatPrice(newBid)}. Remaining budget: ${formatPrice(team.budget)}.`);
                 return;
+            }
+
+            // Check if remaining budget after this bid can accommodate minimum 12 players
+            const remainingBudgetAfterBid = team.budget - newBid;
+            const playersNeededAfterThis = MIN_PLAYERS - (currentPlayerCount + 1);
+            if (playersNeededAfterThis > 0) {
+                const minPricePerPlayer = 0.2; // 20L minimum base price
+                const minBudgetNeeded = playersNeededAfterThis * minPricePerPlayer;
+                if (remainingBudgetAfterBid < minBudgetNeeded) {
+                    showAuctionPopup('Budget Warning - Bid Blocked', `${team.name} cannot place this bid. After buying this player for ${formatPrice(newBid)}, the remaining budget of ${formatPrice(remainingBudgetAfterBid)} is not enough to fill the squad to minimum ${MIN_PLAYERS} players. Need at least ${formatPrice(minBudgetNeeded)} more for ${playersNeededAfterThis} remaining slots at minimum price.`);
+                    return;
+                }
+                // Show warning if budget is getting low (less than double the minimum needed)
+                if (remainingBudgetAfterBid < minBudgetNeeded * 2) {
+                    showAuctionPopup('Budget Warning', `Warning: ${team.name} will have only ${formatPrice(remainingBudgetAfterBid)} left after this bid. Still need ${playersNeededAfterThis} more players to reach minimum squad size of ${MIN_PLAYERS}. Bid is allowed but be careful!`, true);
+                }
             }
 
             // Update bid amount display
@@ -1317,6 +1493,21 @@
 
             // Update button states
             renderTeams();
+        }
+
+        function showAuctionPopup(title, message, isWarningOnly) {
+            document.getElementById('popup-title').textContent = title;
+            document.getElementById('popup-message').textContent = message;
+            const popup = document.getElementById('auction-popup');
+            popup.classList.add('active');
+            // For warnings (not blocks), auto-close after 3 seconds
+            if (isWarningOnly) {
+                setTimeout(() => popup.classList.remove('active'), 3000);
+            }
+        }
+
+        function closeAuctionPopup() {
+            document.getElementById('auction-popup').classList.remove('active');
         }
 
         function markSold() { socket.emit('markSold'); }
