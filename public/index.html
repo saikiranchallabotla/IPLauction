@@ -1091,10 +1091,29 @@
 
         function addTeam() {
             const name = document.getElementById('new-team-name').value.trim();
-            if (name) {
-                fetch('/api/room/' + roomCode + '/teams', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
-                document.getElementById('new-team-name').value = '';
+            if (!name) {
+                alert('Please enter a team name');
+                return;
             }
+            if (!roomCode) {
+                alert('Not connected to a room. Please refresh and rejoin.');
+                return;
+            }
+            fetch('/api/room/' + roomCode + '/teams', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to create team');
+                return res.json();
+            })
+            .then(() => {
+                document.getElementById('new-team-name').value = '';
+            })
+            .catch(err => {
+                alert('Error creating team: ' + err.message);
+            });
         }
 
         function deleteTeam(id) {

@@ -181,7 +181,7 @@ app.post('/api/room/:code/reset', (req, res) => {
         unsoldPlayers: []
     };
 
-    io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState });
+    io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
     res.json({ success: true });
 });
 
@@ -196,7 +196,12 @@ io.on('connection', (socket) => {
             socket.join(room.code);
             socket.roomCode = room.code;
             console.log(`Socket ${socket.id} joined room ${room.code}`);
-            socket.emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState });
+            socket.emit('fullUpdate', {
+                teams: room.teams,
+                players: room.players,
+                auctionState: room.auctionState,
+                config: { initialBudget: INITIAL_BUDGET }
+            });
         }
     });
 
@@ -268,7 +273,7 @@ io.on('connection', (socket) => {
                 price
             });
 
-            io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState });
+            io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
 
             // Reset after 3 seconds
             setTimeout(() => {
@@ -297,7 +302,7 @@ io.on('connection', (socket) => {
             room.auctionState.unsoldPlayers.push(room.players[playerIndex]);
             room.auctionState.status = 'unsold';
 
-            io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState });
+            io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
 
             // Reset after 2 seconds
             setTimeout(() => {
