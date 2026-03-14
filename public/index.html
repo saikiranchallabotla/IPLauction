@@ -590,7 +590,7 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3 class="card-title">Teams & Budgets</h3>
+                    <h3 class="card-title">Friend Teams & Budgets</h3>
                     <div class="teams-list" id="teams-display"></div>
                 </div>
             </div>
@@ -608,16 +608,16 @@
 
                     <!-- Step 1: Setup Teams -->
                     <div id="admin-teams-tab">
-                        <h3 class="card-title">Add Participating Teams</h3>
-                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Add all teams before starting the auction. Each team gets 100 Cr budget.</p>
+                        <h3 class="card-title">Create Your Friend Teams</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Add teams for you and your friends. Each team gets 100 Cr to buy IPL players from any franchise (CSK, MI, RCB, etc.)</p>
 
                         <div class="team-form">
-                            <input type="text" id="new-team-name" placeholder="Enter team name (e.g., Team Virat)" onkeypress="if(event.key==='Enter')addTeam()">
+                            <input type="text" id="new-team-name" placeholder="Enter friend team name (e.g., Sai's XI, Kiran Warriors)" onkeypress="if(event.key==='Enter')addTeam()">
                             <button class="btn btn-primary" onclick="addTeam()">Add Team</button>
                         </div>
 
                         <div style="margin-top: 1rem;">
-                            <h4 style="color: var(--accent); margin-bottom: 0.5rem;">Teams Added (<span id="team-count">0</span>)</h4>
+                            <h4 style="color: var(--accent); margin-bottom: 0.5rem;">Friend Teams (<span id="team-count">0</span>)</h4>
                             <div id="setup-teams-list"></div>
                         </div>
 
@@ -630,8 +630,8 @@
 
                     <!-- Step 2: Set Prices -->
                     <div id="admin-prices-tab" style="display: none;">
-                        <h3 class="card-title">Set Base Prices for Players (<span id="player-count">0</span> players)</h3>
-                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Assign base prices (2Cr, 1Cr, 50L, 20L) to categorize players for auction rounds.</p>
+                        <h3 class="card-title">Set Base Prices for IPL Players (<span id="player-count">0</span> players)</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">All 250 IPL players from 10 franchises (CSK, MI, RCB, KKR, DC, PBKS, RR, SRH, LSG, GT). Set base prices to categorize for auction rounds.</p>
                         <div class="filters">
                             <select id="filter-role-price" onchange="filterPlayersPrice()">
                                 <option value="">All Roles</option>
@@ -691,7 +691,7 @@
                     </div>
 
                     <div class="card">
-                        <h3 class="card-title">Teams Overview</h3>
+                        <h3 class="card-title">Friend Teams Overview</h3>
                         <div id="team-management-list"></div>
                         <button class="btn btn-danger" style="width: 100%; margin-top: 1rem;" onclick="resetAuction()">Reset Entire Auction</button>
                     </div>
