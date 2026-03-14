@@ -440,6 +440,8 @@
         }
         .player-item:hover { border-color: rgba(63, 81, 181, 0.3); background: rgba(63, 81, 181, 0.06); transform: translateX(2px); }
         .player-item.selected { border-color: var(--accent); background: var(--accent-dim); box-shadow: 0 0 15px var(--accent-glow); }
+        .player-item.unsold-player { border-color: rgba(255,23,68,0.2); background: rgba(255,23,68,0.05); opacity: 0.8; }
+        .player-item.unsold-player:hover { border-color: rgba(255,23,68,0.4); background: rgba(255,23,68,0.1); opacity: 1; }
         .player-info .name { font-weight: 600; }
         .player-info .role { font-size: 0.85rem; color: var(--text-secondary); font-weight: 400; }
         .player-price { color: var(--accent); font-weight: 700; }
@@ -872,7 +874,10 @@
                     <div id="admin-auction-tab" style="display: none;">
                         <h3 class="card-title">Select Auction Category</h3>
                         <div class="category-buttons" id="category-buttons"></div>
-                        <h3 class="card-title" style="margin-top: 1rem;">Players in Category</h3>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+                            <h3 class="card-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">Players in Category</h3>
+                            <button class="btn btn-warning" onclick="drawRandomPlayer()" style="padding: 0.35rem 1rem; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.03em;">Draw!</button>
+                        </div>
                         <div class="players-list" id="players-list"></div>
 
                         <!-- Unsold Players for Re-Auction -->
@@ -909,10 +914,11 @@
                                 <input type="hidden" id="bid-amount" value="0.2">
                             </div>
 
-                            <!-- SOLD / UNSOLD Buttons -->
+                            <!-- SOLD / UNSOLD / REBID Buttons -->
                             <div style="display: flex; gap: 0.5rem;">
                                 <button class="btn btn-success" onclick="markSold()" style="flex: 1; padding: 0.4rem; font-size: 0.9rem; font-weight: bold;">SOLD!</button>
                                 <button class="btn btn-danger" onclick="markUnsold()" style="flex: 1; padding: 0.4rem; font-size: 0.9rem; font-weight: bold;">UNSOLD</button>
+                                <button class="btn btn-warning" onclick="rebidPlayer()" style="flex: 1; padding: 0.4rem; font-size: 0.9rem; font-weight: bold;">REBID</button>
                             </div>
                         </div>
                     </div>
@@ -1329,7 +1335,7 @@
 
         function getPlayersInCategory(cat) {
             return state.players.filter(p => {
-                if (p.status !== 'available') return false;
+                if (p.status !== 'available' && p.status !== 'unsold') return false;
 
                 // Price matching
                 let priceMatch = false;
@@ -1353,17 +1359,29 @@
 
         function renderPlayers() {
             const cat = PRICE_CATEGORIES.find(c => c.key === currentCategory);
-            let filtered = cat ? getPlayersInCategory(cat) : state.players.filter(p => p.status === 'available');
+            let filtered = cat ? getPlayersInCategory(cat) : state.players.filter(p => p.status === 'available' || p.status === 'unsold');
 
-            const html = filtered.map(p => `
-                <div class="player-item ${selectedPlayer?.id === p.id ? 'selected' : ''}" onclick="selectPlayer(${p.id})">
+            // Sort: available first, unsold at bottom
+            filtered.sort((a, b) => {
+                if (a.status === 'available' && b.status === 'unsold') return -1;
+                if (a.status === 'unsold' && b.status === 'available') return 1;
+                return 0;
+            });
+
+            const html = filtered.map(p => {
+                const isUnsold = p.status === 'unsold';
+                return `
+                <div class="player-item ${selectedPlayer?.id === p.id ? 'selected' : ''} ${isUnsold ? 'unsold-player' : ''}" onclick="${isUnsold ? 'rebidFromList(' + p.id + ')' : 'selectPlayer(' + p.id + ')'}">
                     <div class="player-info">
-                        <div class="name">${p.name} <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
+                        <div class="name">${p.name} <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span>${isUnsold ? ' <span style="background:rgba(255,23,68,0.2);color:var(--danger);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.65rem;font-weight:700;">UNSOLD</span>' : ''}</div>
                         <div class="role">${p.role} | ${p.country}</div>
                     </div>
-                    <div class="player-price">${formatPrice(p.basePrice)}</div>
+                    <div style="display:flex;align-items:center;gap:0.4rem;">
+                        <div class="player-price">${formatPrice(p.basePrice)}</div>
+                        ${isUnsold ? '<button class="btn btn-warning" style="padding:0.15rem 0.4rem;font-size:0.65rem;white-space:nowrap;" onclick="event.stopPropagation();rebidFromList(' + p.id + ')">Rebid</button>' : ''}
+                    </div>
                 </div>
-            `).join('');
+            `}).join('');
 
             document.getElementById('players-list').innerHTML = html || '<p style="color: var(--text-secondary); padding: 1rem;">No players in this category. Set prices first in "Set Prices" tab.</p>';
         }
@@ -1672,6 +1690,36 @@
 
         function markSold() { if (socket) socket.emit('markSold'); }
         function markUnsold() { if (socket) socket.emit('markUnsold'); }
+
+        function rebidPlayer() {
+            // Rebid the current player (if unsold or in bidding, reset them back to available and re-select)
+            const currentPlayer = state.auctionState?.currentPlayer;
+            if (!currentPlayer) {
+                showAuctionPopup('No Player', 'No player is currently selected to rebid.', true);
+                return;
+            }
+            if (socket) socket.emit('reAuctionPlayer', currentPlayer.id);
+        }
+
+        function rebidFromList(playerId) {
+            // Re-auction an unsold player from the category list and select them
+            if (socket) socket.emit('reAuctionPlayer', playerId);
+        }
+
+        function drawRandomPlayer() {
+            const cat = PRICE_CATEGORIES.find(c => c.key === currentCategory);
+            if (!cat) return;
+
+            const available = getPlayersInCategory(cat).filter(p => p.status === 'available');
+            if (available.length === 0) {
+                showAuctionPopup('No Players', 'No available players left in this category.', true);
+                return;
+            }
+
+            const randomIndex = Math.floor(Math.random() * available.length);
+            const drawn = available[randomIndex];
+            selectPlayer(drawn.id);
+        }
 
         function addTeam() {
             const name = document.getElementById('new-team-name').value.trim();
