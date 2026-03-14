@@ -19,6 +19,7 @@ const rooms = new Map();
 
 // Load players data
 const playersData = require('./data/players.json');
+console.log(`Loaded ${playersData.length} players from players.json`);
 
 // Generate random 6-character room code
 function generateRoomCode() {

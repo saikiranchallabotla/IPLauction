@@ -630,7 +630,7 @@
 
                     <!-- Step 2: Set Prices -->
                     <div id="admin-prices-tab" style="display: none;">
-                        <h3 class="card-title">Set Base Prices for Players</h3>
+                        <h3 class="card-title">Set Base Prices for Players (<span id="player-count">0</span> players)</h3>
                         <p style="color: var(--text-secondary); margin-bottom: 1rem;">Assign base prices (2Cr, 1Cr, 50L, 20L) to categorize players for auction rounds.</p>
                         <div class="filters">
                             <select id="filter-role-price" onchange="filterPlayersPrice()">
@@ -1011,6 +1011,10 @@
         function renderPlayersPrice() {
             const role = document.getElementById('filter-role-price')?.value || '';
             const search = (document.getElementById('search-player-price')?.value || '').toLowerCase();
+
+            // Update player count
+            const countEl = document.getElementById('player-count');
+            if (countEl) countEl.textContent = state.players.length;
 
             let filtered = state.players.filter(p => p.status === 'available');
             if (role) filtered = filtered.filter(p => p.role === role);
