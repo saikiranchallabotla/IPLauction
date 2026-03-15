@@ -560,6 +560,17 @@ app.post('/api/room/:code/players/:id/price', (req, res) => {
     }
 });
 
+// Bulk save all player prices
+app.post('/api/room/:code/players/save-prices', (req, res) => {
+    const room = getRoom(req.params.code);
+    if (!room) {
+        return res.status(404).json({ error: 'Room not found' });
+    }
+    saveRooms(room.code);
+    console.log(`Prices saved for room ${room.code} (${room.players.length} players)`);
+    res.json({ success: true, message: 'All prices saved successfully' });
+});
+
 // Delete team from room
 app.delete('/api/room/:code/teams/:id', (req, res) => {
     const room = getRoom(req.params.code);

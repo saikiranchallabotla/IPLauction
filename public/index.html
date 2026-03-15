@@ -1016,7 +1016,12 @@
 
                         <div class="players-list" id="players-price-list" style="max-height: 400px;"></div>
 
-                        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); display: flex; gap: 0.5rem;">
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center;">
+                            <button class="btn btn-primary" style="flex: 1; padding: 0.6rem; font-weight: 700;" onclick="savePrices()">Save Prices</button>
+                            <span id="save-prices-status" style="font-size: 0.8rem; color: var(--success); display: none;">Saved!</span>
+                        </div>
+
+                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); display: flex; gap: 0.5rem;">
                             <button class="btn btn-secondary" style="flex: 1;" onclick="showAdminTab('teams', document.querySelector('#admin-view .tab:nth-child(1)'))">
                                 ← Back to Teams
                             </button>
@@ -1820,6 +1825,28 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ basePrice: parseFloat(price) })
             }).then(() => renderCategoryTabs());
+        }
+
+        function savePrices() {
+            if (!roomCode) { showAuctionPopup('Not Connected', 'Not connected to a room.', true); return; }
+            fetch('/api/room/' + roomCode + '/players/save-prices', { method: 'POST' })
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        var status = document.getElementById('save-prices-status');
+                        if (status) {
+                            status.style.display = 'inline';
+                            status.textContent = 'All prices saved!';
+                            setTimeout(function() { status.style.display = 'none'; }, 3000);
+                        }
+                        showAuctionPopup('Saved', 'All player prices have been saved successfully.', false);
+                    } else {
+                        showAuctionPopup('Error', data.error || 'Failed to save prices.', true);
+                    }
+                })
+                .catch(function() {
+                    showAuctionPopup('Error', 'Failed to save prices. Check your connection.', true);
+                });
         }
 
         function formatPrice(price) {
