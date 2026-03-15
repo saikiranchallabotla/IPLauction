@@ -982,7 +982,6 @@
                     <div class="card" style="margin-top: 1rem;">
                         <h3 class="card-title">Players Remaining by Category</h3>
                         <div class="category-buttons" id="live-category-buttons" style="margin-bottom: 0;"></div>
-                        <div id="live-player-list" style="margin-top: 0.75rem; display: none; max-height: 350px; overflow-y: auto;"></div>
                     </div>
                     <!-- Bid History Log -->
                     <div class="card" style="margin-top: 1rem;">
@@ -1370,6 +1369,17 @@
                 <button class="popup-btn popup-btn-confirm" onclick="confirmEnterRoom()">Enter Room</button>
                 <button class="popup-btn popup-btn-cancel" onclick="cancelEnterRoom()">Cancel</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Live Category Player List Popup -->
+    <div class="auction-popup-overlay" id="live-player-popup" onclick="closeLivePlayerPopup(event)">
+        <div class="auction-popup" style="max-width: 550px; width: 95%; max-height: 85vh; display: flex; flex-direction: column; padding: 0;">
+            <div style="padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="color: var(--accent); margin: 0; font-size: 0.95rem;" id="live-player-popup-title">Players</h3>
+                <button onclick="closeLivePlayerPopup()" style="background:none;border:none;color:var(--text-secondary);font-size:1.3rem;cursor:pointer;padding:0.2rem 0.4rem;">&times;</button>
+            </div>
+            <div id="live-player-list" style="overflow-y: auto; flex: 1; padding: 0.3rem 0.5rem;"></div>
         </div>
     </div>
 
@@ -1841,56 +1851,58 @@
         }
 
         function showLiveCategoryPlayers(catKey) {
-            var listEl = document.getElementById('live-player-list');
-            if (!listEl) return;
-            if (activeLiveCategory === catKey) {
-                // Toggle off
-                activeLiveCategory = null;
-                listEl.style.display = 'none';
-                listEl.innerHTML = '';
-                renderLiveCategories();
-                return;
-            }
             activeLiveCategory = catKey;
+            renderLiveCategories();
+            renderLivePlayerList();
+            document.getElementById('live-player-popup').classList.add('active');
+        }
+
+        function closeLivePlayerPopup(e) {
+            if (e && e.target !== e.currentTarget) return;
+            document.getElementById('live-player-popup').classList.remove('active');
+            activeLiveCategory = null;
             renderLiveCategories();
         }
 
         function renderLivePlayerList() {
             var listEl = document.getElementById('live-player-list');
+            var titleEl = document.getElementById('live-player-popup-title');
             if (!listEl || !activeLiveCategory) return;
 
             var players;
+            var title;
             if (activeLiveCategory === 'all') {
                 players = state.players.filter(function(p) { return p.status === 'available' || p.status === 'unsold'; });
                 players.sort(function(a, b) { return (b.basePrice || 0) - (a.basePrice || 0); });
+                title = 'All Remaining Players (' + players.length + ')';
             } else {
                 var cat = PRICE_CATEGORIES.find(function(c) { return c.key === activeLiveCategory; });
                 players = cat ? getPlayersInCategory(cat) : [];
+                title = (cat ? cat.label : '') + ' — ' + players.length + ' players';
             }
+            if (titleEl) titleEl.textContent = title;
 
             if (players.length === 0) {
-                listEl.innerHTML = '<div style="padding:0.5rem;color:var(--text-secondary);text-align:center;font-size:0.85rem;">No players remaining in this category</div>';
-                listEl.style.display = 'block';
+                listEl.innerHTML = '<div style="padding:1rem;color:var(--text-secondary);text-align:center;font-size:0.85rem;">No players remaining in this category</div>';
                 return;
             }
 
             var html = '';
-            players.forEach(function(p) {
+            players.forEach(function(p, i) {
                 var isOverseas = p.country !== 'India';
                 var isUnsold = p.status === 'unsold';
-                html += '<div class="player-item' + (isUnsold ? ' unsold-player' : '') + '" style="cursor:default;">' +
-                    '<div class="player-info">' +
-                        '<div class="name">' + p.name + ' <span class="ipl-team-badge">' + (p.previousTeam || 'Uncapped') + '</span>' +
-                            (isUnsold ? ' <span style="background:rgba(255,23,68,0.2);color:var(--danger);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.65rem;font-weight:700;">UNSOLD</span>' : '') +
-                            (isOverseas ? ' <span style="background:rgba(13,71,161,0.2);color:#42a5f5;padding:0.1rem 0.4rem;border-radius:4px;font-size:0.65rem;font-weight:700;">OS</span>' : '') +
-                        '</div>' +
-                        '<div class="role">' + p.role + ' | ' + p.country + '</div>' +
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.25rem 0.4rem;border-bottom:1px solid rgba(255,255,255,0.05);' + (i % 2 === 0 ? '' : 'background:rgba(255,255,255,0.02);') + '">' +
+                    '<div style="flex:1;min-width:0;">' +
+                        '<span style="font-size:0.78rem;font-weight:600;color:var(--text);">' + p.name + '</span> ' +
+                        '<span class="ipl-team-badge" style="font-size:0.6rem;padding:0.05rem 0.3rem;">' + (p.previousTeam || 'Uncapped') + '</span>' +
+                        (isUnsold ? ' <span style="background:rgba(255,23,68,0.2);color:var(--danger);padding:0.05rem 0.3rem;border-radius:3px;font-size:0.55rem;font-weight:700;">UNSOLD</span>' : '') +
+                        (isOverseas ? ' <span style="background:rgba(13,71,161,0.2);color:#42a5f5;padding:0.05rem 0.3rem;border-radius:3px;font-size:0.55rem;font-weight:700;">OS</span>' : '') +
+                        '<div style="font-size:0.65rem;color:var(--text-secondary);">' + p.role + ' | ' + p.country + '</div>' +
                     '</div>' +
-                    '<div class="player-price">' + formatPrice(p.basePrice) + '</div>' +
+                    '<div style="font-size:0.75rem;font-weight:700;color:var(--accent);white-space:nowrap;margin-left:0.5rem;">' + formatPrice(p.basePrice) + '</div>' +
                 '</div>';
             });
             listEl.innerHTML = html;
-            listEl.style.display = 'block';
         }
 
         function getPlayersInCategory(cat) {
