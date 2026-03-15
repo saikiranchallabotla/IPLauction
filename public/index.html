@@ -942,7 +942,7 @@
                 <button class="btn btn-secondary" onclick="showView('history')">History</button>
                 <button class="btn btn-secondary" onclick="showView('fantasy')">Points Table</button>
                 <button class="btn btn-success" onclick="exportToExcel()">Export Excel</button>
-                <button class="btn btn-primary" onclick="showView('admin')">Admin</button>
+                <button class="btn btn-primary" id="admin-nav-btn" onclick="showView('admin')">Admin</button>
                 <button class="btn btn-danger" onclick="leaveRoom()">Leave</button>
             </div>
         </header>
@@ -1316,6 +1316,7 @@
         let selectedPlayer = null;
         let currentCategory = '2cr-home';
         let roomCode = null;
+        let isAdmin = false;
         let fantasyData = { teams: [], matches: [], lastUpdated: null, configured: false };
         let selectedFantasyMatch = null;
 
@@ -1335,6 +1336,10 @@
                 const res = await fetch('/api/room/create', { method: 'POST' });
                 const data = await res.json();
                 roomCode = data.code;
+                // Store admin token so we can prove ownership when joining
+                if (data.adminToken) {
+                    localStorage.setItem('adminToken_' + data.code, data.adminToken);
+                }
                 document.getElementById('created-room-code').textContent = data.code;
                 document.getElementById('created-room-display').classList.add('show');
             } catch (err) {
@@ -1469,10 +1474,27 @@
             document.getElementById('main-app').style.display = 'block';
             document.getElementById('room-code-badge').textContent = 'Room: ' + roomCode;
 
+            // Hide admin button by default until we know if we're admin
+            document.getElementById('admin-nav-btn').style.display = 'none';
+
             // Initialize socket and join room
             socket = io();
             socket.on('connect', () => {
-                socket.emit('joinRoom', roomCode);
+                var adminToken = localStorage.getItem('adminToken_' + roomCode) || null;
+                socket.emit('joinRoom', roomCode, adminToken);
+            });
+
+            socket.on('adminStatus', (data) => {
+                isAdmin = data.isAdmin;
+                var adminBtn = document.getElementById('admin-nav-btn');
+                if (adminBtn) adminBtn.style.display = isAdmin ? 'inline-block' : 'none';
+                // If non-admin is on admin view, redirect to auction
+                if (!isAdmin) {
+                    var adminView = document.getElementById('admin-view');
+                    if (adminView && adminView.classList.contains('active')) {
+                        showView('auction');
+                    }
+                }
             });
 
             socket.on('fullUpdate', (data) => { try { state = data; renderAll(); } catch(e) { console.error('fullUpdate render error:', e); } });
@@ -2445,6 +2467,7 @@
             if (socket) socket.disconnect();
             socket = null;
             roomCode = null;
+            isAdmin = false;
             state = { teams: [], players: [], auctionState: {} };
             selectedPlayer = null;
             currentCategory = '2cr-home';

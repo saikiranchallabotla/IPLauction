@@ -401,6 +401,16 @@ function generateRoomCode() {
     return code;
 }
 
+// Generate random admin token
+function generateAdminToken() {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let token = '';
+    for (let i = 0; i < 32; i++) {
+        token += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return token;
+}
+
 // Create a new room with fresh player data
 function createRoom(code) {
     const players = playersData.map((p, index) => ({
@@ -412,6 +422,7 @@ function createRoom(code) {
     rooms.set(code, {
         code,
         createdAt: Date.now(),
+        adminToken: generateAdminToken(),
         teams: [],
         players,
         auctionState: {
@@ -463,8 +474,9 @@ app.post('/api/room/create', (req, res) => {
         code = generateRoomCode();
     }
     createRoom(code);
+    const room = getRoom(code);
     console.log(`Room created: ${code}`);
-    res.json({ code });
+    res.json({ code, adminToken: room.adminToken });
 });
 
 // Join an existing room
@@ -653,18 +665,21 @@ io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
     // Join a room
-    socket.on('joinRoom', (code) => {
+    socket.on('joinRoom', (code, adminToken) => {
         const room = getRoom(code);
         if (room) {
             socket.join(room.code);
             socket.roomCode = room.code;
-            console.log(`Socket ${socket.id} joined room ${room.code}`);
+            const isAdmin = !!(adminToken && room.adminToken && adminToken === room.adminToken);
+            socket.isAdmin = isAdmin;
+            console.log(`Socket ${socket.id} joined room ${room.code} (admin: ${isAdmin})`);
             socket.emit('fullUpdate', {
                 teams: room.teams,
                 players: room.players,
                 auctionState: room.auctionState,
                 config: { initialBudget: INITIAL_BUDGET }
             });
+            socket.emit('adminStatus', { isAdmin });
         } else {
             socket.emit('roomError', 'Room not found. It may have been lost after a server restart. Please create a new room.');
         }
