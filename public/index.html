@@ -703,9 +703,17 @@
             border: 1px solid var(--border);
             border-radius: 10px;
             margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .room-list-item:hover {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+            transform: translateX(4px);
+            box-shadow: 0 0 12px var(--accent-glow);
         }
         .room-list-item .room-info {
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             color: var(--text);
             font-weight: 500;
         }
@@ -713,6 +721,22 @@
             font-size: 0.75rem;
             color: var(--text-secondary);
             margin-top: 0.15rem;
+        }
+        .room-join-btn {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            border: none;
+            padding: 0.4rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-family: 'Outfit', sans-serif;
+            transition: all 0.25s ease;
+        }
+        .room-join-btn:hover {
+            box-shadow: 0 2px 12px var(--primary-glow);
+            transform: translateY(-1px);
         }
         .room-status-dot {
             display: inline-block;
@@ -1274,12 +1298,18 @@
         </div>
     </div>
 
-    <!-- Create Room Password Popup -->
+    <!-- Create Room Popup -->
     <div class="auction-popup-overlay" id="create-password-popup">
         <div class="auction-popup" style="border-color: var(--success); max-width: 380px;">
-            <h3 style="color: var(--success);">Set Admin Password</h3>
-            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">This password will be needed to access the admin panel. Share it only with co-admins.</p>
-            <input type="password" id="create-password-input" placeholder="Enter a password" style="width: 100%; padding: 0.6rem 0.8rem; border: 2px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.95rem; text-align: center; letter-spacing: 0.1em; margin-bottom: 0.5rem;" onkeypress="if(event.key==='Enter')confirmCreateRoom()">
+            <h3 style="color: var(--success);">Create Auction Room</h3>
+            <div style="margin-bottom: 0.6rem;">
+                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Room Name</label>
+                <input type="text" id="create-room-name" placeholder="e.g., IPL Friends League" style="width: 100%; padding: 0.6rem 0.8rem; border: 2px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.95rem; text-align: center;">
+            </div>
+            <div style="margin-bottom: 0.6rem;">
+                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Admin Password</label>
+                <input type="password" id="create-password-input" placeholder="Set a password for admin access" style="width: 100%; padding: 0.6rem 0.8rem; border: 2px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.95rem; text-align: center; letter-spacing: 0.1em;" onkeypress="if(event.key==='Enter')confirmCreateRoom()">
+            </div>
             <div id="create-password-error" style="color: var(--danger); font-size: 0.8rem; margin-bottom: 0.5rem; display: none;"></div>
             <div style="display: flex; gap: 0.5rem; justify-content: center;">
                 <button class="popup-btn popup-btn-confirm" onclick="confirmCreateRoom()">Create Room</button>
@@ -1318,6 +1348,7 @@
         let selectedPlayer = null;
         let currentCategory = '2cr-home';
         let roomCode = null;
+        let roomName = null;
         let isAdmin = false;
         let pendingAdminPassword = null;
         let fantasyData = { teams: [], matches: [], lastUpdated: null, configured: false };
@@ -1335,16 +1366,23 @@
 
         // ============ ROOM MANAGEMENT ============
         function createRoom() {
-            // Show password popup
+            // Show create room popup
+            document.getElementById('create-room-name').value = '';
             document.getElementById('create-password-input').value = '';
             document.getElementById('create-password-error').style.display = 'none';
             document.getElementById('create-password-popup').classList.add('active');
         }
 
         async function confirmCreateRoom() {
+            var newRoomName = (document.getElementById('create-room-name').value || '').trim();
             var password = (document.getElementById('create-password-input').value || '').trim();
+            if (!newRoomName) {
+                document.getElementById('create-password-error').textContent = 'Please enter a room name.';
+                document.getElementById('create-password-error').style.display = 'block';
+                return;
+            }
             if (!password) {
-                document.getElementById('create-password-error').textContent = 'Please enter a password.';
+                document.getElementById('create-password-error').textContent = 'Please enter an admin password.';
                 document.getElementById('create-password-error').style.display = 'block';
                 return;
             }
@@ -1352,7 +1390,7 @@
                 const res = await fetch('/api/room/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ adminPassword: password })
+                    body: JSON.stringify({ adminPassword: password, roomName: newRoomName })
                 });
                 const data = await res.json();
                 if (!res.ok) {
@@ -1362,6 +1400,7 @@
                 }
                 document.getElementById('create-password-popup').classList.remove('active');
                 roomCode = data.code;
+                roomName = newRoomName;
                 // Store admin password locally so creator auto-enters as admin
                 localStorage.setItem('adminPass_' + data.code, password);
                 document.getElementById('created-room-code').textContent = data.code;
@@ -1394,6 +1433,7 @@
                 if (res.ok) {
                     const data = await res.json();
                     roomCode = data.code;
+                    roomName = data.roomName || 'Auction Room';
                     // Always ask if they are admin when joining via code
                     showAdminCheckPopup();
                 } else {
@@ -1444,6 +1484,12 @@
             enterAuction();
         }
 
+        function clickRoom(code, name) {
+            roomCode = code;
+            roomName = name || 'Auction Room';
+            showAdminCheckPopup();
+        }
+
         function enterRoom() {
             if (roomCode) {
                 // Creator entering - use stored password
@@ -1452,7 +1498,7 @@
             }
         }
 
-        // ============ ACTIVE ROOMS (no codes shown) ============
+        // ============ ACTIVE ROOMS ============
         let roomsRefreshInterval = null;
 
         async function loadActiveRooms() {
@@ -1471,11 +1517,16 @@
                 list.innerHTML = rooms.map(function(r) {
                     var isLive = r.status === 'bidding';
                     var age = getTimeAgo(r.createdAt);
-                    return '<div class="room-list-item">' +
+                    var safeName = (r.roomName || 'Auction Room').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    return '<div class="room-list-item" onclick="clickRoom(\'' + r.code + '\', \'' + safeName + '\')" style="cursor: pointer;">' +
                         '<div>' +
-                            '<div class="room-info"><span class="room-status-dot ' + (isLive ? 'live' : 'idle') + '"></span>' + (isLive ? 'Live Auction' : 'Waiting') + '</div>' +
+                            '<div class="room-info">' +
+                                '<span class="room-status-dot ' + (isLive ? 'live' : 'idle') + '"></span>' +
+                                '<strong>' + (r.roomName || 'Auction Room') + '</strong>' +
+                            '</div>' +
                             '<div class="room-meta">' + r.teamCount + ' teams | ' + r.playersSold + ' sold | ' + age + '</div>' +
                         '</div>' +
+                        '<button class="room-join-btn" onclick="event.stopPropagation(); clickRoom(\'' + r.code + '\', \'' + safeName + '\')">Enter</button>' +
                     '</div>';
                 }).join('');
             } catch (err) {
@@ -1504,7 +1555,7 @@
             // Hide landing, show app
             document.getElementById('landing-page').style.display = 'none';
             document.getElementById('main-app').style.display = 'block';
-            document.getElementById('room-code-badge').textContent = 'Room: ' + roomCode;
+            document.getElementById('room-code-badge').textContent = roomName || ('Room: ' + roomCode);
 
             // Hide admin button by default until we know if we're admin
             document.getElementById('admin-nav-btn').style.display = 'none';
@@ -2507,6 +2558,7 @@
             if (socket) socket.disconnect();
             socket = null;
             roomCode = null;
+            roomName = null;
             isAdmin = false;
             pendingAdminPassword = null;
             state = { teams: [], players: [], auctionState: {} };

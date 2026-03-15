@@ -402,7 +402,7 @@ function generateRoomCode() {
 }
 
 // Create a new room with fresh player data
-function createRoom(code, adminPassword) {
+function createRoom(code, adminPassword, roomName) {
     const players = playersData.map((p, index) => ({
         id: index + 1,
         ...p,
@@ -411,6 +411,7 @@ function createRoom(code, adminPassword) {
 
     rooms.set(code, {
         code,
+        roomName: roomName || 'Auction Room',
         createdAt: Date.now(),
         adminPassword: adminPassword || '',
         teams: [],
@@ -439,11 +440,13 @@ function getRoom(code) {
 
 // ============ REST API ============
 
-// List active rooms (without codes - for landing page display only)
+// List active rooms for landing page
 app.get('/api/rooms', (req, res) => {
     const roomList = [];
     for (const [code, room] of rooms) {
         roomList.push({
+            code: room.code,
+            roomName: room.roomName || 'Auction Room',
             teamCount: room.teams.length,
             playersSold: room.auctionState.soldPlayers.length,
             status: room.auctionState.status,
@@ -456,17 +459,20 @@ app.get('/api/rooms', (req, res) => {
 
 // Create a new auction room
 app.post('/api/room/create', (req, res) => {
-    const { adminPassword } = req.body || {};
+    const { adminPassword, roomName } = req.body || {};
     if (!adminPassword || adminPassword.trim().length === 0) {
         return res.status(400).json({ error: 'Admin password is required.' });
+    }
+    if (!roomName || roomName.trim().length === 0) {
+        return res.status(400).json({ error: 'Room name is required.' });
     }
     let code = generateRoomCode();
     // Make sure code is unique
     while (rooms.has(code)) {
         code = generateRoomCode();
     }
-    createRoom(code, adminPassword.trim());
-    console.log(`Room created: ${code}`);
+    createRoom(code, adminPassword.trim(), roomName.trim());
+    console.log(`Room created: ${code} (${roomName.trim()})`);
     res.json({ code });
 });
 
@@ -475,7 +481,7 @@ app.post('/api/room/join', (req, res) => {
     const { code } = req.body;
     const room = getRoom(code);
     if (room) {
-        res.json({ success: true, code: room.code });
+        res.json({ success: true, code: room.code, roomName: room.roomName || 'Auction Room' });
     } else {
         res.status(404).json({ error: 'Room not found. Check the code and try again.' });
     }
