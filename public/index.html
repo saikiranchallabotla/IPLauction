@@ -1019,7 +1019,27 @@
                                 <option value="Wicketkeeper">Wicketkeeper</option>
                             </select>
                             <input type="text" id="search-player-price" placeholder="Search..." oninput="filterPlayersPrice()">
+                            <button class="btn btn-success" onclick="toggleAddPlayerForm()" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; font-weight: 700; white-space: nowrap;">+ Add Player</button>
                         </div>
+
+                        <!-- Add Player Inline Form -->
+                        <div id="add-player-form" style="display: none; background: rgba(76,175,80,0.08); border: 1px solid rgba(76,175,80,0.25); border-radius: 10px; padding: 0.8rem; margin-bottom: 0.8rem;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <input type="text" id="add-player-name" placeholder="Player Name" style="padding: 0.45rem 0.6rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.85rem;">
+                                <input type="text" id="add-player-ipl-team" placeholder="IPL Team (e.g. CSK)" style="padding: 0.45rem 0.6rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.85rem;">
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <select id="add-player-role" style="padding: 0.45rem 0.6rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.85rem;">
+                                    <option value="Batsman">Batsman</option>
+                                    <option value="Bowler">Bowler</option>
+                                    <option value="All-rounder">All-rounder</option>
+                                    <option value="Wicketkeeper">Wicketkeeper</option>
+                                </select>
+                                <input type="text" id="add-player-country" placeholder="Country" value="India" style="padding: 0.45rem 0.6rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.85rem;">
+                                <button class="btn btn-success" onclick="addPlayerFromForm()" style="padding: 0.45rem; font-size: 0.85rem; font-weight: 700;">Add</button>
+                            </div>
+                        </div>
+
                         <div class="players-list" id="players-price-list" style="max-height: 400px;"></div>
 
                         <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); display: flex; gap: 0.5rem;">
@@ -1121,82 +1141,37 @@
             <div id="post-auction-panel" style="display: none; padding: 0 1rem 1rem;">
                 <div style="background: linear-gradient(135deg, rgba(76, 175, 80, 0.15), rgba(33, 150, 243, 0.1)); border: 1px solid rgba(76, 175, 80, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1rem; text-align: center;">
                     <div style="font-size: 1.1rem; font-weight: 700; color: var(--success);">Auction Completed</div>
-                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Teams are locked. You can trade players or add new ones below.</div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Teams are locked. You can trade players below. To add new players, use the "Set Prices" tab.</div>
                     <button class="btn btn-secondary" onclick="resumeAuction()" style="margin-top: 0.5rem; padding: 0.3rem 1rem; font-size: 0.8rem;">Resume Auction</button>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                    <!-- Trade Players -->
-                    <div class="card">
-                        <h3 class="card-title" style="font-size: 0.95rem;">Trade Players</h3>
-                        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
-                            <div>
-                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">From Team</label>
-                                <select id="trade-from-team" onchange="updateTradePlayerList()" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                                    <option value="">Select team...</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Player</label>
-                                <select id="trade-player" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                                    <option value="">Select player...</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">To Team</label>
-                                <select id="trade-to-team" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                                    <option value="">Select team...</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Trade Price (Cr)</label>
-                                <input type="number" id="trade-price" step="0.1" min="0.2" placeholder="Same as bought price" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                            </div>
-                            <button class="btn btn-primary" onclick="tradePlayer()" style="padding: 0.5rem; font-weight: 700;">Execute Trade</button>
+                <!-- Trade Players -->
+                <div class="card">
+                    <h3 class="card-title" style="font-size: 0.95rem;">Trade Players</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 0.6rem; align-items: end;">
+                        <div>
+                            <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">From Team</label>
+                            <select id="trade-from-team" onchange="updateTradePlayerList()" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                <option value="">Select team...</option>
+                            </select>
                         </div>
-                    </div>
-
-                    <!-- Add New Player -->
-                    <div class="card">
-                        <h3 class="card-title" style="font-size: 0.95rem;">Add New Player</h3>
-                        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
-                            <div>
-                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Player Name</label>
-                                <input type="text" id="new-player-name" placeholder="e.g., Virat Kohli" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                            </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                                <div>
-                                    <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Role</label>
-                                    <select id="new-player-role" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                                        <option value="Batter">Batter</option>
-                                        <option value="Bowler">Bowler</option>
-                                        <option value="All-Rounder">All-Rounder</option>
-                                        <option value="Wicketkeeper">Wicketkeeper</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Country</label>
-                                    <input type="text" id="new-player-country" placeholder="e.g., India" value="India" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                                </div>
-                            </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                                <div>
-                                    <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">IPL Team</label>
-                                    <input type="text" id="new-player-ipl-team" placeholder="e.g., CSK" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                                </div>
-                                <div>
-                                    <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Price (Cr)</label>
-                                    <input type="number" id="new-player-price" step="0.1" min="0.2" value="0.2" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                                </div>
-                            </div>
-                            <div>
-                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Assign To Team (optional)</label>
-                                <select id="new-player-team" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                                    <option value="">Add to pool (unassigned)</option>
-                                </select>
-                            </div>
-                            <button class="btn btn-success" onclick="addNewPlayer()" style="padding: 0.5rem; font-weight: 700;">Add Player</button>
+                        <div>
+                            <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Player</label>
+                            <select id="trade-player" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                <option value="">Select player...</option>
+                            </select>
                         </div>
+                        <div>
+                            <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">To Team</label>
+                            <select id="trade-to-team" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                <option value="">Select team...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Trade Price (Cr)</label>
+                            <input type="number" id="trade-price" step="0.1" min="0.2" placeholder="Same as bought" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                        </div>
+                        <button class="btn btn-primary" onclick="tradePlayer()" style="padding: 0.5rem 1rem; font-weight: 700; white-space: nowrap;">Execute Trade</button>
                     </div>
                 </div>
             </div>
@@ -2517,7 +2492,6 @@
 
             if (isFinished) {
                 populateTradeDropdowns();
-                populateNewPlayerTeamDropdown();
             }
         }
 
@@ -2586,49 +2560,35 @@
             }
         }
 
-        function populateNewPlayerTeamDropdown() {
-            var select = document.getElementById('new-player-team');
-            if (!select) return;
-            var teams = state.teams || [];
-            select.innerHTML = '<option value="">Add to pool (unassigned)</option>' +
-                teams.map(function(t) { return '<option value="' + t.id + '">' + t.name + ' (Budget: ' + (t.budget || 0).toFixed(2) + ' Cr)</option>'; }).join('');
+        function toggleAddPlayerForm() {
+            var form = document.getElementById('add-player-form');
+            if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
         }
 
-        async function addNewPlayer() {
-            var name = (document.getElementById('new-player-name').value || '').trim();
-            var role = document.getElementById('new-player-role').value;
-            var country = (document.getElementById('new-player-country').value || '').trim();
-            var previousTeam = (document.getElementById('new-player-ipl-team').value || '').trim();
-            var basePrice = parseFloat(document.getElementById('new-player-price').value) || 0.2;
-            var assignToTeamId = document.getElementById('new-player-team').value;
+        function addPlayerFromForm() {
+            var name = (document.getElementById('add-player-name').value || '').trim();
+            var role = document.getElementById('add-player-role').value;
+            var country = (document.getElementById('add-player-country').value || '').trim() || 'India';
+            var previousTeam = (document.getElementById('add-player-ipl-team').value || '').trim() || 'Uncapped';
 
             if (!name) {
                 showAuctionPopup('Missing Info', 'Player name is required.', true);
                 return;
             }
 
-            var msg = 'Add ' + name + ' (' + role + ', ' + (country || 'India') + ') at ' + basePrice.toFixed(2) + ' Cr';
-            if (assignToTeamId) {
-                var team = (state.teams || []).find(function(t) { return t.id === assignToTeamId; });
-                msg += ' and assign to ' + (team ? team.name : 'team');
-            }
-            msg += '?';
+            socket.emit('addPlayer', {
+                name: name,
+                role: role,
+                country: country,
+                previousTeam: previousTeam,
+                basePrice: 0.2,
+                assignToTeamId: null
+            });
 
-            var yes = await showConfirmPopup('Add Player', msg, 'Add');
-            if (yes) {
-                socket.emit('addPlayer', {
-                    name: name,
-                    role: role,
-                    country: country || 'India',
-                    previousTeam: previousTeam || 'Uncapped',
-                    basePrice: basePrice,
-                    assignToTeamId: assignToTeamId || null
-                });
-                document.getElementById('new-player-name').value = '';
-                document.getElementById('new-player-ipl-team').value = '';
-                document.getElementById('new-player-price').value = '0.2';
-                document.getElementById('new-player-country').value = 'India';
-            }
+            document.getElementById('add-player-name').value = '';
+            document.getElementById('add-player-ipl-team').value = '';
+            document.getElementById('add-player-country').value = 'India';
+            showAuctionPopup('Player Added', name + ' has been added to the player pool. Set the price using the dropdown.', false);
         }
 
         function showView(view) {
