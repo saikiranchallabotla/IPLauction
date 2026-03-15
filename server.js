@@ -445,7 +445,6 @@ app.get('/api/rooms', (req, res) => {
     const roomList = [];
     for (const [code, room] of rooms) {
         roomList.push({
-            code: room.code,
             roomName: room.roomName || 'Auction Room',
             teamCount: room.teams.length,
             playersSold: room.auctionState.soldPlayers.length,

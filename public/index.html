@@ -703,14 +703,6 @@
             border: 1px solid var(--border);
             border-radius: 10px;
             margin-bottom: 0.5rem;
-            cursor: pointer;
-            transition: all 0.25s ease;
-        }
-        .room-list-item:hover {
-            border-color: var(--accent);
-            background: var(--accent-dim);
-            transform: translateX(4px);
-            box-shadow: 0 0 12px var(--accent-glow);
         }
         .room-list-item .room-info {
             font-size: 0.9rem;
@@ -721,22 +713,6 @@
             font-size: 0.75rem;
             color: var(--text-secondary);
             margin-top: 0.15rem;
-        }
-        .room-join-btn {
-            background: linear-gradient(135deg, var(--primary), var(--primary-light));
-            color: white;
-            border: none;
-            padding: 0.4rem 1rem;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 0.8rem;
-            cursor: pointer;
-            font-family: 'Outfit', sans-serif;
-            transition: all 0.25s ease;
-        }
-        .room-join-btn:hover {
-            box-shadow: 0 2px 12px var(--primary-glow);
-            transform: translateY(-1px);
         }
         .room-status-dot {
             display: inline-block;
@@ -1484,12 +1460,6 @@
             enterAuction();
         }
 
-        function clickRoom(code, name) {
-            roomCode = code;
-            roomName = name || 'Auction Room';
-            showAdminCheckPopup();
-        }
-
         function enterRoom() {
             if (roomCode) {
                 // Creator entering - use stored password
@@ -1517,8 +1487,7 @@
                 list.innerHTML = rooms.map(function(r) {
                     var isLive = r.status === 'bidding';
                     var age = getTimeAgo(r.createdAt);
-                    var safeName = (r.roomName || 'Auction Room').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    return '<div class="room-list-item" onclick="clickRoom(\'' + r.code + '\', \'' + safeName + '\')" style="cursor: pointer;">' +
+                    return '<div class="room-list-item">' +
                         '<div>' +
                             '<div class="room-info">' +
                                 '<span class="room-status-dot ' + (isLive ? 'live' : 'idle') + '"></span>' +
@@ -1526,7 +1495,6 @@
                             '</div>' +
                             '<div class="room-meta">' + r.teamCount + ' teams | ' + r.playersSold + ' sold | ' + age + '</div>' +
                         '</div>' +
-                        '<button class="room-join-btn" onclick="event.stopPropagation(); clickRoom(\'' + r.code + '\', \'' + safeName + '\')">Enter</button>' +
                     '</div>';
                 }).join('');
             } catch (err) {
