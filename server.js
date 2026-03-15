@@ -401,18 +401,8 @@ function generateRoomCode() {
     return code;
 }
 
-// Generate random admin token
-function generateAdminToken() {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    let token = '';
-    for (let i = 0; i < 32; i++) {
-        token += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return token;
-}
-
 // Create a new room with fresh player data
-function createRoom(code) {
+function createRoom(code, adminPassword) {
     const players = playersData.map((p, index) => ({
         id: index + 1,
         ...p,
@@ -422,7 +412,7 @@ function createRoom(code) {
     rooms.set(code, {
         code,
         createdAt: Date.now(),
-        adminToken: generateAdminToken(),
+        adminPassword: adminPassword || '',
         teams: [],
         players,
         auctionState: {
@@ -449,34 +439,20 @@ function getRoom(code) {
 
 // ============ REST API ============
 
-// List all active rooms (for landing page)
-app.get('/api/rooms', (req, res) => {
-    const roomList = [];
-    for (const [code, room] of rooms) {
-        roomList.push({
-            code: room.code,
-            teamCount: room.teams.length,
-            playersSold: room.auctionState.soldPlayers.length,
-            status: room.auctionState.status,
-            createdAt: room.createdAt
-        });
-    }
-    // Sort by most recently created first
-    roomList.sort((a, b) => b.createdAt - a.createdAt);
-    res.json(roomList);
-});
-
 // Create a new auction room
 app.post('/api/room/create', (req, res) => {
+    const { adminPassword } = req.body || {};
+    if (!adminPassword || adminPassword.trim().length === 0) {
+        return res.status(400).json({ error: 'Admin password is required.' });
+    }
     let code = generateRoomCode();
     // Make sure code is unique
     while (rooms.has(code)) {
         code = generateRoomCode();
     }
-    createRoom(code);
-    const room = getRoom(code);
+    createRoom(code, adminPassword.trim());
     console.log(`Room created: ${code}`);
-    res.json({ code, adminToken: room.adminToken });
+    res.json({ code });
 });
 
 // Join an existing room
@@ -665,12 +641,12 @@ io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
     // Join a room
-    socket.on('joinRoom', (code, adminToken) => {
+    socket.on('joinRoom', (code, adminPassword) => {
         const room = getRoom(code);
         if (room) {
             socket.join(room.code);
             socket.roomCode = room.code;
-            const isAdmin = !!(adminToken && room.adminToken && adminToken === room.adminToken);
+            const isAdmin = !!(adminPassword && room.adminPassword && adminPassword === room.adminPassword);
             socket.isAdmin = isAdmin;
             console.log(`Socket ${socket.id} joined room ${room.code} (admin: ${isAdmin})`);
             socket.emit('fullUpdate', {

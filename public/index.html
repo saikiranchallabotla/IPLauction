@@ -693,62 +693,6 @@
             .btn { padding: 0.45rem 0.7rem; font-size: 0.78rem; }
         }
 
-        /* ============ ACTIVE ROOMS ============ */
-        .room-list-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.8rem 1rem;
-            background: var(--dark-elevated);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            margin-bottom: 0.5rem;
-            cursor: pointer;
-            transition: all 0.25s ease;
-        }
-        .room-list-item:hover {
-            border-color: var(--accent);
-            background: var(--accent-dim);
-            transform: translateX(4px);
-            box-shadow: 0 0 12px var(--accent-glow);
-        }
-        .room-list-item .room-code {
-            font-weight: 700;
-            font-family: 'Outfit', monospace;
-            letter-spacing: 0.15rem;
-            color: var(--accent);
-            font-size: 1.05rem;
-        }
-        .room-list-item .room-meta {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            margin-top: 0.15rem;
-        }
-        .room-list-item .room-join-btn {
-            background: linear-gradient(135deg, var(--primary), var(--primary-light));
-            color: white;
-            border: none;
-            padding: 0.4rem 1rem;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 0.8rem;
-            cursor: pointer;
-            font-family: 'Outfit', sans-serif;
-            transition: all 0.25s ease;
-        }
-        .room-list-item .room-join-btn:hover {
-            box-shadow: 0 2px 12px var(--primary-glow);
-            transform: translateY(-1px);
-        }
-        .room-status-dot {
-            display: inline-block;
-            width: 7px; height: 7px;
-            border-radius: 50%;
-            margin-right: 0.3rem;
-        }
-        .room-status-dot.live { background: var(--success); box-shadow: 0 0 6px var(--success-glow); }
-        .room-status-dot.idle { background: var(--text-secondary); }
-
         /* ============ FANTASY POINTS TABLE ============ */
         .fantasy-container { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
         .fantasy-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
@@ -903,6 +847,9 @@
             <div class="landing-section">
                 <h2>Create New Auction</h2>
                 <p>Start a new auction room and share the code with your friends</p>
+                <div style="margin-bottom: 0.8rem;">
+                    <input type="password" id="create-admin-password" placeholder="Set Admin Password" style="width: 100%; padding: 0.8rem 1rem; border: 2px solid var(--border-light); border-radius: 10px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 1rem; text-align: center; letter-spacing: 0.1em;">
+                </div>
                 <button class="btn-large btn-create" onclick="createRoom()">Create Auction Room</button>
 
                 <div class="room-code-display" id="created-room-display">
@@ -921,11 +868,6 @@
                     <button class="btn-large btn-join" style="width: auto; padding: 1rem 1.5rem;" onclick="joinRoom()">Join</button>
                 </div>
                 <div class="error-msg" id="join-error"></div>
-            </div>
-
-            <div class="landing-section" id="active-rooms-section" style="display: none;">
-                <h2>Active Rooms</h2>
-                <div id="active-rooms-list"></div>
             </div>
         </div>
     </div>
@@ -1300,6 +1242,20 @@
         </div>
     </div>
 
+    <!-- Admin Check Popup -->
+    <div class="auction-popup-overlay" id="admin-check-popup">
+        <div class="auction-popup" style="border-color: var(--accent); max-width: 380px;">
+            <h3 style="color: var(--accent);">Are you the Admin?</h3>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">If you created this room, enter your admin password to access the admin panel.</p>
+            <input type="password" id="admin-password-input" placeholder="Enter admin password" style="width: 100%; padding: 0.6rem 0.8rem; border: 2px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.95rem; text-align: center; letter-spacing: 0.1em; margin-bottom: 0.5rem;">
+            <div id="admin-password-error" style="color: var(--danger); font-size: 0.8rem; margin-bottom: 0.5rem; display: none;">Wrong password. Try again or join as participant.</div>
+            <div style="display: flex; gap: 0.5rem; justify-content: center;">
+                <button class="popup-btn popup-btn-confirm" onclick="submitAdminPassword()">Enter as Admin</button>
+                <button class="popup-btn popup-btn-cancel" onclick="skipAdminCheck()">Join as Participant</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Sold Overlay -->
     <div class="sold-overlay" id="sold-overlay">
         <div class="sold-content">
@@ -1317,6 +1273,7 @@
         let currentCategory = '2cr-home';
         let roomCode = null;
         let isAdmin = false;
+        let pendingAdminPassword = null;
         let fantasyData = { teams: [], matches: [], lastUpdated: null, configured: false };
         let selectedFantasyMatch = null;
 
@@ -1332,14 +1289,25 @@
 
         // ============ ROOM MANAGEMENT ============
         async function createRoom() {
+            var password = (document.getElementById('create-admin-password').value || '').trim();
+            if (!password) {
+                showAuctionPopup('Password Required', 'Please set an admin password to create a room.', true);
+                return;
+            }
             try {
-                const res = await fetch('/api/room/create', { method: 'POST' });
+                const res = await fetch('/api/room/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ adminPassword: password })
+                });
                 const data = await res.json();
-                roomCode = data.code;
-                // Store admin token so we can prove ownership when joining
-                if (data.adminToken) {
-                    localStorage.setItem('adminToken_' + data.code, data.adminToken);
+                if (!res.ok) {
+                    showAuctionPopup('Error', data.error || 'Failed to create room.', true);
+                    return;
                 }
+                roomCode = data.code;
+                // Store admin password locally so creator auto-enters as admin
+                localStorage.setItem('adminPass_' + data.code, password);
                 document.getElementById('created-room-code').textContent = data.code;
                 document.getElementById('created-room-display').classList.add('show');
             } catch (err) {
@@ -1364,7 +1332,16 @@
                 if (res.ok) {
                     const data = await res.json();
                     roomCode = data.code;
-                    enterAuction();
+                    // Check if we already have the admin password stored (creator returning)
+                    var storedPass = localStorage.getItem('adminPass_' + roomCode);
+                    if (storedPass) {
+                        // Auto-enter as admin
+                        pendingAdminPassword = storedPass;
+                        enterAuction();
+                    } else {
+                        // Show admin check popup
+                        showAdminCheckPopup();
+                    }
                 } else {
                     const err = await res.json();
                     showJoinError(err.error);
@@ -1389,85 +1366,39 @@
             });
         }
 
+        function showAdminCheckPopup() {
+            document.getElementById('admin-password-input').value = '';
+            document.getElementById('admin-password-error').style.display = 'none';
+            document.getElementById('admin-check-popup').classList.add('active');
+        }
+
+        function submitAdminPassword() {
+            var password = (document.getElementById('admin-password-input').value || '').trim();
+            if (!password) {
+                document.getElementById('admin-password-error').textContent = 'Please enter a password.';
+                document.getElementById('admin-password-error').style.display = 'block';
+                return;
+            }
+            pendingAdminPassword = password;
+            document.getElementById('admin-check-popup').classList.remove('active');
+            enterAuction();
+        }
+
+        function skipAdminCheck() {
+            pendingAdminPassword = null;
+            document.getElementById('admin-check-popup').classList.remove('active');
+            enterAuction();
+        }
+
         function enterRoom() {
             if (roomCode) {
+                // Creator entering - use stored password
+                pendingAdminPassword = localStorage.getItem('adminPass_' + roomCode) || null;
                 enterAuction();
             }
         }
 
-        // Fetch and display active rooms on landing page
-        let roomsRefreshInterval = null;
-
-        async function loadActiveRooms() {
-            try {
-                const res = await fetch('/api/rooms');
-                const rooms = await res.json();
-                const section = document.getElementById('active-rooms-section');
-                const list = document.getElementById('active-rooms-list');
-
-                if (rooms.length === 0) {
-                    section.style.display = 'none';
-                    return;
-                }
-
-                section.style.display = 'block';
-                list.innerHTML = rooms.map(r => {
-                    const isLive = r.status === 'bidding';
-                    const age = getTimeAgo(r.createdAt);
-                    return `
-                        <div class="room-list-item" onclick="quickJoin('${r.code}')">
-                            <div>
-                                <div class="room-code">
-                                    <span class="room-status-dot ${isLive ? 'live' : 'idle'}"></span>
-                                    ${r.code}
-                                </div>
-                                <div class="room-meta">${r.teamCount} teams | ${r.playersSold} sold | ${age}</div>
-                            </div>
-                            <button class="room-join-btn" onclick="event.stopPropagation(); quickJoin('${r.code}')">Join</button>
-                        </div>
-                    `;
-                }).join('');
-            } catch (err) {
-                // Silently fail - rooms list is optional
-            }
-        }
-
-        function getTimeAgo(timestamp) {
-            const diff = Date.now() - timestamp;
-            const mins = Math.floor(diff / 60000);
-            if (mins < 1) return 'just now';
-            if (mins < 60) return mins + 'm ago';
-            const hrs = Math.floor(mins / 60);
-            if (hrs < 24) return hrs + 'h ago';
-            return Math.floor(hrs / 24) + 'd ago';
-        }
-
-        async function quickJoin(code) {
-            try {
-                const res = await fetch('/api/room/join', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code })
-                });
-                if (res.ok) {
-                    roomCode = code;
-                    enterAuction();
-                } else {
-                    showAuctionPopup('Room Not Found', 'Room no longer exists. It may have been lost after a server restart.', true);
-                    loadActiveRooms();
-                }
-            } catch (err) {
-                showAuctionPopup('Connection Failed', 'Connection failed. Please try again.', true);
-            }
-        }
-
-        // Load rooms on page load and refresh every 10 seconds
-        loadActiveRooms();
-        roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
-
         function enterAuction() {
-            // Stop refreshing rooms list
-            if (roomsRefreshInterval) { clearInterval(roomsRefreshInterval); roomsRefreshInterval = null; }
 
             // Hide landing, show app
             document.getElementById('landing-page').style.display = 'none';
@@ -1480,14 +1411,18 @@
             // Initialize socket and join room
             socket = io();
             socket.on('connect', () => {
-                var adminToken = localStorage.getItem('adminToken_' + roomCode) || null;
-                socket.emit('joinRoom', roomCode, adminToken);
+                socket.emit('joinRoom', roomCode, pendingAdminPassword || null);
             });
 
             socket.on('adminStatus', (data) => {
                 isAdmin = data.isAdmin;
                 var adminBtn = document.getElementById('admin-nav-btn');
                 if (adminBtn) adminBtn.style.display = isAdmin ? 'inline-block' : 'none';
+                // If admin password was correct, store it for future reconnects
+                if (isAdmin && pendingAdminPassword) {
+                    localStorage.setItem('adminPass_' + roomCode, pendingAdminPassword);
+                }
+                pendingAdminPassword = null;
                 // If non-admin is on admin view, redirect to auction
                 if (!isAdmin) {
                     var adminView = document.getElementById('admin-view');
@@ -2468,6 +2403,7 @@
             socket = null;
             roomCode = null;
             isAdmin = false;
+            pendingAdminPassword = null;
             state = { teams: [], players: [], auctionState: {} };
             selectedPlayer = null;
             currentCategory = '2cr-home';
@@ -2475,8 +2411,6 @@
             document.getElementById('landing-page').style.display = 'flex';
             document.getElementById('created-room-display').classList.remove('show');
             document.getElementById('join-code-input').value = '';
-            loadActiveRooms();
-            roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
         }
 
         async function deleteTeam(id) {
