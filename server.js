@@ -414,7 +414,8 @@ function createRoom(code) {
             currentBidder: null,
             soldPlayers: [],
             unsoldPlayers: [],
-            bidLog: []
+            bidLog: [],
+            bidHistory: []
         }
     });
 
@@ -775,6 +776,18 @@ io.on('connection', (socket) => {
         room.auctionState.status = 'sold';
         if (!room.auctionState.bidLog) room.auctionState.bidLog = [];
         room.auctionState.bidLog.push({ type: 'sold', teamName: team.name, amount: price, playerName: player.name, time: Date.now() });
+        // Save to bid history
+        if (!room.auctionState.bidHistory) room.auctionState.bidHistory = [];
+        room.auctionState.bidHistory.push({
+            playerName: player.name,
+            iplTeam: player.previousTeam || 'Uncapped',
+            country: player.country,
+            basePrice: player.basePrice,
+            result: 'sold',
+            soldTo: team.name,
+            soldPrice: price,
+            bids: (room.auctionState.bidLog || []).filter(b => b.type === 'bid')
+        });
 
         saveRooms(room.code); // Save immediately after sale
 
@@ -819,6 +832,18 @@ io.on('connection', (socket) => {
         room.auctionState.status = 'unsold';
         if (!room.auctionState.bidLog) room.auctionState.bidLog = [];
         room.auctionState.bidLog.push({ type: 'unsold', playerName: player.name, time: Date.now() });
+        // Save to bid history
+        if (!room.auctionState.bidHistory) room.auctionState.bidHistory = [];
+        room.auctionState.bidHistory.push({
+            playerName: player.name,
+            iplTeam: player.previousTeam || 'Uncapped',
+            country: player.country,
+            basePrice: player.basePrice,
+            result: 'unsold',
+            soldTo: null,
+            soldPrice: null,
+            bids: (room.auctionState.bidLog || []).filter(b => b.type === 'bid')
+        });
 
         saveRooms(room.code); // Save immediately after unsold
 

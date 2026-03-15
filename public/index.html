@@ -801,19 +801,57 @@
 
         /* ============ BID LOG ============ */
         .bid-log-entry {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 0.45rem 0.7rem; border-left: 3px solid var(--border);
-            margin-bottom: 0.3rem; border-radius: 0 6px 6px 0;
-            background: var(--dark-elevated); font-size: 0.82rem;
-            transition: all 0.2s ease;
+            margin-bottom: 0.5rem; border-radius: 10px;
+            background: var(--dark-elevated); border: 1px solid var(--border);
+            overflow: hidden; transition: all 0.2s ease;
         }
-        .bid-log-entry.log-bid { border-left-color: var(--primary-light); }
-        .bid-log-entry.log-start { border-left-color: var(--accent); background: var(--accent-dim); }
-        .bid-log-entry.log-sold { border-left-color: var(--success); background: rgba(0,200,83,0.08); }
-        .bid-log-entry.log-unsold { border-left-color: var(--danger); background: rgba(255,23,68,0.05); }
-        .bid-log-entry .log-team { font-weight: 700; color: var(--text); }
-        .bid-log-entry .log-amount { font-weight: 700; color: var(--accent); }
-        .bid-log-entry .log-label { font-size: 0.72rem; color: var(--text-secondary); }
+        .bid-log-entry:hover { border-color: var(--border-light); }
+        .bid-log-entry.log-sold { border-left: 4px solid var(--success); }
+        .bid-log-entry.log-unsold { border-left: 4px solid var(--danger); }
+        .bid-log-entry.log-live { border-left: 4px solid var(--accent); background: var(--accent-dim); }
+        .bid-log-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.6rem 0.8rem; cursor: pointer;
+        }
+        .bid-log-player-info { flex: 1; }
+        .bid-log-player-name { font-weight: 700; font-size: 0.9rem; }
+        .bid-log-player-meta { font-size: 0.72rem; color: var(--text-secondary); display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; margin-top: 0.15rem; }
+        .bid-log-ipl-badge {
+            background: rgba(255, 145, 0, 0.15); color: var(--warning);
+            padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.65rem;
+            font-weight: 700; border: 1px solid rgba(255, 145, 0, 0.2);
+        }
+        .bid-log-country-tag {
+            padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.65rem; font-weight: 700;
+        }
+        .bid-log-country-tag.home { background: rgba(0,200,83,0.12); color: var(--success); border: 1px solid rgba(0,200,83,0.2); }
+        .bid-log-country-tag.overseas { background: rgba(63,81,181,0.15); color: var(--primary-light); border: 1px solid rgba(63,81,181,0.25); }
+        .bid-log-result {
+            text-align: right; min-width: 80px;
+        }
+        .bid-log-result-tag { font-weight: 700; font-size: 0.78rem; }
+        .bid-log-result-tag.sold { color: var(--success); }
+        .bid-log-result-tag.unsold { color: var(--danger); }
+        .bid-log-result-tag.live { color: var(--accent); }
+        .bid-log-result-price { font-size: 0.72rem; color: var(--text-secondary); }
+        .bid-log-result-team { font-size: 0.7rem; color: var(--primary-light); }
+        .bid-log-expand { color: var(--text-secondary); font-size: 0.9rem; margin-left: 0.5rem; transition: transform 0.2s ease; }
+        .bid-log-entry.expanded .bid-log-expand { transform: rotate(180deg); }
+        .bid-log-details {
+            display: none; padding: 0.4rem 0.8rem 0.6rem;
+            border-top: 1px solid var(--border);
+        }
+        .bid-log-entry.expanded .bid-log-details { display: block; }
+        .bid-step {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.3rem 0.5rem; margin-bottom: 0.2rem;
+            border-left: 2px solid var(--primary-light); border-radius: 0 4px 4px 0;
+            background: rgba(63,81,181,0.05); font-size: 0.78rem;
+        }
+        .bid-step .bs-team { font-weight: 600; color: var(--text); }
+        .bid-step .bs-amount { font-weight: 700; color: var(--accent); }
+        .bid-step:last-child { border-left-color: var(--success); background: rgba(0,200,83,0.06); }
+        .bid-log-no-bids { font-size: 0.75rem; color: var(--text-secondary); padding: 0.3rem 0; }
         .bid-log-empty { color: var(--text-secondary); font-size: 0.85rem; text-align: center; padding: 1rem; }
 
         /* ============ TEAM EXPANSION ============ */
@@ -834,17 +872,6 @@
         .team-player-entry .tp-price { color: var(--accent); font-weight: 700; font-size: 0.78rem; }
         .team-expand-hint { font-size: 0.7rem; color: var(--text-secondary); transition: transform 0.2s ease; }
         .team-item.expanded .team-expand-hint { transform: rotate(180deg); }
-
-        /* ============ LIVE SOLD LIST ============ */
-        .live-sold-item {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 0.5rem 0.7rem; margin-bottom: 0.3rem;
-            background: var(--dark-elevated); border-radius: 8px;
-            border: 1px solid var(--border); font-size: 0.82rem;
-        }
-        .live-sold-item .lsi-name { font-weight: 600; color: var(--text); }
-        .live-sold-item .lsi-team { font-size: 0.72rem; color: var(--primary-light); }
-        .live-sold-item .lsi-price { font-weight: 700; color: var(--accent); white-space: nowrap; }
 
         /* ============ SCROLLBAR ============ */
         ::-webkit-scrollbar { width: 6px; }
@@ -919,10 +946,10 @@
                             <div class="player-details">Admin will start the auction shortly</div>
                         </div>
                     </div>
-                    <!-- Bid Log -->
+                    <!-- Bid History Log -->
                     <div class="card" style="margin-top: 1rem;">
-                        <h3 class="card-title">Bid Log</h3>
-                        <div id="bid-log-display" style="max-height: 250px; overflow-y: auto;"></div>
+                        <h3 class="card-title">Auction Log</h3>
+                        <div id="bid-log-display" style="max-height: 400px; overflow-y: auto;"></div>
                     </div>
                 </div>
                 <div>
@@ -930,11 +957,6 @@
                         <h3 class="card-title">Friend Teams & Budgets</h3>
                         <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Click a team to see their players</p>
                         <div class="teams-list" id="teams-display"></div>
-                    </div>
-                    <!-- Sold Players in Live View -->
-                    <div class="card" style="margin-top: 1rem;">
-                        <h3 class="card-title">Sold Players (<span id="live-sold-count">0</span>)</h3>
-                        <div id="live-sold-list" style="max-height: 300px; overflow-y: auto;"></div>
                     </div>
                 </div>
             </div>
@@ -1399,7 +1421,7 @@
 
         // ============ RENDERING ============
         function renderAll() {
-            const fns = [renderAuction, renderTeams, renderSetupTeams, renderCategoryTabs, renderPlayers, renderPlayersPrice, renderHistory, renderAdminSoldList, renderUnsoldAdmin, renderPointsTable, renderBidLog, renderLiveSold];
+            const fns = [renderAuction, renderTeams, renderSetupTeams, renderCategoryTabs, renderPlayers, renderPlayersPrice, renderHistory, renderAdminSoldList, renderUnsoldAdmin, renderPointsTable, renderBidLog];
             fns.forEach(fn => { try { fn(); } catch(e) { console.error('Render error in ' + fn.name + ':', e); } });
         }
 
@@ -1982,43 +2004,77 @@
         function renderBidLog() {
             const container = document.getElementById('bid-log-display');
             if (!container) return;
-            const bidLog = (state.auctionState || {}).bidLog || [];
-            if (bidLog.length === 0) {
-                container.innerHTML = '<div class="bid-log-empty">No bids yet. Select a player to start.</div>';
-                return;
+            const bidHistory = (state.auctionState || {}).bidHistory || [];
+            const currentPlayer = (state.auctionState || {}).currentPlayer;
+            const currentBidLog = (state.auctionState || {}).bidLog || [];
+            const status = (state.auctionState || {}).status || 'waiting';
+
+            let html = '';
+
+            // Show current live auction at the top
+            if (currentPlayer && (status === 'bidding')) {
+                const isOverseas = currentPlayer.country !== 'India';
+                const liveBids = currentBidLog.filter(b => b.type === 'bid');
+                const bidSteps = liveBids.map(b =>
+                    '<div class="bid-step"><span class="bs-team">' + b.teamName + '</span><span class="bs-amount">' + formatPrice(b.amount) + '</span></div>'
+                ).join('');
+                html += '<div class="bid-log-entry log-live expanded">' +
+                    '<div class="bid-log-header">' +
+                        '<div class="bid-log-player-info">' +
+                            '<div class="bid-log-player-name">' + currentPlayer.name + '</div>' +
+                            '<div class="bid-log-player-meta">' +
+                                '<span class="bid-log-ipl-badge">' + (currentPlayer.previousTeam || 'Uncapped') + '</span>' +
+                                '<span class="bid-log-country-tag ' + (isOverseas ? 'overseas' : 'home') + '">' + (isOverseas ? 'OVERSEAS' : 'HOME') + '</span>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="bid-log-result">' +
+                            '<div class="bid-log-result-tag live">LIVE</div>' +
+                            '<div class="bid-log-result-price">' + formatPrice(state.auctionState.currentBid) + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="bid-log-details" style="display: block;">' +
+                        (liveBids.length > 0 ? bidSteps : '<div class="bid-log-no-bids">Base price: ' + formatPrice(currentPlayer.basePrice) + ' — No bids yet</div>') +
+                    '</div>' +
+                '</div>';
             }
-            container.innerHTML = bidLog.slice().reverse().map(entry => {
-                if (entry.type === 'start') {
-                    return '<div class="bid-log-entry log-start"><span class="log-label">Auction started for <strong>' + entry.playerName + '</strong></span><span class="log-amount">' + formatPrice(entry.amount) + '</span></div>';
-                } else if (entry.type === 'bid') {
-                    return '<div class="bid-log-entry log-bid"><span><span class="log-team">' + entry.teamName + '</span> <span class="log-label">bids</span></span><span class="log-amount">' + formatPrice(entry.amount) + '</span></div>';
-                } else if (entry.type === 'sold') {
-                    return '<div class="bid-log-entry log-sold"><span class="log-label">SOLD to <strong>' + entry.teamName + '</strong></span><span class="log-amount">' + formatPrice(entry.amount) + '</span></div>';
-                } else if (entry.type === 'unsold') {
-                    return '<div class="bid-log-entry log-unsold"><span class="log-label">UNSOLD — ' + entry.playerName + '</span><span></span></div>';
-                }
-                return '';
+
+            // Show completed auctions (most recent first)
+            html += bidHistory.slice().reverse().map((entry, idx) => {
+                const isOverseas = entry.country !== 'India';
+                const isSold = entry.result === 'sold';
+                const bidSteps = (entry.bids || []).map(b =>
+                    '<div class="bid-step"><span class="bs-team">' + b.teamName + '</span><span class="bs-amount">' + formatPrice(b.amount) + '</span></div>'
+                ).join('');
+                return '<div class="bid-log-entry ' + (isSold ? 'log-sold' : 'log-unsold') + '" onclick="toggleBidLogEntry(this)">' +
+                    '<div class="bid-log-header">' +
+                        '<div class="bid-log-player-info">' +
+                            '<div class="bid-log-player-name">' + entry.playerName + '</div>' +
+                            '<div class="bid-log-player-meta">' +
+                                '<span class="bid-log-ipl-badge">' + entry.iplTeam + '</span>' +
+                                '<span class="bid-log-country-tag ' + (isOverseas ? 'overseas' : 'home') + '">' + (isOverseas ? 'OVERSEAS' : 'HOME') + '</span>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="bid-log-result">' +
+                            '<div class="bid-log-result-tag ' + entry.result + '">' + (isSold ? 'SOLD' : 'UNSOLD') + '</div>' +
+                            (isSold ? '<div class="bid-log-result-price">' + formatPrice(entry.soldPrice) + '</div>' : '') +
+                            (isSold ? '<div class="bid-log-result-team">' + entry.soldTo + '</div>' : '') +
+                        '</div>' +
+                        '<span class="bid-log-expand">&#9660;</span>' +
+                    '</div>' +
+                    '<div class="bid-log-details">' +
+                        (entry.bids && entry.bids.length > 0 ? bidSteps : '<div class="bid-log-no-bids">No bids — went unsold at base price ' + formatPrice(entry.basePrice) + '</div>') +
+                    '</div>' +
+                '</div>';
             }).join('');
-            container.scrollTop = 0;
+
+            if (!html) {
+                html = '<div class="bid-log-empty">No auctions yet. Select a player to start.</div>';
+            }
+            container.innerHTML = html;
         }
 
-        // ============ LIVE SOLD LIST ============
-        function renderLiveSold() {
-            const container = document.getElementById('live-sold-list');
-            const countEl = document.getElementById('live-sold-count');
-            if (!container) return;
-            const soldPlayers = (state.auctionState || {}).soldPlayers || [];
-            if (countEl) countEl.textContent = soldPlayers.length;
-            if (soldPlayers.length === 0) {
-                container.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.85rem; text-align: center; padding: 1rem;">No players sold yet</div>';
-                return;
-            }
-            container.innerHTML = soldPlayers.slice().reverse().map(p =>
-                '<div class="live-sold-item">' +
-                    '<div><div class="lsi-name">' + p.name + '</div><div class="lsi-team">→ ' + (p.soldToName || '') + '</div></div>' +
-                    '<div class="lsi-price">' + formatPrice(p.soldPrice || 0) + '</div>' +
-                '</div>'
-            ).join('');
+        function toggleBidLogEntry(el) {
+            el.classList.toggle('expanded');
         }
 
         // ============ TEAM EXPAND ============
