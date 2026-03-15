@@ -3010,6 +3010,106 @@
                 XLSX.utils.book_append_sheet(wb, ws, t.name.substring(0, 30));
             });
 
+            // ========== IPL Team-wise Player List (All Players with Set Prices) ==========
+            var allPlayers = state.players || [];
+            var iplTeamMap = {};
+            allPlayers.forEach(function(p) {
+                var team = p.previousTeam || 'Uncapped';
+                if (!iplTeamMap[team]) iplTeamMap[team] = [];
+                iplTeamMap[team].push(p);
+            });
+            // Sort teams alphabetically, but put Uncapped last
+            var iplTeamNames = Object.keys(iplTeamMap).sort(function(a, b) {
+                if (a === 'Uncapped') return 1;
+                if (b === 'Uncapped') return -1;
+                return a.localeCompare(b);
+            });
+
+            var iplData = [];
+            var iplTeamHeaderRows = []; // track which rows are team headers
+            var iplPlayerNum = 0;
+
+            iplTeamNames.forEach(function(teamName) {
+                var players = iplTeamMap[teamName];
+                // Sort by base price descending
+                players.sort(function(a, b) { return (b.basePrice || 0) - (a.basePrice || 0); });
+                // Team header row
+                iplTeamHeaderRows.push(iplData.length);
+                iplData.push([teamName + ' (' + players.length + ' players)', '', '', '', '', '']);
+                // Player rows
+                players.forEach(function(p) {
+                    iplPlayerNum++;
+                    iplData.push([iplPlayerNum, p.name, p.role, p.country, p.basePrice, p.status === 'sold' ? 'SOLD' : p.status === 'unsold' ? 'UNSOLD' : 'Available']);
+                });
+                // Empty separator row
+                iplData.push(['', '', '', '', '', '']);
+            });
+
+            // Add header at top
+            var iplHeaders = ['#', 'Player Name', 'Role', 'Country', 'Base Price (Cr)', 'Status'];
+            iplData.unshift(iplHeaders);
+            // Adjust header row indices since we added a row at top
+            iplTeamHeaderRows = iplTeamHeaderRows.map(function(r) { return r + 1; });
+
+            var wsIpl = XLSX.utils.aoa_to_sheet(iplData);
+            applyColWidths(wsIpl, [5, 26, 16, 14, 16, 12]);
+
+            // Style column header
+            for (var ci = 0; ci < iplHeaders.length; ci++) {
+                var addrI = XLSX.utils.encode_cell({ r: 0, c: ci });
+                if (wsIpl[addrI]) wsIpl[addrI].s = headerStyle;
+            }
+
+            // Style team header rows
+            var iplTeamBanner = {
+                font: { bold: true, sz: 12, name: 'Calibri', color: { rgb: 'FFFFFF' } },
+                fill: { fgColor: { rgb: '4527A0' } },
+                alignment: { horizontal: 'left', vertical: 'center' },
+                border: { top: {style:'thin',color:{rgb:'000000'}}, bottom: {style:'thin',color:{rgb:'000000'}}, left: {style:'thin',color:{rgb:'000000'}}, right: {style:'thin',color:{rgb:'000000'}} }
+            };
+            iplTeamHeaderRows.forEach(function(row) {
+                for (var cc = 0; cc < iplHeaders.length; cc++) {
+                    var addrH = XLSX.utils.encode_cell({ r: row, c: cc });
+                    if (!wsIpl[addrH]) wsIpl[addrH] = { v: '', t: 's' };
+                    wsIpl[addrH].s = iplTeamBanner;
+                }
+                // Merge team name across all columns
+                if (!wsIpl['!merges']) wsIpl['!merges'] = [];
+                wsIpl['!merges'].push({ s: { r: row, c: 0 }, e: { r: row, c: iplHeaders.length - 1 } });
+            });
+
+            // Style player data rows
+            var soldStatusStyle = {
+                font: { bold: true, sz: 11, name: 'Calibri', color: { rgb: '1B5E20' } },
+                alignment: { horizontal: 'center', vertical: 'center' },
+                border: { top: {style:'thin',color:{rgb:'D0D0D0'}}, bottom: {style:'thin',color:{rgb:'D0D0D0'}}, left: {style:'thin',color:{rgb:'D0D0D0'}}, right: {style:'thin',color:{rgb:'D0D0D0'}} }
+            };
+            var unsoldStatusStyle = {
+                font: { bold: true, sz: 11, name: 'Calibri', color: { rgb: 'B71C1C' } },
+                alignment: { horizontal: 'center', vertical: 'center' },
+                border: { top: {style:'thin',color:{rgb:'D0D0D0'}}, bottom: {style:'thin',color:{rgb:'D0D0D0'}}, left: {style:'thin',color:{rgb:'D0D0D0'}}, right: {style:'thin',color:{rgb:'D0D0D0'}} }
+            };
+            for (var ri = 1; ri < iplData.length; ri++) {
+                if (iplTeamHeaderRows.indexOf(ri) >= 0) continue; // skip team headers
+                if (iplData[ri][0] === '') continue; // skip separator rows
+                var isEvenI = ri % 2 === 0;
+                for (var cj = 0; cj < iplHeaders.length; cj++) {
+                    var addrJ = XLSX.utils.encode_cell({ r: ri, c: cj });
+                    if (!wsIpl[addrJ]) continue;
+                    if (cj === 1) wsIpl[addrJ].s = isEvenI ? evenRowLeft : cellLeft;
+                    else if (cj === 4) wsIpl[addrJ].s = isEvenI ? moneyStyleEven : moneyStyle;
+                    else if (cj === 5) {
+                        var statusVal = iplData[ri][5];
+                        if (statusVal === 'SOLD') wsIpl[addrJ].s = soldStatusStyle;
+                        else if (statusVal === 'UNSOLD') wsIpl[addrJ].s = unsoldStatusStyle;
+                        else wsIpl[addrJ].s = isEvenI ? evenRow : cellStyle;
+                    }
+                    else if (cj === 3 && iplData[ri][3] !== 'India') wsIpl[addrJ].s = isEvenI ? overseasStyleEven : overseasStyle;
+                    else wsIpl[addrJ].s = isEvenI ? evenRow : cellStyle;
+                }
+            }
+            XLSX.utils.book_append_sheet(wb, wsIpl, 'All Players (IPL Team)');
+
             XLSX.writeFile(wb, 'IPL_Auction_' + roomCode + '.xlsx');
         }
 
