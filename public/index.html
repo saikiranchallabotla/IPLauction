@@ -1122,10 +1122,11 @@
                                 <button class="btn" onclick="undoBid()" style="margin-top: 0.4rem; padding: 0.25rem 0.8rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); border: 1px solid var(--border-light); color: var(--text-secondary); border-radius: 6px; cursor: pointer;" title="Undo last bid">&#8630; Undo</button>
                             </div>
 
-                            <!-- SOLD / UNSOLD Buttons -->
+                            <!-- SOLD / UNSOLD / Cancel Buttons -->
                             <div style="display: flex; gap: 0.5rem;">
                                 <button class="btn btn-success" onclick="markSold()" style="flex: 1; padding: 0.4rem; font-size: 0.9rem; font-weight: bold;">SOLD!</button>
                                 <button class="btn btn-danger" onclick="markUnsold()" style="flex: 1; padding: 0.4rem; font-size: 0.9rem; font-weight: bold;">UNSOLD</button>
+                                <button class="btn" onclick="cancelBid()" style="padding: 0.4rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border-light); color: var(--text-secondary); font-weight: 600;" title="Return player to pool">✕ Cancel</button>
                             </div>
                         </div>
                     </div>
@@ -2608,6 +2609,14 @@
         function markUnsold() {
             if (state.auctionState && state.auctionState.auctionFinished) return;
             if (socket) socket.emit('markUnsold');
+        }
+
+        async function cancelBid() {
+            if (!state.auctionState || state.auctionState.status !== 'bidding') return;
+            var playerName = state.auctionState.currentPlayer ? state.auctionState.currentPlayer.name : 'this player';
+            var yes = await showConfirmPopup('Cancel Bid', 'Return ' + playerName + ' back to the player pool?', 'Yes, Cancel');
+            if (!yes) return;
+            if (socket) socket.emit('cancelBid');
         }
 
         function rebidPlayer() {

@@ -710,6 +710,24 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Admin: Cancel current bid and return player to pool
+    socket.on('cancelBid', () => {
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+        if (room.auctionState.status !== 'bidding') return;
+        if (!room.auctionState.currentPlayer) return;
+
+        // Reset auction state - player stays 'available'
+        room.auctionState.currentPlayer = null;
+        room.auctionState.currentBid = 0;
+        room.auctionState.currentBidder = null;
+        room.auctionState.status = 'waiting';
+        room.auctionState.timerStart = null;
+        room.auctionState.bidLog = [];
+        saveRooms(room.code);
+        io.to(room.code).emit('auctionUpdate', room.auctionState);
+    });
+
     // Admin: Re-auction an unsold player
     socket.on('reAuctionPlayer', (playerId) => {
         const room = getRoom(socket.roomCode);
