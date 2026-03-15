@@ -408,6 +408,29 @@
         .bid-amount { font-size: 2.5rem; font-weight: 800; color: var(--accent); text-shadow: 0 0 15px var(--accent-glow); }
         .bid-team { font-size: 1.3rem; font-weight: 600; color: white; }
 
+        /* Auction Timer */
+        .auction-timer {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-family: 'Outfit', monospace;
+            letter-spacing: 0.1em;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: var(--success);
+        }
+        .auction-timer.warning { color: #ff9800; border-color: rgba(255,152,0,0.3); background: rgba(255,152,0,0.08); }
+        .auction-timer.danger { color: var(--danger); border-color: rgba(255,23,68,0.3); background: rgba(255,23,68,0.1); animation: timerPulse 1s infinite; }
+        @keyframes timerPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
         /* ============ TEAMS ============ */
         .teams-list { display: flex; flex-direction: column; gap: 0.6rem; max-height: 500px; overflow-y: auto; }
 
@@ -1362,6 +1385,7 @@
         let roomName = null;
         let isAdmin = false;
         let pendingAdminPassword = null;
+        let auctionTimerInterval = null;
         let fantasyData = { teams: [], matches: [], lastUpdated: null, configured: false };
         let selectedFantasyMatch = null;
 
@@ -1630,6 +1654,10 @@
 
             if (!badge || !content || !adminPlayer) return;
 
+            // Always enforce admin button visibility
+            var adminBtn = document.getElementById('admin-nav-btn');
+            if (adminBtn) adminBtn.style.display = isAdmin ? 'inline-block' : 'none';
+
             badge.className = 'status-badge status-' + (auctionState.status || 'waiting');
             badge.textContent = (auctionState.status || 'waiting').toUpperCase();
 
@@ -1639,6 +1667,7 @@
                     <div class="player-name">${p.name}</div>
                     <div class="player-details">${p.role} | ${p.country} | <span class="ipl-team-badge">${p.previousTeam || 'Uncapped'}</span></div>
                     <div class="player-base">Base: <span>${formatPrice(p.basePrice)}</span></div>
+                    <div id="auction-timer-display" class="auction-timer" style="display:none;"></div>
                     <div class="bid-info">
                         <div>
                             <div class="bid-label">Current Bid</div>
@@ -1657,9 +1686,13 @@
                 `;
                 document.getElementById('bid-amount').value = auctionState.currentBid;
                 if (typeof updateStepIndicator === 'function') updateStepIndicator();
+
+                // Start/update countdown timer
+                startAuctionTimer(auctionState.timerStart);
             } else {
                 content.innerHTML = `<div class="player-name">Waiting for Auction</div><div class="player-details">Admin will start the auction shortly</div>`;
                 adminPlayer.innerHTML = `<div class="player-name" style="font-size: 1.8rem;">No Player Selected</div>`;
+                stopAuctionTimer();
             }
 
             document.querySelectorAll('.team-item').forEach(item => {
@@ -2404,6 +2437,50 @@
             if (socket) socket.emit('undoBid');
         }
 
+        // ============ 2-MINUTE AUCTION TIMER ============
+        var lastTimerStart = null;
+
+        function startAuctionTimer(timerStart) {
+            if (!timerStart) { stopAuctionTimer(); return; }
+            // Only restart interval if timer source changed
+            if (lastTimerStart === timerStart && auctionTimerInterval) return;
+            lastTimerStart = timerStart;
+            if (auctionTimerInterval) clearInterval(auctionTimerInterval);
+            updateTimerDisplay(timerStart);
+            auctionTimerInterval = setInterval(function() { updateTimerDisplay(timerStart); }, 1000);
+        }
+
+        function stopAuctionTimer() {
+            if (auctionTimerInterval) { clearInterval(auctionTimerInterval); auctionTimerInterval = null; }
+            lastTimerStart = null;
+        }
+
+        function updateTimerDisplay(timerStart) {
+            var el = document.getElementById('auction-timer-display');
+            if (!el) return;
+            var elapsed = Date.now() - timerStart;
+            var totalMs = 2 * 60 * 1000; // 2 minutes
+            var remaining = totalMs - elapsed;
+
+            if (remaining <= 0) {
+                el.textContent = '⏱ 0:00 — TIME UP!';
+                el.className = 'auction-timer danger';
+                el.style.display = 'inline-flex';
+                if (auctionTimerInterval) { clearInterval(auctionTimerInterval); auctionTimerInterval = null; }
+                return;
+            }
+
+            var secs = Math.ceil(remaining / 1000);
+            var m = Math.floor(secs / 60);
+            var s = secs % 60;
+            el.textContent = '⏱ ' + m + ':' + (s < 10 ? '0' : '') + s;
+            el.style.display = 'inline-flex';
+
+            if (remaining <= 30000) el.className = 'auction-timer danger';
+            else if (remaining <= 60000) el.className = 'auction-timer warning';
+            else el.className = 'auction-timer';
+        }
+
         // Team bid button click - auto increment and set bidder
         function teamBid(teamId) {
             const team = state.teams.find(t => t.id === teamId);
@@ -2606,6 +2683,7 @@
             roomName = null;
             isAdmin = false;
             pendingAdminPassword = null;
+            stopAuctionTimer();
             state = { teams: [], players: [], auctionState: {} };
             selectedPlayer = null;
             currentCategory = '2cr-home';
@@ -2755,6 +2833,7 @@
         }
 
         function showView(view) {
+            if (view === 'admin' && !isAdmin) return;
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(view + '-view').classList.add('active');
             if (view === 'fantasy' && roomCode) {

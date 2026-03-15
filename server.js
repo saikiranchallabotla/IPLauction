@@ -703,6 +703,7 @@ io.on('connection', (socket) => {
             room.auctionState.currentBid = player.basePrice;
             room.auctionState.currentBidder = null;
             room.auctionState.status = 'bidding';
+            room.auctionState.timerStart = Date.now();
             room.auctionState.bidLog = [{ type: 'start', playerName: player.name, amount: player.basePrice, time: Date.now() }];
             saveRooms(room.code);
             io.to(room.code).emit('auctionUpdate', room.auctionState);
