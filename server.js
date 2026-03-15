@@ -771,7 +771,7 @@ io.on('connection', (socket) => {
         io.to(room.code).emit('auctionUpdate', room.auctionState);
     });
 
-    // Admin: Undo last bid (up to 2 steps back)
+    // Admin: Undo last bid
     socket.on('undoBid', () => {
         const room = getRoom(socket.roomCode);
         if (!room) return;
