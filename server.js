@@ -16,6 +16,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 const INITIAL_BUDGET = 100;
 const ROOMS_FILE = path.join(__dirname, 'data', 'rooms.json');
 const MONGODB_URI = process.env.MONGODB_URI;
+const CRICAPI_KEY = process.env.CRICAPI_KEY || '';
+const CRICAPI_SERIES_ID = process.env.CRICAPI_SERIES_ID || '';
+const FANTASY_REFRESH_INTERVAL = parseInt(process.env.FANTASY_REFRESH_INTERVAL) || 30; // minutes
 
 // Store multiple auction rooms (in-memory cache)
 let rooms = new Map();
@@ -150,6 +153,237 @@ function loadRoomsFromFile() {
     }
 }
 
+// ============ FANTASY POINTS LAYER ============
+const Fuse = require('fuse.js');
+let fantasyCache = null;
+let fantasyFetchTimer = null;
+
+async function initFantasyPoints() {
+    if (!db) {
+        console.log('Fantasy points require MongoDB - skipping');
+        return;
+    }
+    const doc = await db.collection('fantasy_points').findOne({ seriesId: CRICAPI_SERIES_ID });
+    if (doc) {
+        fantasyCache = doc;
+        console.log(`Loaded fantasy data: ${doc.matches?.length || 0} matches cached`);
+    }
+    if (CRICAPI_KEY && CRICAPI_SERIES_ID) {
+        startFantasyRefreshTimer();
+    }
+}
+
+function startFantasyRefreshTimer() {
+    if (fantasyFetchTimer) clearInterval(fantasyFetchTimer);
+    fantasyFetchTimer = setInterval(() => {
+        fetchAllFantasyPoints().catch(err =>
+            console.error('Fantasy auto-refresh failed:', err.message)
+        );
+    }, FANTASY_REFRESH_INTERVAL * 60 * 1000);
+    console.log(`Fantasy points auto-refresh every ${FANTASY_REFRESH_INTERVAL} minutes`);
+}
+
+async function fetchAllFantasyPoints() {
+    const apiKey = process.env.CRICAPI_KEY || CRICAPI_KEY;
+    const seriesId = process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID;
+    if (!apiKey || !seriesId) {
+        throw new Error('CRICAPI_KEY and CRICAPI_SERIES_ID must be set');
+    }
+
+    console.log('Fetching fantasy points from CricAPI...');
+
+    // Step 1: Get all match IDs for the series
+    const seriesRes = await fetch(
+        `https://api.cricapi.com/v1/series_info?apikey=${apiKey}&id=${seriesId}`
+    );
+    const seriesData = await seriesRes.json();
+    if (seriesData.status !== 'success') {
+        throw new Error(`CricAPI series_info error: ${JSON.stringify(seriesData.info || 'unknown')}`);
+    }
+
+    const matchList = seriesData.data?.matchList || [];
+    console.log(`Found ${matchList.length} matches in series`);
+
+    // Step 2: For each completed/live match, fetch fantasy points
+    const existingMatches = (fantasyCache?.matches || []);
+    const existingCompleted = new Set(
+        existingMatches.filter(m => m.status === 'completed').map(m => m.matchId)
+    );
+
+    const newMatches = [];
+    let apiCalls = 0;
+
+    for (const match of matchList) {
+        // Skip already-fetched completed matches
+        if (existingCompleted.has(match.id)) continue;
+        // Skip future matches
+        if (!match.matchStarted && !match.matchEnded) continue;
+        // Rate limit
+        if (apiCalls >= 50) {
+            console.log('Rate limit reached, will fetch remaining next cycle');
+            break;
+        }
+
+        try {
+            const pointsRes = await fetch(
+                `https://api.cricapi.com/v1/match_points?apikey=${apiKey}&id=${match.id}&ruleset=0&offset=0`
+            );
+            const pointsData = await pointsRes.json();
+            apiCalls++;
+
+            if (pointsData.status === 'success' && pointsData.data?.totals) {
+                newMatches.push({
+                    matchId: match.id,
+                    matchName: match.name || `Match`,
+                    matchDate: match.date || match.dateTimeGMT || '',
+                    status: match.matchEnded ? 'completed' : 'live',
+                    playerPoints: pointsData.data.totals.map(p => ({
+                        cricApiId: p.id || '',
+                        cricApiName: p.name,
+                        points: parseFloat(p.points) || 0
+                    }))
+                });
+            }
+        } catch (err) {
+            console.error(`Failed to fetch points for match ${match.id}:`, err.message);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    // Step 3: Merge
+    const allMatches = [...existingMatches];
+    for (const nm of newMatches) {
+        const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
+        if (idx >= 0) allMatches[idx] = nm;
+        else allMatches.push(nm);
+    }
+    allMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+
+    const nameMapping = buildNameMapping(allMatches);
+
+    fantasyCache = {
+        seriesId: seriesId,
+        lastFetchedAt: Date.now(),
+        matches: allMatches,
+        nameMapping
+    };
+
+    if (db) {
+        await db.collection('fantasy_points').updateOne(
+            { seriesId: seriesId },
+            { $set: fantasyCache },
+            { upsert: true }
+        );
+    }
+
+    console.log(`Fantasy points updated: ${allMatches.length} total matches, ${newMatches.length} new/updated`);
+    broadcastFantasyUpdate();
+    return { totalMatches: allMatches.length, newMatches: newMatches.length };
+}
+
+function buildNameMapping(matches) {
+    const cricApiNames = new Set();
+    for (const match of matches) {
+        for (const pp of match.playerPoints) {
+            cricApiNames.add(pp.cricApiName);
+        }
+    }
+
+    const fuse = new Fuse(playersData, {
+        keys: ['name'],
+        threshold: 0.3,
+        distance: 100,
+        includeScore: true,
+    });
+
+    const mapping = {};
+    for (const apiName of cricApiNames) {
+        // Exact match
+        const exact = playersData.find(p => p.name.toLowerCase() === apiName.toLowerCase());
+        if (exact) { mapping[apiName] = exact.name; continue; }
+
+        // Last-name match
+        const apiLastName = apiName.split(' ').pop().toLowerCase();
+        const lastNameMatches = playersData.filter(p => p.name.toLowerCase().endsWith(apiLastName));
+        if (lastNameMatches.length === 1) { mapping[apiName] = lastNameMatches[0].name; continue; }
+
+        // Fuzzy match
+        const results = fuse.search(apiName);
+        if (results.length > 0 && results[0].score < 0.35) {
+            mapping[apiName] = results[0].item.name;
+        }
+    }
+
+    return mapping;
+}
+
+function computeRoomFantasyPoints(room) {
+    if (!fantasyCache || !fantasyCache.matches.length) {
+        return { teams: [], matches: [], lastUpdated: null };
+    }
+
+    const nameMapping = fantasyCache.nameMapping || {};
+    // Reverse mapping: our player name -> array of CricAPI names
+    const reverseMapping = {};
+    for (const [apiName, ourName] of Object.entries(nameMapping)) {
+        if (!reverseMapping[ourName]) reverseMapping[ourName] = [];
+        reverseMapping[ourName].push(apiName);
+    }
+
+    const teamPoints = room.teams.map(team => {
+        const playerBreakdowns = (team.players || []).map(player => {
+            const apiNames = reverseMapping[player.name] || [];
+            const matchPoints = fantasyCache.matches.map(match => {
+                let pts = 0;
+                for (const apiName of apiNames) {
+                    const found = match.playerPoints.find(pp => pp.cricApiName === apiName);
+                    if (found) { pts = found.points; break; }
+                }
+                return { matchId: match.matchId, matchName: match.matchName, points: pts };
+            });
+            const totalPoints = matchPoints.reduce((sum, mp) => sum + mp.points, 0);
+            return {
+                playerName: player.name,
+                role: player.role,
+                country: player.country,
+                soldPrice: player.soldPrice,
+                totalPoints,
+                matchPoints
+            };
+        });
+
+        const teamTotal = playerBreakdowns.reduce((sum, pb) => sum + pb.totalPoints, 0);
+        return {
+            teamId: team.id,
+            teamName: team.name,
+            totalPoints: teamTotal,
+            playerBreakdowns
+        };
+    });
+
+    teamPoints.sort((a, b) => b.totalPoints - a.totalPoints);
+
+    return {
+        teams: teamPoints,
+        matches: fantasyCache.matches.map(m => ({
+            matchId: m.matchId,
+            matchName: m.matchName,
+            matchDate: m.matchDate,
+            status: m.status
+        })),
+        lastUpdated: fantasyCache.lastFetchedAt
+    };
+}
+
+function broadcastFantasyUpdate() {
+    for (const [code, room] of rooms) {
+        const data = computeRoomFantasyPoints(room);
+        data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
+        io.to(code).emit('fantasyPointsUpdate', data);
+    }
+}
+
 // Generate random 6-character room code
 function generateRoomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -179,7 +413,8 @@ function createRoom(code) {
             currentBid: 0,
             currentBidder: null,
             soldPlayers: [],
-            unsoldPlayers: []
+            unsoldPlayers: [],
+            bidLog: []
         }
     });
 
@@ -350,6 +585,57 @@ app.post('/api/room/:code/reset', (req, res) => {
     res.json({ success: true });
 });
 
+// ============ FANTASY POINTS API ============
+
+// Get fantasy points for a room
+app.get('/api/room/:code/fantasy-points', (req, res) => {
+    const room = getRoom(req.params.code);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (!fantasyCache) {
+        return res.json({
+            teams: [], matches: [], lastUpdated: null,
+            configured: !!(CRICAPI_KEY && CRICAPI_SERIES_ID)
+        });
+    }
+
+    const data = computeRoomFantasyPoints(room);
+    data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
+    res.json(data);
+});
+
+// Admin: Trigger manual fantasy points refresh
+app.post('/api/room/:code/fantasy-points/refresh', async (req, res) => {
+    const apiKey = process.env.CRICAPI_KEY || CRICAPI_KEY;
+    const seriesId = process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID;
+    if (!apiKey || !seriesId) {
+        return res.status(400).json({
+            error: 'Fantasy points not configured. Set CRICAPI_KEY and CRICAPI_SERIES_ID environment variables.'
+        });
+    }
+
+    try {
+        const result = await fetchAllFantasyPoints();
+        res.json({ success: true, ...result });
+    } catch (err) {
+        console.error('Manual fantasy refresh failed:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin: Update fantasy API configuration at runtime
+app.post('/api/room/:code/fantasy-config', (req, res) => {
+    const { apiKey, seriesId } = req.body;
+    if (apiKey) process.env.CRICAPI_KEY = apiKey;
+    if (seriesId) process.env.CRICAPI_SERIES_ID = seriesId;
+
+    if (apiKey && seriesId) {
+        startFantasyRefreshTimer();
+    }
+
+    res.json({ success: true, configured: !!(process.env.CRICAPI_KEY && process.env.CRICAPI_SERIES_ID) });
+});
+
 // ============ SOCKET.IO EVENTS ============
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -383,6 +669,7 @@ io.on('connection', (socket) => {
             room.auctionState.currentBid = player.basePrice;
             room.auctionState.currentBidder = null;
             room.auctionState.status = 'bidding';
+            room.auctionState.bidLog = [{ type: 'start', playerName: player.name, amount: player.basePrice, time: Date.now() }];
             saveRooms(room.code);
             io.to(room.code).emit('auctionUpdate', room.auctionState);
         }
@@ -441,6 +728,8 @@ io.on('connection', (socket) => {
 
         room.auctionState.currentBid = amount;
         room.auctionState.currentBidder = team;
+        if (!room.auctionState.bidLog) room.auctionState.bidLog = [];
+        room.auctionState.bidLog.push({ type: 'bid', teamName: team.name, amount, time: Date.now() });
         saveRooms(room.code); // Save after each bid
         io.to(room.code).emit('auctionUpdate', room.auctionState);
     });
@@ -484,6 +773,8 @@ io.on('connection', (socket) => {
         });
 
         room.auctionState.status = 'sold';
+        if (!room.auctionState.bidLog) room.auctionState.bidLog = [];
+        room.auctionState.bidLog.push({ type: 'sold', teamName: team.name, amount: price, playerName: player.name, time: Date.now() });
 
         saveRooms(room.code); // Save immediately after sale
 
@@ -526,6 +817,8 @@ io.on('connection', (socket) => {
         // Update auction state
         room.auctionState.unsoldPlayers.push(room.players[playerIndex]);
         room.auctionState.status = 'unsold';
+        if (!room.auctionState.bidLog) room.auctionState.bidLog = [];
+        room.auctionState.bidLog.push({ type: 'unsold', playerName: player.name, time: Date.now() });
 
         saveRooms(room.code); // Save immediately after unsold
 
@@ -542,6 +835,15 @@ io.on('connection', (socket) => {
         }, 2000);
     });
 
+    // Fantasy points request
+    socket.on('requestFantasyPoints', () => {
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+        const data = computeRoomFantasyPoints(room);
+        data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
+        socket.emit('fantasyPointsUpdate', data);
+    });
+
     socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);
     });
@@ -550,7 +852,8 @@ io.on('connection', (socket) => {
 // ============ START SERVER ============
 const PORT = process.env.PORT || 3000;
 
-initPersistence().then(() => {
+initPersistence().then(async () => {
+    await initFantasyPoints();
     httpServer.listen(PORT, () => {
         console.log(`
     ╔═══════════════════════════════════════╗
@@ -558,6 +861,7 @@ initPersistence().then(() => {
     ║     Server running on port ${PORT}        ║
     ╠═══════════════════════════════════════╣
     ║  Storage: ${db ? 'MongoDB (persistent)' : 'File (local only)'}        ║
+    ║  Fantasy: ${(process.env.CRICAPI_KEY || CRICAPI_KEY) ? 'Configured' : 'Not configured'}               ║
     ╚═══════════════════════════════════════╝
 
     Open http://localhost:${PORT} in your browser

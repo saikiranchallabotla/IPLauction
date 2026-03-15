@@ -57,7 +57,15 @@
                 radial-gradient(ellipse at 80% 50%, rgba(245, 197, 24, 0.08) 0%, transparent 50%),
                 radial-gradient(ellipse at 50% 100%, rgba(63, 81, 181, 0.15) 0%, transparent 50%),
                 linear-gradient(180deg, #080b14 0%, #0d1220 50%, #080b14 100%);
+            background-size: 200% 200%;
+            animation: landingGradient 12s ease infinite;
             padding: 2rem;
+        }
+
+        @keyframes landingGradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
 
         .landing-logo {
@@ -405,8 +413,7 @@
 
         .team-item {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
             padding: 1rem 1.2rem;
             background: var(--dark-elevated);
             border-radius: 12px;
@@ -732,6 +739,113 @@
         .room-status-dot.live { background: var(--success); box-shadow: 0 0 6px var(--success-glow); }
         .room-status-dot.idle { background: var(--text-secondary); }
 
+        /* ============ FANTASY POINTS TABLE ============ */
+        .fantasy-container { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+        .fantasy-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .fantasy-header h2 { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+        .fantasy-last-updated { font-size: 0.8rem; color: var(--text-secondary); }
+        .fantasy-leaderboard { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
+        .fantasy-team-row {
+            background: var(--dark-elevated); border: 1px solid var(--border);
+            border-radius: 14px; overflow: hidden; transition: all 0.3s ease;
+        }
+        .fantasy-team-row:hover { border-color: var(--border-light); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .fantasy-team-row.rank-1 { border-left: 4px solid var(--accent); background: var(--accent-dim); }
+        .fantasy-team-row.rank-2 { border-left: 4px solid #c0c0c0; }
+        .fantasy-team-row.rank-3 { border-left: 4px solid #cd7f32; }
+        .fantasy-team-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 1.2rem; cursor: pointer; transition: background 0.2s ease;
+        }
+        .fantasy-team-header:hover { background: rgba(255,255,255,0.03); }
+        .fantasy-rank { font-size: 1.5rem; font-weight: 800; color: var(--accent); min-width: 2.5rem; text-align: center; }
+        .fantasy-rank.rank-1 { color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
+        .fantasy-rank.rank-2 { color: #c0c0c0; }
+        .fantasy-rank.rank-3 { color: #cd7f32; }
+        .fantasy-team-info { flex: 1; margin-left: 1rem; }
+        .fantasy-team-name { font-weight: 700; font-size: 1.1rem; }
+        .fantasy-team-meta { font-size: 0.8rem; color: var(--text-secondary); }
+        .fantasy-total-points { font-size: 1.8rem; font-weight: 800; color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
+        .fantasy-total-label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+        .fantasy-expand-icon { color: var(--text-secondary); font-size: 1.2rem; transition: transform 0.3s ease; margin-left: 1rem; }
+        .fantasy-team-row.expanded .fantasy-expand-icon { transform: rotate(180deg); }
+        .fantasy-player-breakdown { display: none; padding: 0 1.2rem 1rem; border-top: 1px solid var(--border); }
+        .fantasy-team-row.expanded .fantasy-player-breakdown { display: block; }
+        .fantasy-player-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.6rem 0; border-bottom: 1px solid var(--border);
+        }
+        .fantasy-player-row:last-child { border-bottom: none; }
+        .fantasy-player-name { font-weight: 600; font-size: 0.9rem; }
+        .fantasy-player-role { font-size: 0.75rem; color: var(--text-secondary); }
+        .fantasy-player-points { font-weight: 700; color: var(--accent); font-size: 1rem; }
+        .fantasy-player-points.negative { color: var(--danger); }
+        .fantasy-match-tabs {
+            display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap;
+            overflow-x: auto; padding-bottom: 0.5rem;
+        }
+        .fantasy-match-tab {
+            padding: 0.4rem 0.8rem; background: var(--glass); border: 1px solid var(--border);
+            color: var(--text-secondary); border-radius: 8px; cursor: pointer; font-weight: 600;
+            font-size: 0.75rem; font-family: 'Outfit', sans-serif; transition: all 0.25s ease; white-space: nowrap;
+        }
+        .fantasy-match-tab:hover { background: rgba(255,255,255,0.06); border-color: var(--border-light); }
+        .fantasy-match-tab.active { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; border-color: transparent; }
+        .fantasy-not-configured { text-align: center; padding: 3rem 1.5rem; color: var(--text-secondary); }
+        .fantasy-not-configured h3 { color: var(--accent); margin-bottom: 1rem; }
+        @media (max-width: 900px) {
+            .fantasy-header { flex-direction: column; gap: 0.5rem; align-items: flex-start; }
+            .fantasy-total-points { font-size: 1.4rem; }
+            .fantasy-rank { font-size: 1.2rem; min-width: 2rem; }
+        }
+
+        /* ============ BID LOG ============ */
+        .bid-log-entry {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.45rem 0.7rem; border-left: 3px solid var(--border);
+            margin-bottom: 0.3rem; border-radius: 0 6px 6px 0;
+            background: var(--dark-elevated); font-size: 0.82rem;
+            transition: all 0.2s ease;
+        }
+        .bid-log-entry.log-bid { border-left-color: var(--primary-light); }
+        .bid-log-entry.log-start { border-left-color: var(--accent); background: var(--accent-dim); }
+        .bid-log-entry.log-sold { border-left-color: var(--success); background: rgba(0,200,83,0.08); }
+        .bid-log-entry.log-unsold { border-left-color: var(--danger); background: rgba(255,23,68,0.05); }
+        .bid-log-entry .log-team { font-weight: 700; color: var(--text); }
+        .bid-log-entry .log-amount { font-weight: 700; color: var(--accent); }
+        .bid-log-entry .log-label { font-size: 0.72rem; color: var(--text-secondary); }
+        .bid-log-empty { color: var(--text-secondary); font-size: 0.85rem; text-align: center; padding: 1rem; }
+
+        /* ============ TEAM EXPANSION ============ */
+        .team-item { cursor: pointer; }
+        .team-players-list {
+            display: none; padding: 0.5rem 0.8rem 0.6rem; margin-top: 0.5rem;
+            border-top: 1px solid var(--border);
+        }
+        .team-item.expanded .team-players-list { display: block; }
+        .team-player-entry {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.3rem 0; font-size: 0.78rem;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .team-player-entry:last-child { border-bottom: none; }
+        .team-player-entry .tp-name { color: var(--text); font-weight: 500; }
+        .team-player-entry .tp-role { color: var(--text-secondary); font-size: 0.7rem; }
+        .team-player-entry .tp-price { color: var(--accent); font-weight: 700; font-size: 0.78rem; }
+        .team-expand-hint { font-size: 0.7rem; color: var(--text-secondary); transition: transform 0.2s ease; }
+        .team-item.expanded .team-expand-hint { transform: rotate(180deg); }
+
+        /* ============ LIVE SOLD LIST ============ */
+        .live-sold-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.5rem 0.7rem; margin-bottom: 0.3rem;
+            background: var(--dark-elevated); border-radius: 8px;
+            border: 1px solid var(--border); font-size: 0.82rem;
+        }
+        .live-sold-item .lsi-name { font-weight: 600; color: var(--text); }
+        .live-sold-item .lsi-team { font-size: 0.72rem; color: var(--primary-light); }
+        .live-sold-item .lsi-price { font-weight: 700; color: var(--accent); white-space: nowrap; }
+
         /* ============ SCROLLBAR ============ */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -787,6 +901,7 @@
             <div class="nav-btns">
                 <button class="btn btn-secondary" onclick="showView('auction')">Live Auction</button>
                 <button class="btn btn-secondary" onclick="showView('history')">History</button>
+                <button class="btn btn-secondary" onclick="showView('fantasy')">Points Table</button>
                 <button class="btn btn-success" onclick="exportToExcel()">Export Excel</button>
                 <button class="btn btn-primary" onclick="showView('admin')">Admin</button>
                 <button class="btn btn-danger" onclick="leaveRoom()">Leave</button>
@@ -804,10 +919,23 @@
                             <div class="player-details">Admin will start the auction shortly</div>
                         </div>
                     </div>
+                    <!-- Bid Log -->
+                    <div class="card" style="margin-top: 1rem;">
+                        <h3 class="card-title">Bid Log</h3>
+                        <div id="bid-log-display" style="max-height: 250px; overflow-y: auto;"></div>
+                    </div>
                 </div>
-                <div class="card">
-                    <h3 class="card-title">Friend Teams & Budgets</h3>
-                    <div class="teams-list" id="teams-display"></div>
+                <div>
+                    <div class="card">
+                        <h3 class="card-title">Friend Teams & Budgets</h3>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Click a team to see their players</p>
+                        <div class="teams-list" id="teams-display"></div>
+                    </div>
+                    <!-- Sold Players in Live View -->
+                    <div class="card" style="margin-top: 1rem;">
+                        <h3 class="card-title">Sold Players (<span id="live-sold-count">0</span>)</h3>
+                        <div id="live-sold-list" style="max-height: 300px; overflow-y: auto;"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -995,6 +1123,78 @@
         </div>
     </div>
 
+    <!-- Fantasy Points View -->
+    <div id="fantasy-view" class="view">
+        <div class="fantasy-container">
+            <div class="fantasy-header">
+                <div>
+                    <h2>Fantasy Points Table</h2>
+                    <div class="fantasy-last-updated" id="fantasy-last-updated"></div>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <button class="btn btn-secondary" onclick="refreshFantasyPoints()" id="fantasy-refresh-btn">Refresh Points</button>
+                </div>
+            </div>
+
+            <div class="history-stats" id="fantasy-stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="fantasy-stat-matches">0</div>
+                    <div class="stat-label">Matches Played</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="fantasy-stat-leader">-</div>
+                    <div class="stat-label">Leading Team</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="fantasy-stat-mvp">-</div>
+                    <div class="stat-label">Top Scorer</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="fantasy-stat-total">0</div>
+                    <div class="stat-label">Total Points</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="tabs" style="margin-bottom: 1rem;">
+                    <button class="tab active" onclick="showFantasyTab('leaderboard', this)">Team Rankings</button>
+                    <button class="tab" onclick="showFantasyTab('match-view', this)">Match-by-Match</button>
+                </div>
+
+                <div id="fantasy-leaderboard-tab">
+                    <div class="fantasy-leaderboard" id="fantasy-leaderboard"></div>
+                    <div class="fantasy-not-configured" id="fantasy-empty">
+                        <h3>No Fantasy Data Yet</h3>
+                        <p>Fantasy points will appear here once configured and matches are played.</p>
+                    </div>
+                </div>
+
+                <div id="fantasy-match-view-tab" style="display: none;">
+                    <div class="fantasy-match-tabs" id="fantasy-match-tabs"></div>
+                    <div id="fantasy-match-content">
+                        <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Select a match above to see point breakdowns</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" id="fantasy-admin-config" style="margin-top: 1rem;">
+                <h3 class="card-title">Fantasy Points Configuration</h3>
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">Get a free API key from <a href="https://cricketdata.org" target="_blank" style="color: var(--accent);">cricketdata.org</a> and find the IPL series ID.</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div>
+                        <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">CricAPI Key</label>
+                        <input type="password" id="fantasy-api-key" placeholder="Enter CricAPI key" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">IPL Series ID</label>
+                        <input type="text" id="fantasy-series-id" placeholder="e.g., d5a498c8-7596-..." style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="saveFantasyConfig()" style="margin-top: 0.75rem;">Save & Fetch Points</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Auction Warning Popup -->
     <div class="auction-popup-overlay" id="auction-popup">
         <div class="auction-popup">
@@ -1020,6 +1220,8 @@
         let selectedPlayer = null;
         let currentCategory = '2cr-home';
         let roomCode = null;
+        let fantasyData = { teams: [], matches: [], lastUpdated: null, configured: false };
+        let selectedFantasyMatch = null;
 
         const PRICE_CATEGORIES = [
             { key: '2cr-home', label: '2 Cr HOME', price: 2, country: 'India' },
@@ -1178,10 +1380,11 @@
             });
 
             socket.on('fullUpdate', (data) => { try { state = data; renderAll(); } catch(e) { console.error('fullUpdate render error:', e); } });
-            socket.on('auctionUpdate', (auctionState) => { try { state.auctionState = auctionState; renderAuction(); } catch(e) { console.error('auctionUpdate render error:', e); } });
+            socket.on('auctionUpdate', (auctionState) => { try { state.auctionState = auctionState; renderAuction(); renderBidLog(); } catch(e) { console.error('auctionUpdate render error:', e); } });
             socket.on('teamsUpdated', (teams) => { try { state.teams = teams; renderTeams(); } catch(e) { console.error('teamsUpdated render error:', e); } });
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
             socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); } catch(e) { console.error('playersUpdated render error:', e); } });
+            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
             socket.on('roomError', (msg) => {
                 alert(msg);
                 forceLeaveRoom();
@@ -1196,7 +1399,7 @@
 
         // ============ RENDERING ============
         function renderAll() {
-            const fns = [renderAuction, renderTeams, renderSetupTeams, renderCategoryTabs, renderPlayers, renderPlayersPrice, renderHistory, renderAdminSoldList, renderUnsoldAdmin];
+            const fns = [renderAuction, renderTeams, renderSetupTeams, renderCategoryTabs, renderPlayers, renderPlayersPrice, renderHistory, renderAdminSoldList, renderUnsoldAdmin, renderPointsTable, renderBidLog, renderLiveSold];
             fns.forEach(fn => { try { fn(); } catch(e) { console.error('Render error in ' + fn.name + ':', e); } });
         }
 
@@ -1261,16 +1464,29 @@
             const html = teams.map(t => {
                 const budget = t.budget != null ? t.budget : initialBudget;
                 const spent = initialBudget - budget;
+                const playersList = (t.players || []).map(p =>
+                    '<div class="team-player-entry">' +
+                        '<div><span class="tp-name">' + p.name + '</span> <span class="tp-role">' + p.role + '</span></div>' +
+                        '<div class="tp-price">' + formatPrice(p.soldPrice || 0) + '</div>' +
+                    '</div>'
+                ).join('');
+                const noPlayers = (t.players || []).length === 0 ? '<div style="font-size: 0.75rem; color: var(--text-secondary); padding: 0.3rem 0;">No players yet</div>' : '';
                 return `
-                <div class="team-item" data-id="${t.id}">
-                    <div>
-                        <div class="team-name">${t.name}</div>
-                        <div style="font-size: 0.8rem; color: var(--text-secondary);">${(t.players || []).length} players</div>
+                <div class="team-item" data-id="${t.id}" onclick="toggleTeamPlayers(this)">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <div>
+                            <div class="team-name">${t.name}</div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">${(t.players || []).length} players</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <div style="text-align: right;">
+                                <div class="team-budget ${budget < 10 ? 'low' : ''}">${budget.toFixed(2)} Cr</div>
+                                <div class="team-spent">Spent: ${spent.toFixed(2)} Cr</div>
+                            </div>
+                            <span class="team-expand-hint">&#9660;</span>
+                        </div>
                     </div>
-                    <div style="text-align: right;">
-                        <div class="team-budget ${budget < 10 ? 'low' : ''}">${budget.toFixed(2)} Cr</div>
-                        <div class="team-spent">Spent: ${spent.toFixed(2)} Cr</div>
-                    </div>
+                    <div class="team-players-list">${playersList || noPlayers}</div>
                 </div>
             `}).join('');
 
@@ -1558,6 +1774,258 @@
             `).join('');
         }
 
+        // ============ FANTASY POINTS TABLE ============
+        function renderPointsTable() {
+            const matchesPlayed = (fantasyData.matches || []).filter(m => m.status === 'completed').length;
+            const el = id => document.getElementById(id);
+
+            const statMatches = el('fantasy-stat-matches');
+            if (statMatches) statMatches.textContent = matchesPlayed;
+
+            const lastUpdated = el('fantasy-last-updated');
+            if (lastUpdated && fantasyData.lastUpdated) {
+                const ago = Math.round((Date.now() - fantasyData.lastUpdated) / 60000);
+                lastUpdated.textContent = ago < 1 ? 'Updated just now' :
+                    ago < 60 ? 'Updated ' + ago + 'm ago' :
+                    'Updated ' + Math.round(ago / 60) + 'h ago';
+            }
+
+            const teams = fantasyData.teams || [];
+
+            const statLeader = el('fantasy-stat-leader');
+            if (statLeader) statLeader.textContent = teams.length > 0 ? teams[0].teamName : '-';
+
+            let mvpName = '-', mvpPoints = 0;
+            for (const team of teams) {
+                for (const player of (team.playerBreakdowns || [])) {
+                    if (player.totalPoints > mvpPoints) {
+                        mvpPoints = player.totalPoints;
+                        mvpName = player.playerName;
+                    }
+                }
+            }
+            const statMvp = el('fantasy-stat-mvp');
+            if (statMvp) statMvp.textContent = mvpName;
+
+            const totalPoints = teams.reduce((sum, t) => sum + t.totalPoints, 0);
+            const statTotal = el('fantasy-stat-total');
+            if (statTotal) statTotal.textContent = Math.round(totalPoints);
+
+            const leaderboard = el('fantasy-leaderboard');
+            const emptyMsg = el('fantasy-empty');
+            if (!leaderboard) return;
+
+            if (teams.length === 0 || matchesPlayed === 0) {
+                leaderboard.innerHTML = '';
+                if (emptyMsg) {
+                    emptyMsg.style.display = 'block';
+                    if (!fantasyData.configured) {
+                        emptyMsg.innerHTML = '<h3>Fantasy Points Not Configured</h3><p>Set the CricAPI key and IPL series ID below to enable fantasy point tracking.</p>';
+                    } else {
+                        emptyMsg.innerHTML = '<h3>No Fantasy Data Yet</h3><p>Points will appear here once IPL matches are played and data is fetched.</p><button class="btn btn-secondary" onclick="refreshFantasyPoints()" style="margin-top: 1rem;">Fetch Points Now</button>';
+                    }
+                }
+                return;
+            }
+
+            if (emptyMsg) emptyMsg.style.display = 'none';
+
+            leaderboard.innerHTML = teams.map((team, index) => {
+                const rank = index + 1;
+                const rankClass = rank <= 3 ? 'rank-' + rank : '';
+                const playerRows = (team.playerBreakdowns || [])
+                    .sort((a, b) => b.totalPoints - a.totalPoints)
+                    .map(p => '<div class="fantasy-player-row">' +
+                        '<div>' +
+                            '<div class="fantasy-player-name">' + p.playerName + '</div>' +
+                            '<div class="fantasy-player-role">' + p.role + ' | ' + p.country + ' | Paid: ' + formatPrice(p.soldPrice || 0) + '</div>' +
+                        '</div>' +
+                        '<div style="text-align: right;">' +
+                            '<div class="fantasy-player-points ' + (p.totalPoints < 0 ? 'negative' : '') + '">' + p.totalPoints.toFixed(1) + '</div>' +
+                            '<div style="font-size: 0.7rem; color: var(--text-secondary);">pts</div>' +
+                        '</div>' +
+                    '</div>').join('');
+
+                return '<div class="fantasy-team-row ' + rankClass + '" id="fantasy-team-' + team.teamId + '">' +
+                    '<div class="fantasy-team-header" onclick="toggleFantasyTeam(\'' + team.teamId + '\')">' +
+                        '<div class="fantasy-rank ' + rankClass + '">#' + rank + '</div>' +
+                        '<div class="fantasy-team-info">' +
+                            '<div class="fantasy-team-name">' + team.teamName + '</div>' +
+                            '<div class="fantasy-team-meta">' + (team.playerBreakdowns || []).length + ' players</div>' +
+                        '</div>' +
+                        '<div style="text-align: right;">' +
+                            '<div class="fantasy-total-points">' + team.totalPoints.toFixed(1) + '</div>' +
+                            '<div class="fantasy-total-label">points</div>' +
+                        '</div>' +
+                        '<div class="fantasy-expand-icon">&#9660;</div>' +
+                    '</div>' +
+                    '<div class="fantasy-player-breakdown">' +
+                        (playerRows || '<p style="color: var(--text-secondary); padding: 1rem;">No players in this team</p>') +
+                    '</div>' +
+                '</div>';
+            }).join('');
+
+            renderFantasyMatchTabs();
+        }
+
+        function toggleFantasyTeam(teamId) {
+            const row = document.getElementById('fantasy-team-' + teamId);
+            if (row) row.classList.toggle('expanded');
+        }
+
+        function showFantasyTab(tab, btn) {
+            btn.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('fantasy-leaderboard-tab').style.display = tab === 'leaderboard' ? 'block' : 'none';
+            document.getElementById('fantasy-match-view-tab').style.display = tab === 'match-view' ? 'block' : 'none';
+        }
+
+        function renderFantasyMatchTabs() {
+            const container = document.getElementById('fantasy-match-tabs');
+            if (!container) return;
+            const matches = fantasyData.matches || [];
+            if (matches.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">No matches available</p>';
+                return;
+            }
+            container.innerHTML = matches.map(m => {
+                const shortName = m.matchName.length > 30 ? m.matchName.substring(0, 30) + '...' : m.matchName;
+                return '<button class="fantasy-match-tab ' + (selectedFantasyMatch === m.matchId ? 'active' : '') + '" onclick="selectFantasyMatch(\'' + m.matchId + '\')">' + shortName + '</button>';
+            }).join('');
+        }
+
+        function selectFantasyMatch(matchId) {
+            selectedFantasyMatch = matchId;
+            renderFantasyMatchTabs();
+            renderFantasyMatchContent(matchId);
+        }
+
+        function renderFantasyMatchContent(matchId) {
+            const content = document.getElementById('fantasy-match-content');
+            if (!content) return;
+            const match = (fantasyData.matches || []).find(m => m.matchId === matchId);
+            if (!match) {
+                content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Match data not found</p>';
+                return;
+            }
+            const teams = fantasyData.teams || [];
+            const matchTeamData = teams.map(team => {
+                const playerMatchPoints = (team.playerBreakdowns || []).map(p => {
+                    const mp = (p.matchPoints || []).find(mp => mp.matchId === matchId);
+                    return { playerName: p.playerName, role: p.role, points: mp ? mp.points : 0 };
+                }).sort((a, b) => b.points - a.points);
+                const matchTotal = playerMatchPoints.reduce((sum, p) => sum + p.points, 0);
+                return { teamName: team.teamName, matchTotal, players: playerMatchPoints };
+            }).sort((a, b) => b.matchTotal - a.matchTotal);
+
+            content.innerHTML = '<h4 style="color: var(--accent); margin-bottom: 1rem;">' + match.matchName + '</h4>' +
+                '<div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">' + match.matchDate + ' | ' + match.status + '</div>' +
+                matchTeamData.map((td, idx) =>
+                    '<div style="margin-bottom: 1.5rem;">' +
+                        '<div style="display: flex; justify-content: space-between; padding: 0.5rem 0.75rem; background: ' + (idx === 0 ? 'var(--accent-dim)' : 'var(--glass)') + '; border-radius: 8px; margin-bottom: 0.5rem; border-left: 3px solid ' + (idx === 0 ? 'var(--accent)' : 'var(--border)') + ';">' +
+                            '<strong>' + td.teamName + '</strong>' +
+                            '<span style="color: var(--accent); font-weight: 700;">' + td.matchTotal.toFixed(1) + ' pts</span>' +
+                        '</div>' +
+                        td.players.map(p =>
+                            '<div style="display: flex; justify-content: space-between; padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--border);">' +
+                                '<span>' + p.playerName + ' <span style="font-size: 0.75rem; color: var(--text-secondary);">(' + p.role + ')</span></span>' +
+                                '<span style="color: ' + (p.points > 0 ? 'var(--accent)' : p.points < 0 ? 'var(--danger)' : 'var(--text-secondary)') + '; font-weight: 600;">' + p.points.toFixed(1) + '</span>' +
+                            '</div>'
+                        ).join('') +
+                    '</div>'
+                ).join('');
+        }
+
+        async function refreshFantasyPoints() {
+            if (!roomCode) return;
+            const btn = document.getElementById('fantasy-refresh-btn');
+            if (btn) { btn.textContent = 'Refreshing...'; btn.disabled = true; }
+            try {
+                const res = await fetch('/api/room/' + roomCode + '/fantasy-points/refresh', { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Refresh failed');
+                const pointsRes = await fetch('/api/room/' + roomCode + '/fantasy-points');
+                fantasyData = await pointsRes.json();
+                renderPointsTable();
+            } catch (err) {
+                showAuctionPopup('Refresh Failed', err.message, true);
+            } finally {
+                if (btn) { btn.textContent = 'Refresh Points'; btn.disabled = false; }
+            }
+        }
+
+        async function saveFantasyConfig() {
+            if (!roomCode) return;
+            const apiKey = document.getElementById('fantasy-api-key').value.trim();
+            const seriesId = document.getElementById('fantasy-series-id').value.trim();
+            if (!apiKey || !seriesId) {
+                showAuctionPopup('Missing Fields', 'Both API Key and Series ID are required.', true);
+                return;
+            }
+            try {
+                const res = await fetch('/api/room/' + roomCode + '/fantasy-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ apiKey, seriesId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showAuctionPopup('Saved', 'Configuration saved! Fetching points...', false);
+                    setTimeout(() => { closeAuctionPopup(); refreshFantasyPoints(); }, 1500);
+                }
+            } catch (err) {
+                showAuctionPopup('Error', 'Failed to save config: ' + err.message, true);
+            }
+        }
+
+        // ============ BID LOG ============
+        function renderBidLog() {
+            const container = document.getElementById('bid-log-display');
+            if (!container) return;
+            const bidLog = (state.auctionState || {}).bidLog || [];
+            if (bidLog.length === 0) {
+                container.innerHTML = '<div class="bid-log-empty">No bids yet. Select a player to start.</div>';
+                return;
+            }
+            container.innerHTML = bidLog.slice().reverse().map(entry => {
+                if (entry.type === 'start') {
+                    return '<div class="bid-log-entry log-start"><span class="log-label">Auction started for <strong>' + entry.playerName + '</strong></span><span class="log-amount">' + formatPrice(entry.amount) + '</span></div>';
+                } else if (entry.type === 'bid') {
+                    return '<div class="bid-log-entry log-bid"><span><span class="log-team">' + entry.teamName + '</span> <span class="log-label">bids</span></span><span class="log-amount">' + formatPrice(entry.amount) + '</span></div>';
+                } else if (entry.type === 'sold') {
+                    return '<div class="bid-log-entry log-sold"><span class="log-label">SOLD to <strong>' + entry.teamName + '</strong></span><span class="log-amount">' + formatPrice(entry.amount) + '</span></div>';
+                } else if (entry.type === 'unsold') {
+                    return '<div class="bid-log-entry log-unsold"><span class="log-label">UNSOLD — ' + entry.playerName + '</span><span></span></div>';
+                }
+                return '';
+            }).join('');
+            container.scrollTop = 0;
+        }
+
+        // ============ LIVE SOLD LIST ============
+        function renderLiveSold() {
+            const container = document.getElementById('live-sold-list');
+            const countEl = document.getElementById('live-sold-count');
+            if (!container) return;
+            const soldPlayers = (state.auctionState || {}).soldPlayers || [];
+            if (countEl) countEl.textContent = soldPlayers.length;
+            if (soldPlayers.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.85rem; text-align: center; padding: 1rem;">No players sold yet</div>';
+                return;
+            }
+            container.innerHTML = soldPlayers.slice().reverse().map(p =>
+                '<div class="live-sold-item">' +
+                    '<div><div class="lsi-name">' + p.name + '</div><div class="lsi-team">→ ' + (p.soldToName || '') + '</div></div>' +
+                    '<div class="lsi-price">' + formatPrice(p.soldPrice || 0) + '</div>' +
+                '</div>'
+            ).join('');
+        }
+
+        // ============ TEAM EXPAND ============
+        function toggleTeamPlayers(el) {
+            el.classList.toggle('expanded');
+        }
+
         // Dynamic bid step based on current bid amount
         // 20L to 1Cr: step = 10L (0.1 Cr)
         // 1Cr to 2Cr: step = 20L (0.2 Cr)
@@ -1789,6 +2257,12 @@
         function showView(view) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(view + '-view').classList.add('active');
+            if (view === 'fantasy' && roomCode) {
+                fetch('/api/room/' + roomCode + '/fantasy-points')
+                    .then(r => r.json())
+                    .then(data => { fantasyData = data; renderPointsTable(); })
+                    .catch(err => console.error('Failed to fetch fantasy points:', err));
+            }
         }
 
         function showHistoryTab(tab, btn) {
