@@ -982,6 +982,7 @@
                     <div class="card" style="margin-top: 1rem;">
                         <h3 class="card-title">Players Remaining by Category</h3>
                         <div class="category-buttons" id="live-category-buttons" style="margin-bottom: 0;"></div>
+                        <div id="live-player-list" style="margin-top: 0.75rem; display: none; max-height: 350px; overflow-y: auto;"></div>
                     </div>
                     <!-- Bid History Log -->
                     <div class="card" style="margin-top: 1rem;">
@@ -1810,6 +1811,8 @@
             renderLiveCategories();
         }
 
+        var activeLiveCategory = null;
+
         function renderLiveCategories() {
             var container = document.getElementById('live-category-buttons');
             if (!container) return;
@@ -1819,16 +1822,75 @@
                 var count = getPlayersInCategory(cat).length;
                 totalRemaining += count;
                 var isHome = cat.country === 'India';
-                html += '<div class="category-btn ' + (isHome ? 'home' : 'overseas') + '" style="cursor:default;text-align:center;">' +
+                var isActive = activeLiveCategory === cat.key;
+                html += '<button class="category-btn ' + (isHome ? 'home' : 'overseas') + (isActive ? ' active' : '') + '" style="text-align:center;cursor:pointer;" onclick="showLiveCategoryPlayers(\'' + cat.key + '\')">' +
                     cat.label +
                     '<span class="count' + (count === 0 ? '" style="color:var(--danger);"' : '"') + '>' + count + '</span>' +
-                '</div>';
+                '</button>';
             });
-            html += '<div class="category-btn" style="cursor:default;text-align:center;border-left:3px solid var(--accent);">' +
+            // Total button shows all remaining
+            var allActive = activeLiveCategory === 'all';
+            html += '<button class="category-btn' + (allActive ? ' active' : '') + '" style="text-align:center;cursor:pointer;border-left:3px solid var(--accent);" onclick="showLiveCategoryPlayers(\'all\')">' +
                 'TOTAL' +
                 '<span class="count">' + totalRemaining + '</span>' +
-            '</div>';
+            '</button>';
             container.innerHTML = html;
+
+            // Re-render player list if a category is open
+            if (activeLiveCategory) renderLivePlayerList();
+        }
+
+        function showLiveCategoryPlayers(catKey) {
+            var listEl = document.getElementById('live-player-list');
+            if (!listEl) return;
+            if (activeLiveCategory === catKey) {
+                // Toggle off
+                activeLiveCategory = null;
+                listEl.style.display = 'none';
+                listEl.innerHTML = '';
+                renderLiveCategories();
+                return;
+            }
+            activeLiveCategory = catKey;
+            renderLiveCategories();
+        }
+
+        function renderLivePlayerList() {
+            var listEl = document.getElementById('live-player-list');
+            if (!listEl || !activeLiveCategory) return;
+
+            var players;
+            if (activeLiveCategory === 'all') {
+                players = state.players.filter(function(p) { return p.status === 'available' || p.status === 'unsold'; });
+                players.sort(function(a, b) { return (b.basePrice || 0) - (a.basePrice || 0); });
+            } else {
+                var cat = PRICE_CATEGORIES.find(function(c) { return c.key === activeLiveCategory; });
+                players = cat ? getPlayersInCategory(cat) : [];
+            }
+
+            if (players.length === 0) {
+                listEl.innerHTML = '<div style="padding:0.5rem;color:var(--text-secondary);text-align:center;font-size:0.85rem;">No players remaining in this category</div>';
+                listEl.style.display = 'block';
+                return;
+            }
+
+            var html = '';
+            players.forEach(function(p) {
+                var isOverseas = p.country !== 'India';
+                var isUnsold = p.status === 'unsold';
+                html += '<div class="player-item' + (isUnsold ? ' unsold-player' : '') + '" style="cursor:default;">' +
+                    '<div class="player-info">' +
+                        '<div class="name">' + p.name + ' <span class="ipl-team-badge">' + (p.previousTeam || 'Uncapped') + '</span>' +
+                            (isUnsold ? ' <span style="background:rgba(255,23,68,0.2);color:var(--danger);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.65rem;font-weight:700;">UNSOLD</span>' : '') +
+                            (isOverseas ? ' <span style="background:rgba(13,71,161,0.2);color:#42a5f5;padding:0.1rem 0.4rem;border-radius:4px;font-size:0.65rem;font-weight:700;">OS</span>' : '') +
+                        '</div>' +
+                        '<div class="role">' + p.role + ' | ' + p.country + '</div>' +
+                    '</div>' +
+                    '<div class="player-price">' + formatPrice(p.basePrice) + '</div>' +
+                '</div>';
+            });
+            listEl.innerHTML = html;
+            listEl.style.display = 'block';
         }
 
         function getPlayersInCategory(cat) {
