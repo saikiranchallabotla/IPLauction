@@ -1394,16 +1394,8 @@
                 if (res.ok) {
                     const data = await res.json();
                     roomCode = data.code;
-                    // Check if we already have the admin password stored (creator returning)
-                    var storedPass = localStorage.getItem('adminPass_' + roomCode);
-                    if (storedPass) {
-                        // Auto-enter as admin
-                        pendingAdminPassword = storedPass;
-                        enterAuction();
-                    } else {
-                        // Show admin check popup
-                        showAdminCheckPopup();
-                    }
+                    // Always ask if they are admin when joining via code
+                    showAdminCheckPopup();
                 } else {
                     const err = await res.json();
                     showJoinError(err.error);
@@ -1530,6 +1522,10 @@
                 // If admin password was correct, store it for future reconnects
                 if (isAdmin && pendingAdminPassword) {
                     localStorage.setItem('adminPass_' + roomCode, pendingAdminPassword);
+                }
+                // If user tried admin password but it was wrong, notify them
+                if (!isAdmin && pendingAdminPassword) {
+                    showAuctionPopup('Wrong Password', 'Incorrect admin password. You have joined as a participant.', true);
                 }
                 pendingAdminPassword = null;
                 // If non-admin is on admin view, redirect to auction
