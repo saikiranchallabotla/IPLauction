@@ -38,7 +38,12 @@ async function initPersistence() {
         console.log('URI starts with:', MONGODB_URI.substring(0, 20) + '...');
         try {
             const { MongoClient } = require('mongodb');
-            const client = new MongoClient(MONGODB_URI);
+            const client = new MongoClient(MONGODB_URI, {
+                tls: true,
+                tlsAllowInvalidCertificates: true,
+                serverSelectionTimeoutMS: 10000,
+                connectTimeoutMS: 10000
+            });
             await client.connect();
             db = client.db('ipl_auction');
             console.log('Connected to MongoDB for persistent storage');
