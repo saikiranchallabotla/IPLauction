@@ -980,6 +980,11 @@
                     </div>
                     <!-- Bid History Log -->
                     <div class="card" style="margin-top: 1rem;">
+                        <h3 class="card-title">Players Remaining by Category</h3>
+                        <div class="category-buttons" id="live-category-buttons" style="margin-bottom: 0;"></div>
+                    </div>
+                    <!-- Bid History Log -->
+                    <div class="card" style="margin-top: 1rem;">
                         <h3 class="card-title">Recent Auction Log</h3>
                         <div id="bid-log-display" style="max-height: 400px; overflow-y: auto;"></div>
                     </div>
@@ -1625,10 +1630,10 @@
             });
 
             socket.on('fullUpdate', (data) => { try { state = data; renderAll(); } catch(e) { console.error('fullUpdate render error:', e); } });
-            socket.on('auctionUpdate', (auctionState) => { try { state.auctionState = auctionState; renderAuction(); renderTeams(); renderBidLog(); } catch(e) { console.error('auctionUpdate render error:', e); } });
+            socket.on('auctionUpdate', (auctionState) => { try { state.auctionState = auctionState; renderAuction(); renderTeams(); renderBidLog(); renderLiveCategories(); } catch(e) { console.error('auctionUpdate render error:', e); } });
             socket.on('teamsUpdated', (teams) => { try { state.teams = teams; renderTeams(); } catch(e) { console.error('teamsUpdated render error:', e); } });
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
-            socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); } catch(e) { console.error('playersUpdated render error:', e); } });
+            socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); renderLiveCategories(); } catch(e) { console.error('playersUpdated render error:', e); } });
             socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
             socket.on('roomError', (msg) => {
                 showAuctionPopup('Room Error', msg, false);
@@ -1799,6 +1804,30 @@
                     </button>
                 `;
             });
+            container.innerHTML = html;
+
+            // Also update live auction category display
+            renderLiveCategories();
+        }
+
+        function renderLiveCategories() {
+            var container = document.getElementById('live-category-buttons');
+            if (!container) return;
+            var totalRemaining = 0;
+            var html = '';
+            PRICE_CATEGORIES.forEach(function(cat) {
+                var count = getPlayersInCategory(cat).length;
+                totalRemaining += count;
+                var isHome = cat.country === 'India';
+                html += '<div class="category-btn ' + (isHome ? 'home' : 'overseas') + '" style="cursor:default;text-align:center;">' +
+                    cat.label +
+                    '<span class="count' + (count === 0 ? '" style="color:var(--danger);"' : '"') + '>' + count + '</span>' +
+                '</div>';
+            });
+            html += '<div class="category-btn" style="cursor:default;text-align:center;border-left:3px solid var(--accent);">' +
+                'TOTAL' +
+                '<span class="count">' + totalRemaining + '</span>' +
+            '</div>';
             container.innerHTML = html;
         }
 
