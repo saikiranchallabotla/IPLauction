@@ -693,6 +693,36 @@
             .btn { padding: 0.45rem 0.7rem; font-size: 0.78rem; }
         }
 
+        /* ============ ACTIVE ROOMS ============ */
+        .room-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.8rem 1rem;
+            background: var(--dark-elevated);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+        }
+        .room-list-item .room-info {
+            font-size: 0.85rem;
+            color: var(--text);
+            font-weight: 500;
+        }
+        .room-list-item .room-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.15rem;
+        }
+        .room-status-dot {
+            display: inline-block;
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            margin-right: 0.3rem;
+        }
+        .room-status-dot.live { background: var(--success); box-shadow: 0 0 6px var(--success-glow); }
+        .room-status-dot.idle { background: var(--text-secondary); }
+
         /* ============ FANTASY POINTS TABLE ============ */
         .fantasy-container { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
         .fantasy-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
@@ -847,9 +877,6 @@
             <div class="landing-section">
                 <h2>Create New Auction</h2>
                 <p>Start a new auction room and share the code with your friends</p>
-                <div style="margin-bottom: 0.8rem;">
-                    <input type="password" id="create-admin-password" placeholder="Set Admin Password" style="width: 100%; padding: 0.8rem 1rem; border: 2px solid var(--border-light); border-radius: 10px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 1rem; text-align: center; letter-spacing: 0.1em;">
-                </div>
                 <button class="btn-large btn-create" onclick="createRoom()">Create Auction Room</button>
 
                 <div class="room-code-display" id="created-room-display">
@@ -868,6 +895,11 @@
                     <button class="btn-large btn-join" style="width: auto; padding: 1rem 1.5rem;" onclick="joinRoom()">Join</button>
                 </div>
                 <div class="error-msg" id="join-error"></div>
+            </div>
+
+            <div class="landing-section" id="active-rooms-section" style="display: none;">
+                <h2>Active Rooms</h2>
+                <div id="active-rooms-list"></div>
             </div>
         </div>
     </div>
@@ -1242,6 +1274,20 @@
         </div>
     </div>
 
+    <!-- Create Room Password Popup -->
+    <div class="auction-popup-overlay" id="create-password-popup">
+        <div class="auction-popup" style="border-color: var(--success); max-width: 380px;">
+            <h3 style="color: var(--success);">Set Admin Password</h3>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">This password will be needed to access the admin panel. Share it only with co-admins.</p>
+            <input type="password" id="create-password-input" placeholder="Enter a password" style="width: 100%; padding: 0.6rem 0.8rem; border: 2px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.95rem; text-align: center; letter-spacing: 0.1em; margin-bottom: 0.5rem;" onkeypress="if(event.key==='Enter')confirmCreateRoom()">
+            <div id="create-password-error" style="color: var(--danger); font-size: 0.8rem; margin-bottom: 0.5rem; display: none;"></div>
+            <div style="display: flex; gap: 0.5rem; justify-content: center;">
+                <button class="popup-btn popup-btn-confirm" onclick="confirmCreateRoom()">Create Room</button>
+                <button class="popup-btn popup-btn-cancel" onclick="cancelCreateRoom()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Admin Check Popup -->
     <div class="auction-popup-overlay" id="admin-check-popup">
         <div class="auction-popup" style="border-color: var(--accent); max-width: 380px;">
@@ -1288,10 +1334,18 @@
         ];
 
         // ============ ROOM MANAGEMENT ============
-        async function createRoom() {
-            var password = (document.getElementById('create-admin-password').value || '').trim();
+        function createRoom() {
+            // Show password popup
+            document.getElementById('create-password-input').value = '';
+            document.getElementById('create-password-error').style.display = 'none';
+            document.getElementById('create-password-popup').classList.add('active');
+        }
+
+        async function confirmCreateRoom() {
+            var password = (document.getElementById('create-password-input').value || '').trim();
             if (!password) {
-                showAuctionPopup('Password Required', 'Please set an admin password to create a room.', true);
+                document.getElementById('create-password-error').textContent = 'Please enter a password.';
+                document.getElementById('create-password-error').style.display = 'block';
                 return;
             }
             try {
@@ -1302,17 +1356,25 @@
                 });
                 const data = await res.json();
                 if (!res.ok) {
-                    showAuctionPopup('Error', data.error || 'Failed to create room.', true);
+                    document.getElementById('create-password-error').textContent = data.error || 'Failed to create room.';
+                    document.getElementById('create-password-error').style.display = 'block';
                     return;
                 }
+                document.getElementById('create-password-popup').classList.remove('active');
                 roomCode = data.code;
                 // Store admin password locally so creator auto-enters as admin
                 localStorage.setItem('adminPass_' + data.code, password);
                 document.getElementById('created-room-code').textContent = data.code;
                 document.getElementById('created-room-display').classList.add('show');
+                loadActiveRooms();
             } catch (err) {
-                showAuctionPopup('Error', 'Failed to create room. Please try again.', true);
+                document.getElementById('create-password-error').textContent = 'Failed to create room. Please try again.';
+                document.getElementById('create-password-error').style.display = 'block';
             }
+        }
+
+        function cancelCreateRoom() {
+            document.getElementById('create-password-popup').classList.remove('active');
         }
 
         async function joinRoom() {
@@ -1398,7 +1460,54 @@
             }
         }
 
+        // ============ ACTIVE ROOMS (no codes shown) ============
+        let roomsRefreshInterval = null;
+
+        async function loadActiveRooms() {
+            try {
+                const res = await fetch('/api/rooms');
+                const rooms = await res.json();
+                const section = document.getElementById('active-rooms-section');
+                const list = document.getElementById('active-rooms-list');
+
+                if (rooms.length === 0) {
+                    section.style.display = 'none';
+                    return;
+                }
+
+                section.style.display = 'block';
+                list.innerHTML = rooms.map(function(r) {
+                    var isLive = r.status === 'bidding';
+                    var age = getTimeAgo(r.createdAt);
+                    return '<div class="room-list-item">' +
+                        '<div>' +
+                            '<div class="room-info"><span class="room-status-dot ' + (isLive ? 'live' : 'idle') + '"></span>' + (isLive ? 'Live Auction' : 'Waiting') + '</div>' +
+                            '<div class="room-meta">' + r.teamCount + ' teams | ' + r.playersSold + ' sold | ' + age + '</div>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+            } catch (err) {
+                // Silently fail
+            }
+        }
+
+        function getTimeAgo(timestamp) {
+            var diff = Date.now() - timestamp;
+            var mins = Math.floor(diff / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return mins + 'm ago';
+            var hrs = Math.floor(mins / 60);
+            if (hrs < 24) return hrs + 'h ago';
+            return Math.floor(hrs / 24) + 'd ago';
+        }
+
+        // Load rooms on page load
+        loadActiveRooms();
+        roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
+
         function enterAuction() {
+            // Stop refreshing rooms list
+            if (roomsRefreshInterval) { clearInterval(roomsRefreshInterval); roomsRefreshInterval = null; }
 
             // Hide landing, show app
             document.getElementById('landing-page').style.display = 'none';
@@ -2411,6 +2520,8 @@
             document.getElementById('landing-page').style.display = 'flex';
             document.getElementById('created-room-display').classList.remove('show');
             document.getElementById('join-code-input').value = '';
+            loadActiveRooms();
+            roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
         }
 
         async function deleteTeam(id) {
