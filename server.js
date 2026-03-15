@@ -735,6 +735,9 @@ io.on('connection', (socket) => {
         const room = getRoom(socket.roomCode);
         if (!room) return;
 
+        // Round to avoid floating-point drift
+        amount = Math.round(amount * 100) / 100;
+
         const team = room.teams.find(t => t.id === teamId);
         if (!team || room.auctionState.status !== 'bidding') return;
 
