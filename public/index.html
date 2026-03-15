@@ -2012,6 +2012,8 @@
                 showAuctionPopup('Auction Finished', 'The auction is finished. No more bidding allowed.', true);
                 return;
             }
+            // Block selecting a new player while bidding is active
+            if (state.auctionState && state.auctionState.status === 'bidding') return;
             selectedPlayer = state.players.find(p => p.id === id);
             if (socket) socket.emit('selectPlayer', id);
             renderPlayers();
@@ -2593,8 +2595,14 @@
             document.getElementById('auction-popup').classList.remove('active');
         }
 
-        function markSold() {
+        async function markSold() {
             if (state.auctionState && state.auctionState.auctionFinished) return;
+            if (!state.auctionState || !state.auctionState.currentBidder) return;
+            var playerName = state.auctionState.currentPlayer ? state.auctionState.currentPlayer.name : 'this player';
+            var teamName = state.auctionState.currentBidder.name;
+            var price = formatPrice(state.auctionState.currentBid);
+            var yes = await showConfirmPopup('Confirm Sold', 'Sell ' + playerName + ' to ' + teamName + ' for ' + price + '?', 'SOLD!');
+            if (!yes) return;
             if (socket) socket.emit('markSold');
         }
         function markUnsold() {
