@@ -637,6 +637,16 @@
             box-shadow: 0 2px 10px var(--warning-glow);
         }
         .auction-popup .popup-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 20px var(--warning-glow); }
+        .auction-popup .popup-btn-cancel {
+            background: var(--glass); color: var(--text); border: 1px solid var(--border-light);
+            box-shadow: none;
+        }
+        .auction-popup .popup-btn-cancel:hover { background: rgba(255,255,255,0.1); box-shadow: none; transform: translateY(-2px); }
+        .auction-popup .popup-btn-confirm {
+            background: linear-gradient(135deg, #d50000, #ff1744); color: #fff;
+            box-shadow: 0 2px 10px var(--danger-glow);
+        }
+        .auction-popup .popup-btn-confirm:hover { box-shadow: 0 4px 20px var(--danger-glow); }
 
         /* ============ SOLD PLAYERS TABLE ============ */
         .sold-table {
@@ -1222,7 +1232,10 @@
         <div class="auction-popup">
             <h3 id="popup-title">Warning</h3>
             <p id="popup-message"></p>
-            <button class="popup-btn" onclick="closeAuctionPopup()">OK</button>
+            <div id="popup-buttons" style="display: flex; gap: 0.5rem; justify-content: center;">
+                <button class="popup-btn" id="popup-ok-btn" onclick="closeAuctionPopup()">OK</button>
+                <button class="popup-btn popup-btn-cancel" id="popup-cancel-btn" onclick="closeAuctionPopup()" style="display: none;">Cancel</button>
+            </div>
         </div>
     </div>
 
@@ -1264,7 +1277,7 @@
                 document.getElementById('created-room-code').textContent = data.code;
                 document.getElementById('created-room-display').classList.add('show');
             } catch (err) {
-                alert('Failed to create room. Please try again.');
+                showAuctionPopup('Error', 'Failed to create room. Please try again.', true);
             }
         }
 
@@ -1374,11 +1387,11 @@
                     roomCode = code;
                     enterAuction();
                 } else {
-                    alert('Room no longer exists. It may have been lost after a server restart.');
+                    showAuctionPopup('Room Not Found', 'Room no longer exists. It may have been lost after a server restart.', true);
                     loadActiveRooms();
                 }
             } catch (err) {
-                alert('Connection failed. Please try again.');
+                showAuctionPopup('Connection Failed', 'Connection failed. Please try again.', true);
             }
         }
 
@@ -1408,15 +1421,14 @@
             socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); } catch(e) { console.error('playersUpdated render error:', e); } });
             socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
             socket.on('roomError', (msg) => {
-                alert(msg);
-                forceLeaveRoom();
+                showAuctionPopup('Room Error', msg, false);
+                setTimeout(() => forceLeaveRoom(), 2000);
             });
         }
 
-        function leaveRoom() {
-            if (confirm('Leave this auction room?')) {
-                forceLeaveRoom();
-            }
+        async function leaveRoom() {
+            const yes = await showConfirmPopup('Leave Room', 'Leave this auction room?', 'Leave');
+            if (yes) forceLeaveRoom();
         }
 
         // ============ RENDERING ============
@@ -1761,8 +1773,9 @@
             renderPlayers();
         }
 
-        function reAuctionPlayer(playerId) {
-            if (!confirm('Bring this player back into auction?')) return;
+        async function reAuctionPlayer(playerId) {
+            const yes = await showConfirmPopup('Re-Auction', 'Bring this player back into auction?', 'Re-Auction');
+            if (!yes) return;
             if (socket) socket.emit('reAuctionPlayer', playerId);
         }
 
@@ -2197,15 +2210,39 @@
             renderTeams();
         }
 
+        let popupResolve = null;
+
         function showAuctionPopup(title, message, isWarningOnly) {
             document.getElementById('popup-title').textContent = title;
             document.getElementById('popup-message').textContent = message;
             const popup = document.getElementById('auction-popup');
+            const okBtn = document.getElementById('popup-ok-btn');
+            const cancelBtn = document.getElementById('popup-cancel-btn');
+            okBtn.textContent = 'OK';
+            okBtn.className = 'popup-btn';
+            okBtn.onclick = function() { closeAuctionPopup(); };
+            cancelBtn.style.display = 'none';
             popup.classList.add('active');
-            // For warnings (not blocks), auto-close after 3 seconds
             if (isWarningOnly) {
                 setTimeout(() => popup.classList.remove('active'), 3000);
             }
+        }
+
+        function showConfirmPopup(title, message, confirmText) {
+            return new Promise(function(resolve) {
+                document.getElementById('popup-title').textContent = title;
+                document.getElementById('popup-message').textContent = message;
+                const popup = document.getElementById('auction-popup');
+                const okBtn = document.getElementById('popup-ok-btn');
+                const cancelBtn = document.getElementById('popup-cancel-btn');
+                okBtn.textContent = confirmText || 'Confirm';
+                okBtn.className = 'popup-btn popup-btn-confirm';
+                cancelBtn.style.display = 'inline-block';
+                cancelBtn.textContent = 'Cancel';
+                okBtn.onclick = function() { closeAuctionPopup(); resolve(true); };
+                cancelBtn.onclick = function() { closeAuctionPopup(); resolve(false); };
+                popup.classList.add('active');
+            });
         }
 
         function closeAuctionPopup() {
@@ -2248,11 +2285,11 @@
         function addTeam() {
             const name = document.getElementById('new-team-name').value.trim();
             if (!name) {
-                alert('Please enter a team name');
+                showAuctionPopup('Missing Name', 'Please enter a team name.', true);
                 return;
             }
             if (!roomCode) {
-                alert('Not connected to a room. Please refresh and rejoin.');
+                showAuctionPopup('Not Connected', 'Not connected to a room. Please refresh and rejoin.', true);
                 return;
             }
             fetch('/api/room/' + roomCode + '/teams', {
@@ -2262,8 +2299,8 @@
             })
             .then(async res => {
                 if (res.status === 404) {
-                    alert('Room no longer exists. Returning to home page.');
-                    forceLeaveRoom();
+                    showAuctionPopup('Room Not Found', 'Room no longer exists. Returning to home page.', false);
+                    setTimeout(() => forceLeaveRoom(), 2000);
                     return;
                 }
                 let data;
@@ -2281,7 +2318,7 @@
                 if (data) document.getElementById('new-team-name').value = '';
             })
             .catch(err => {
-                alert('Error creating team: ' + err.message);
+                showAuctionPopup('Error', 'Error creating team: ' + err.message, true);
             });
         }
 
@@ -2300,14 +2337,16 @@
             roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
         }
 
-        function deleteTeam(id) {
-            if (!roomCode) { alert('Not connected to a room. Please refresh.'); return; }
-            if (confirm('Delete this team?')) fetch('/api/room/' + roomCode + '/teams/' + id, { method: 'DELETE' });
+        async function deleteTeam(id) {
+            if (!roomCode) { showAuctionPopup('Not Connected', 'Not connected to a room. Please refresh.', true); return; }
+            const yes = await showConfirmPopup('Delete Team', 'Delete this team? This cannot be undone.', 'Delete');
+            if (yes) fetch('/api/room/' + roomCode + '/teams/' + id, { method: 'DELETE' });
         }
 
-        function resetAuction() {
-            if (!roomCode) { alert('Not connected to a room. Please refresh.'); return; }
-            if (confirm('Reset entire auction?')) fetch('/api/room/' + roomCode + '/reset', { method: 'POST' });
+        async function resetAuction() {
+            if (!roomCode) { showAuctionPopup('Not Connected', 'Not connected to a room. Please refresh.', true); return; }
+            const yes = await showConfirmPopup('Reset Auction', 'Reset entire auction? All sold players and bids will be cleared.', 'Reset');
+            if (yes) fetch('/api/room/' + roomCode + '/reset', { method: 'POST' });
         }
 
         function showView(view) {
