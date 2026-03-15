@@ -422,7 +422,8 @@ function createRoom(code) {
             soldPlayers: [],
             unsoldPlayers: [],
             bidLog: [],
-            bidHistory: []
+            bidHistory: [],
+            auctionFinished: false
         }
     });
 
@@ -585,7 +586,10 @@ app.post('/api/room/:code/reset', (req, res) => {
         currentBid: 0,
         currentBidder: null,
         soldPlayers: [],
-        unsoldPlayers: []
+        unsoldPlayers: [],
+        bidLog: [],
+        bidHistory: [],
+        auctionFinished: false
     };
 
     saveRooms(room.code); // Save after reset
@@ -874,6 +878,128 @@ io.on('connection', (socket) => {
         const data = computeRoomFantasyPoints(room);
         data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
         socket.emit('fantasyPointsUpdate', data);
+    });
+
+    // Admin: Finish auction (lock teams)
+    socket.on('finishAuction', () => {
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+        room.auctionState.auctionFinished = true;
+        room.auctionState.status = 'waiting';
+        room.auctionState.currentPlayer = null;
+        room.auctionState.currentBid = 0;
+        room.auctionState.currentBidder = null;
+        saveRooms(room.code);
+        io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+    });
+
+    // Admin: Resume auction (unlock teams)
+    socket.on('resumeAuction', () => {
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+        room.auctionState.auctionFinished = false;
+        saveRooms(room.code);
+        io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+    });
+
+    // Admin: Trade player between teams
+    socket.on('tradePlayer', ({ playerName, fromTeamId, toTeamId, tradePrice }) => {
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+
+        const fromTeam = room.teams.find(t => t.id === fromTeamId);
+        const toTeam = room.teams.find(t => t.id === toTeamId);
+        if (!fromTeam || !toTeam) return;
+
+        const playerIndex = fromTeam.players.findIndex(p => p.name === playerName);
+        if (playerIndex === -1) return;
+
+        const player = fromTeam.players[playerIndex];
+        const price = tradePrice != null ? tradePrice : player.soldPrice;
+
+        // Check target team budget
+        if (price > toTeam.budget) return;
+
+        // Check max 16 players
+        if ((toTeam.players || []).length >= 16) return;
+
+        // Check overseas limit
+        if (player.country !== 'India') {
+            const overseasCount = (toTeam.players || []).filter(p => p.country !== 'India').length;
+            if (overseasCount >= 6) return;
+        }
+
+        // Remove from source team
+        fromTeam.players.splice(playerIndex, 1);
+        fromTeam.budget += player.soldPrice;
+
+        // Add to target team
+        player.soldTo = toTeamId;
+        player.soldToName = toTeam.name;
+        player.soldPrice = price;
+        toTeam.players.push(player);
+        toTeam.budget -= price;
+
+        // Update in players array too
+        const globalPlayer = room.players.find(p => p.name === playerName);
+        if (globalPlayer) {
+            globalPlayer.soldTo = toTeamId;
+            globalPlayer.soldToName = toTeam.name;
+            globalPlayer.soldPrice = price;
+        }
+
+        // Update in soldPlayers array
+        const soldEntry = room.auctionState.soldPlayers.find(p => p.name === playerName);
+        if (soldEntry) {
+            soldEntry.soldTo = toTeamId;
+            soldEntry.soldToName = toTeam.name;
+            soldEntry.soldPrice = price;
+        }
+
+        saveRooms(room.code);
+        console.log(`Trade: ${playerName} from ${fromTeam.name} to ${toTeam.name} for ${price} Cr`);
+        io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+    });
+
+    // Admin: Add new player and assign to a team
+    socket.on('addPlayer', ({ name, role, country, previousTeam, basePrice, assignToTeamId }) => {
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+
+        // Generate a new unique ID
+        const maxId = room.players.reduce((max, p) => Math.max(max, p.id || 0), 0);
+        const newPlayer = {
+            id: maxId + 1,
+            name: name.trim(),
+            role: role || 'Unknown',
+            country: country || 'India',
+            previousTeam: previousTeam || 'Uncapped',
+            basePrice: parseFloat(basePrice) || 0.2,
+            status: 'available'
+        };
+
+        room.players.push(newPlayer);
+
+        // If assigning directly to a team
+        if (assignToTeamId) {
+            const team = room.teams.find(t => t.id === assignToTeamId);
+            if (team) {
+                const price = newPlayer.basePrice;
+                if (price <= team.budget && (team.players || []).length < 16) {
+                    newPlayer.status = 'sold';
+                    newPlayer.soldTo = team.id;
+                    newPlayer.soldToName = team.name;
+                    newPlayer.soldPrice = price;
+                    team.players.push({ ...newPlayer });
+                    team.budget -= price;
+                    room.auctionState.soldPlayers.push({ ...newPlayer });
+                }
+            }
+        }
+
+        saveRooms(room.code);
+        console.log(`New player added: ${newPlayer.name} (${newPlayer.role}) - ${newPlayer.basePrice} Cr`);
+        io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
     });
 
     socket.on('disconnect', () => {

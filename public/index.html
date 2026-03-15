@@ -1076,11 +1076,10 @@
                                 <input type="hidden" id="bid-amount" value="0.2">
                             </div>
 
-                            <!-- SOLD / UNSOLD / REBID Buttons -->
+                            <!-- SOLD / UNSOLD Buttons -->
                             <div style="display: flex; gap: 0.5rem;">
                                 <button class="btn btn-success" onclick="markSold()" style="flex: 1; padding: 0.4rem; font-size: 0.9rem; font-weight: bold;">SOLD!</button>
                                 <button class="btn btn-danger" onclick="markUnsold()" style="flex: 1; padding: 0.4rem; font-size: 0.9rem; font-weight: bold;">UNSOLD</button>
-                                <button class="btn btn-warning" onclick="rebidPlayer()" style="flex: 1; padding: 0.4rem; font-size: 0.9rem; font-weight: bold;">REBID</button>
                             </div>
                         </div>
                     </div>
@@ -1091,13 +1090,14 @@
                         <div id="team-bid-buttons" style="display: flex; flex-wrap: wrap; gap: 0.3rem;"></div>
                     </div>
 
-                    <!-- Sold Players (toggle) -->
+                    <!-- Sold Players (toggle) + Auction Controls -->
                     <div class="card" style="margin-bottom: 0;">
                         <div style="display: flex; gap: 0.5rem;">
                             <button class="btn btn-success" style="flex: 1; padding: 0.4rem; font-size: 0.85rem;" onclick="toggleSoldPanel()">
                                 Sold Players <span id="admin-sold-count" style="background:rgba(0,0,0,0.2);padding:0.1rem 0.45rem;border-radius:10px;font-size:0.78rem;">0</span>
                             </button>
                             <button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;" onclick="resetAuction()">Reset</button>
+                            <button class="btn btn-warning" id="finish-auction-btn" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; font-weight: 700;" onclick="finishAuction()">Finish Auction</button>
                         </div>
                         <div id="sold-panel-inline" style="display:none; margin-top: 0.5rem; max-height: 250px; overflow-y: auto;">
                             <table class="sold-table">
@@ -1112,6 +1112,90 @@
                                 </thead>
                                 <tbody id="sold-table-body"></tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Post-Auction Panel (visible when auction is finished) -->
+            <div id="post-auction-panel" style="display: none; padding: 0 1rem 1rem;">
+                <div style="background: linear-gradient(135deg, rgba(76, 175, 80, 0.15), rgba(33, 150, 243, 0.1)); border: 1px solid rgba(76, 175, 80, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1rem; text-align: center;">
+                    <div style="font-size: 1.1rem; font-weight: 700; color: var(--success);">Auction Completed</div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Teams are locked. You can trade players or add new ones below.</div>
+                    <button class="btn btn-secondary" onclick="resumeAuction()" style="margin-top: 0.5rem; padding: 0.3rem 1rem; font-size: 0.8rem;">Resume Auction</button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <!-- Trade Players -->
+                    <div class="card">
+                        <h3 class="card-title" style="font-size: 0.95rem;">Trade Players</h3>
+                        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+                            <div>
+                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">From Team</label>
+                                <select id="trade-from-team" onchange="updateTradePlayerList()" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                    <option value="">Select team...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Player</label>
+                                <select id="trade-player" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                    <option value="">Select player...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">To Team</label>
+                                <select id="trade-to-team" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                    <option value="">Select team...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Trade Price (Cr)</label>
+                                <input type="number" id="trade-price" step="0.1" min="0.2" placeholder="Same as bought price" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                            </div>
+                            <button class="btn btn-primary" onclick="tradePlayer()" style="padding: 0.5rem; font-weight: 700;">Execute Trade</button>
+                        </div>
+                    </div>
+
+                    <!-- Add New Player -->
+                    <div class="card">
+                        <h3 class="card-title" style="font-size: 0.95rem;">Add New Player</h3>
+                        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+                            <div>
+                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Player Name</label>
+                                <input type="text" id="new-player-name" placeholder="e.g., Virat Kohli" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                                <div>
+                                    <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Role</label>
+                                    <select id="new-player-role" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                        <option value="Batter">Batter</option>
+                                        <option value="Bowler">Bowler</option>
+                                        <option value="All-Rounder">All-Rounder</option>
+                                        <option value="Wicketkeeper">Wicketkeeper</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Country</label>
+                                    <input type="text" id="new-player-country" placeholder="e.g., India" value="India" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                                <div>
+                                    <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">IPL Team</label>
+                                    <input type="text" id="new-player-ipl-team" placeholder="e.g., CSK" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Price (Cr)</label>
+                                    <input type="number" id="new-player-price" step="0.1" min="0.2" value="0.2" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                </div>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem;">Assign To Team (optional)</label>
+                                <select id="new-player-team" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                                    <option value="">Add to pool (unassigned)</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-success" onclick="addNewPlayer()" style="padding: 0.5rem; font-weight: 700;">Add Player</button>
                         </div>
                     </div>
                 </div>
@@ -1435,7 +1519,7 @@
 
         // ============ RENDERING ============
         function renderAll() {
-            const fns = [renderAuction, renderTeams, renderSetupTeams, renderCategoryTabs, renderPlayers, renderPlayersPrice, renderHistory, renderAdminSoldList, renderUnsoldAdmin, renderPointsTable, renderBidLog];
+            const fns = [renderAuction, renderTeams, renderSetupTeams, renderCategoryTabs, renderPlayers, renderPlayersPrice, renderHistory, renderAdminSoldList, renderUnsoldAdmin, renderPointsTable, renderBidLog, updatePostAuctionPanel];
             fns.forEach(fn => { try { fn(); } catch(e) { console.error('Render error in ' + fn.name + ':', e); } });
         }
 
@@ -1770,6 +1854,10 @@
         }
 
         function selectPlayer(id) {
+            if (state.auctionState && state.auctionState.auctionFinished) {
+                showAuctionPopup('Auction Finished', 'The auction is finished. No more bidding allowed.', true);
+                return;
+            }
             selectedPlayer = state.players.find(p => p.id === id);
             if (socket) socket.emit('selectPlayer', id);
             renderPlayers();
@@ -2295,8 +2383,14 @@
             document.getElementById('auction-popup').classList.remove('active');
         }
 
-        function markSold() { if (socket) socket.emit('markSold'); }
-        function markUnsold() { if (socket) socket.emit('markUnsold'); }
+        function markSold() {
+            if (state.auctionState && state.auctionState.auctionFinished) return;
+            if (socket) socket.emit('markSold');
+        }
+        function markUnsold() {
+            if (state.auctionState && state.auctionState.auctionFinished) return;
+            if (socket) socket.emit('markUnsold');
+        }
 
         function rebidPlayer() {
             // Rebid the current player (if unsold or in bidding, reset them back to available and re-select)
@@ -2314,6 +2408,10 @@
         }
 
         function drawRandomPlayer() {
+            if (state.auctionState && state.auctionState.auctionFinished) {
+                showAuctionPopup('Auction Finished', 'The auction is finished. No more bidding allowed.', true);
+                return;
+            }
             const cat = PRICE_CATEGORIES.find(c => c.key === currentCategory);
             if (!cat) return;
 
@@ -2393,6 +2491,144 @@
             if (!roomCode) { showAuctionPopup('Not Connected', 'Not connected to a room. Please refresh.', true); return; }
             const yes = await showConfirmPopup('Reset Auction', 'Reset entire auction? All sold players and bids will be cleared.', 'Reset');
             if (yes) fetch('/api/room/' + roomCode + '/reset', { method: 'POST' });
+        }
+
+        // ============ POST-AUCTION FEATURES ============
+
+        async function finishAuction() {
+            if (!roomCode || !socket) { showAuctionPopup('Not Connected', 'Not connected to a room.', true); return; }
+            const yes = await showConfirmPopup('Finish Auction', 'Are you sure the auction is finished? Teams will be locked and no more bidding can happen.', 'Yes, Finish');
+            if (yes) socket.emit('finishAuction');
+        }
+
+        async function resumeAuction() {
+            if (!roomCode || !socket) return;
+            const yes = await showConfirmPopup('Resume Auction', 'Resume the auction? Teams will be unlocked and bidding can continue.', 'Resume');
+            if (yes) socket.emit('resumeAuction');
+        }
+
+        function updatePostAuctionPanel() {
+            var panel = document.getElementById('post-auction-panel');
+            var finishBtn = document.getElementById('finish-auction-btn');
+            var isFinished = state.auctionState && state.auctionState.auctionFinished;
+
+            if (panel) panel.style.display = isFinished ? 'block' : 'none';
+            if (finishBtn) finishBtn.style.display = isFinished ? 'none' : 'inline-block';
+
+            if (isFinished) {
+                populateTradeDropdowns();
+                populateNewPlayerTeamDropdown();
+            }
+        }
+
+        function populateTradeDropdowns() {
+            var fromSelect = document.getElementById('trade-from-team');
+            var toSelect = document.getElementById('trade-to-team');
+            if (!fromSelect || !toSelect) return;
+
+            var teams = state.teams || [];
+            var currentFrom = fromSelect.value;
+            var currentTo = toSelect.value;
+
+            fromSelect.innerHTML = '<option value="">Select team...</option>' +
+                teams.map(function(t) { return '<option value="' + t.id + '">' + t.name + ' (' + (t.players || []).length + ' players)</option>'; }).join('');
+            toSelect.innerHTML = '<option value="">Select team...</option>' +
+                teams.map(function(t) { return '<option value="' + t.id + '">' + t.name + ' (Budget: ' + (t.budget || 0).toFixed(2) + ' Cr)</option>'; }).join('');
+
+            if (currentFrom) fromSelect.value = currentFrom;
+            if (currentTo) toSelect.value = currentTo;
+            updateTradePlayerList();
+        }
+
+        function updateTradePlayerList() {
+            var fromTeamId = document.getElementById('trade-from-team').value;
+            var playerSelect = document.getElementById('trade-player');
+            if (!playerSelect) return;
+
+            playerSelect.innerHTML = '<option value="">Select player...</option>';
+            if (!fromTeamId) return;
+
+            var team = (state.teams || []).find(function(t) { return t.id === fromTeamId; });
+            if (!team) return;
+
+            playerSelect.innerHTML += (team.players || []).map(function(p) {
+                return '<option value="' + p.name.replace(/"/g, '&quot;') + '">' + p.name + ' (' + formatPrice(p.soldPrice) + ')</option>';
+            }).join('');
+        }
+
+        async function tradePlayer() {
+            var fromTeamId = document.getElementById('trade-from-team').value;
+            var playerName = document.getElementById('trade-player').value;
+            var toTeamId = document.getElementById('trade-to-team').value;
+            var tradePriceInput = document.getElementById('trade-price').value;
+
+            if (!fromTeamId || !playerName || !toTeamId) {
+                showAuctionPopup('Missing Info', 'Please select source team, player, and destination team.', true);
+                return;
+            }
+            if (fromTeamId === toTeamId) {
+                showAuctionPopup('Invalid Trade', 'Source and destination teams cannot be the same.', true);
+                return;
+            }
+
+            var fromTeam = (state.teams || []).find(function(t) { return t.id === fromTeamId; });
+            var toTeam = (state.teams || []).find(function(t) { return t.id === toTeamId; });
+            var tradePrice = tradePriceInput ? parseFloat(tradePriceInput) : null;
+
+            var msg = 'Trade ' + playerName + ' from ' + (fromTeam ? fromTeam.name : '?') + ' to ' + (toTeam ? toTeam.name : '?');
+            if (tradePrice) msg += ' for ' + tradePrice.toFixed(2) + ' Cr';
+            msg += '?';
+
+            var yes = await showConfirmPopup('Confirm Trade', msg, 'Trade');
+            if (yes) {
+                socket.emit('tradePlayer', { playerName: playerName, fromTeamId: fromTeamId, toTeamId: toTeamId, tradePrice: tradePrice });
+                document.getElementById('trade-price').value = '';
+            }
+        }
+
+        function populateNewPlayerTeamDropdown() {
+            var select = document.getElementById('new-player-team');
+            if (!select) return;
+            var teams = state.teams || [];
+            select.innerHTML = '<option value="">Add to pool (unassigned)</option>' +
+                teams.map(function(t) { return '<option value="' + t.id + '">' + t.name + ' (Budget: ' + (t.budget || 0).toFixed(2) + ' Cr)</option>'; }).join('');
+        }
+
+        async function addNewPlayer() {
+            var name = (document.getElementById('new-player-name').value || '').trim();
+            var role = document.getElementById('new-player-role').value;
+            var country = (document.getElementById('new-player-country').value || '').trim();
+            var previousTeam = (document.getElementById('new-player-ipl-team').value || '').trim();
+            var basePrice = parseFloat(document.getElementById('new-player-price').value) || 0.2;
+            var assignToTeamId = document.getElementById('new-player-team').value;
+
+            if (!name) {
+                showAuctionPopup('Missing Info', 'Player name is required.', true);
+                return;
+            }
+
+            var msg = 'Add ' + name + ' (' + role + ', ' + (country || 'India') + ') at ' + basePrice.toFixed(2) + ' Cr';
+            if (assignToTeamId) {
+                var team = (state.teams || []).find(function(t) { return t.id === assignToTeamId; });
+                msg += ' and assign to ' + (team ? team.name : 'team');
+            }
+            msg += '?';
+
+            var yes = await showConfirmPopup('Add Player', msg, 'Add');
+            if (yes) {
+                socket.emit('addPlayer', {
+                    name: name,
+                    role: role,
+                    country: country || 'India',
+                    previousTeam: previousTeam || 'Uncapped',
+                    basePrice: basePrice,
+                    assignToTeamId: assignToTeamId || null
+                });
+                document.getElementById('new-player-name').value = '';
+                document.getElementById('new-player-ipl-team').value = '';
+                document.getElementById('new-player-price').value = '0.2';
+                document.getElementById('new-player-country').value = 'India';
+            }
         }
 
         function showView(view) {
