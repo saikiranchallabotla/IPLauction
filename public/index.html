@@ -873,9 +873,11 @@
         .team-item.expanded .team-players-list { display: block; }
         .team-player-entry {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 0.3rem 0; font-size: 0.78rem;
+            padding: 0.3rem 0.4rem; font-size: 0.78rem;
             border-bottom: 1px solid rgba(255,255,255,0.03);
+            cursor: pointer; border-radius: 4px; transition: background 0.2s ease;
         }
+        .team-player-entry:hover { background: rgba(63,81,181,0.1); }
         .team-player-entry:last-child { border-bottom: none; }
         .team-player-entry .tp-name { color: var(--text); font-weight: 500; }
         .team-player-entry .tp-role { color: var(--text-secondary); font-size: 0.7rem; }
@@ -958,7 +960,7 @@
                     </div>
                     <!-- Bid History Log -->
                     <div class="card" style="margin-top: 1rem;">
-                        <h3 class="card-title">Auction Log</h3>
+                        <h3 class="card-title">Recent Auction Log</h3>
                         <div id="bid-log-display" style="max-height: 400px; overflow-y: auto;"></div>
                     </div>
                 </div>
@@ -1499,7 +1501,7 @@
                 const budget = t.budget != null ? t.budget : initialBudget;
                 const spent = initialBudget - budget;
                 const playersList = (t.players || []).map(p =>
-                    '<div class="team-player-entry">' +
+                    '<div class="team-player-entry" onclick="event.stopPropagation(); showPlayerBidLog(\'' + p.name.replace(/'/g, "\\'") + '\')">' +
                         '<div><span class="tp-name">' + p.name + '</span> <span class="tp-role">' + p.role + '</span></div>' +
                         '<div class="tp-price">' + formatPrice(p.soldPrice || 0) + '</div>' +
                     '</div>'
@@ -2051,8 +2053,9 @@
                 '</div>';
             }
 
-            // Show completed auctions (most recent first)
-            html += bidHistory.slice().reverse().map((entry, idx) => {
+            // Show last 10 completed auctions (most recent first)
+            const recent = bidHistory.slice(-10).reverse();
+            html += recent.map(function(entry) {
                 const isOverseas = entry.country !== 'India';
                 const isSold = entry.result === 'sold';
                 const bidSteps = (entry.bids || []).map(b =>
@@ -2088,6 +2091,49 @@
 
         function toggleBidLogEntry(el) {
             el.classList.toggle('expanded');
+        }
+
+        // Show bid log for a specific player (clicked from team list)
+        function showPlayerBidLog(playerName) {
+            const bidHistory = (state.auctionState || {}).bidHistory || [];
+            const entry = bidHistory.find(function(e) { return e.playerName === playerName; });
+            if (!entry) {
+                showAuctionPopup('No Bid Data', 'No bid history found for ' + playerName + '.', true);
+                return;
+            }
+            const isSold = entry.result === 'sold';
+            const isOverseas = entry.country !== 'India';
+            const bidSteps = (entry.bids || []).map(function(b, i) {
+                return '<div class="bid-step"><span class="bs-team">' + b.teamName + '</span><span class="bs-amount">' + formatPrice(b.amount) + '</span></div>';
+            }).join('');
+
+            var title = entry.playerName;
+            var body = '<div style="text-align: left;">' +
+                '<div style="margin-bottom: 0.75rem; display: flex; gap: 0.4rem; align-items: center;">' +
+                    '<span class="bid-log-ipl-badge">' + entry.iplTeam + '</span>' +
+                    '<span class="bid-log-country-tag ' + (isOverseas ? 'overseas' : 'home') + '">' + (isOverseas ? 'OVERSEAS' : 'HOME') + '</span>' +
+                    '<span style="font-size: 0.75rem; color: var(--text-secondary);">Base: ' + formatPrice(entry.basePrice) + '</span>' +
+                '</div>' +
+                '<div style="margin-bottom: 0.5rem; font-weight: 700; color: ' + (isSold ? 'var(--success)' : 'var(--danger)') + ';">' +
+                    (isSold ? 'SOLD to ' + entry.soldTo + ' for ' + formatPrice(entry.soldPrice) : 'UNSOLD') +
+                '</div>';
+            if (entry.bids && entry.bids.length > 0) {
+                body += '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Bid Steps:</div>' + bidSteps;
+            } else {
+                body += '<div style="font-size: 0.78rem; color: var(--text-secondary);">No competing bids</div>';
+            }
+            body += '</div>';
+
+            document.getElementById('popup-title').textContent = title;
+            document.getElementById('popup-message').innerHTML = body;
+            var popup = document.getElementById('auction-popup');
+            var okBtn = document.getElementById('popup-ok-btn');
+            var cancelBtn = document.getElementById('popup-cancel-btn');
+            okBtn.textContent = 'OK';
+            okBtn.className = 'popup-btn';
+            okBtn.onclick = function() { closeAuctionPopup(); };
+            cancelBtn.style.display = 'none';
+            popup.classList.add('active');
         }
 
         // ============ TEAM EXPAND ============
