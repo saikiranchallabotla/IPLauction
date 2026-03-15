@@ -1600,7 +1600,7 @@
             });
 
             socket.on('fullUpdate', (data) => { try { state = data; renderAll(); } catch(e) { console.error('fullUpdate render error:', e); } });
-            socket.on('auctionUpdate', (auctionState) => { try { state.auctionState = auctionState; renderAuction(); renderBidLog(); } catch(e) { console.error('auctionUpdate render error:', e); } });
+            socket.on('auctionUpdate', (auctionState) => { try { state.auctionState = auctionState; renderAuction(); renderTeams(); renderBidLog(); } catch(e) { console.error('auctionUpdate render error:', e); } });
             socket.on('teamsUpdated', (teams) => { try { state.teams = teams; renderTeams(); } catch(e) { console.error('teamsUpdated render error:', e); } });
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
             socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); } catch(e) { console.error('playersUpdated render error:', e); } });
