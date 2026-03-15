@@ -34,6 +34,8 @@ let db = null; // MongoDB database reference
 
 async function initPersistence() {
     if (MONGODB_URI) {
+        console.log('MONGODB_URI is set, attempting to connect...');
+        console.log('URI starts with:', MONGODB_URI.substring(0, 20) + '...');
         try {
             const { MongoClient } = require('mongodb');
             const client = new MongoClient(MONGODB_URI);
