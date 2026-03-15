@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <style>
         :root {
             --primary: #1a237e;
@@ -2817,43 +2817,197 @@
         }
 
         function exportToExcel() {
-            const wb = XLSX.utils.book_new();
+            var wb = XLSX.utils.book_new();
+            var initialBudget = (state.config && state.config.initialBudget) || 100;
 
-            // Sheet 1: All Teams Summary
-            const teamsData = state.teams.map(t => ({
-                'Team Name': t.name,
-                'Budget Remaining (Cr)': (t.budget || 0).toFixed(2),
-                'Budget Spent (Cr)': ((state.config?.initialBudget || 100) - (t.budget || 0)).toFixed(2),
-                'Players Count': (t.players || []).length
-            }));
-            const ws1 = XLSX.utils.json_to_sheet(teamsData);
+            // ---- Style definitions ----
+            var headerStyle = {
+                font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 12, name: 'Calibri' },
+                fill: { fgColor: { rgb: '1A237E' } },
+                alignment: { horizontal: 'center', vertical: 'center' },
+                border: { top: {style:'thin',color:{rgb:'000000'}}, bottom: {style:'thin',color:{rgb:'000000'}}, left: {style:'thin',color:{rgb:'000000'}}, right: {style:'thin',color:{rgb:'000000'}} }
+            };
+            var goldHeader = {
+                font: { bold: true, color: { rgb: '000000' }, sz: 12, name: 'Calibri' },
+                fill: { fgColor: { rgb: 'F5C518' } },
+                alignment: { horizontal: 'center', vertical: 'center' },
+                border: { top: {style:'thin',color:{rgb:'000000'}}, bottom: {style:'thin',color:{rgb:'000000'}}, left: {style:'thin',color:{rgb:'000000'}}, right: {style:'thin',color:{rgb:'000000'}} }
+            };
+            var cellStyle = {
+                font: { sz: 11, name: 'Calibri' },
+                alignment: { horizontal: 'center', vertical: 'center' },
+                border: { top: {style:'thin',color:{rgb:'D0D0D0'}}, bottom: {style:'thin',color:{rgb:'D0D0D0'}}, left: {style:'thin',color:{rgb:'D0D0D0'}}, right: {style:'thin',color:{rgb:'D0D0D0'}} }
+            };
+            var cellLeft = JSON.parse(JSON.stringify(cellStyle));
+            cellLeft.alignment = { horizontal: 'left', vertical: 'center' };
+            var evenRow = {
+                font: { sz: 11, name: 'Calibri' },
+                fill: { fgColor: { rgb: 'F2F2F2' } },
+                alignment: { horizontal: 'center', vertical: 'center' },
+                border: { top: {style:'thin',color:{rgb:'D0D0D0'}}, bottom: {style:'thin',color:{rgb:'D0D0D0'}}, left: {style:'thin',color:{rgb:'D0D0D0'}}, right: {style:'thin',color:{rgb:'D0D0D0'}} }
+            };
+            var evenRowLeft = JSON.parse(JSON.stringify(evenRow));
+            evenRowLeft.alignment = { horizontal: 'left', vertical: 'center' };
+            var moneyStyle = {
+                font: { sz: 11, name: 'Calibri', bold: true, color: { rgb: '1B5E20' } },
+                alignment: { horizontal: 'center', vertical: 'center' },
+                border: { top: {style:'thin',color:{rgb:'D0D0D0'}}, bottom: {style:'thin',color:{rgb:'D0D0D0'}}, left: {style:'thin',color:{rgb:'D0D0D0'}}, right: {style:'thin',color:{rgb:'D0D0D0'}} }
+            };
+            var moneyStyleEven = JSON.parse(JSON.stringify(moneyStyle));
+            moneyStyleEven.fill = { fgColor: { rgb: 'F2F2F2' } };
+            var overseasStyle = {
+                font: { sz: 11, name: 'Calibri', color: { rgb: '0D47A1' } },
+                alignment: { horizontal: 'center', vertical: 'center' },
+                border: { top: {style:'thin',color:{rgb:'D0D0D0'}}, bottom: {style:'thin',color:{rgb:'D0D0D0'}}, left: {style:'thin',color:{rgb:'D0D0D0'}}, right: {style:'thin',color:{rgb:'D0D0D0'}} }
+            };
+            var overseasStyleEven = JSON.parse(JSON.stringify(overseasStyle));
+            overseasStyleEven.fill = { fgColor: { rgb: 'F2F2F2' } };
+
+            function applyColWidths(ws, widths) {
+                ws['!cols'] = widths.map(function(w) { return { wch: w }; });
+            }
+
+            function styleRow(ws, row, cols, style) {
+                for (var c = 0; c < cols; c++) {
+                    var addr = XLSX.utils.encode_cell({ r: row, c: c });
+                    if (ws[addr]) ws[addr].s = style;
+                }
+            }
+
+            // ========== Sheet 1: Teams Summary ==========
+            var tsHeaders = ['#', 'Team Name', 'Players', 'Budget Remaining (Cr)', 'Budget Spent (Cr)', 'Overseas', 'Indian'];
+            var tsData = [tsHeaders];
+            state.teams.forEach(function(t, i) {
+                var players = t.players || [];
+                var overseas = players.filter(function(p) { return p.country !== 'India'; }).length;
+                var indian = players.length - overseas;
+                var spent = initialBudget - (t.budget || 0);
+                tsData.push([i + 1, t.name, players.length, (t.budget || 0).toFixed(2), spent.toFixed(2), overseas, indian]);
+            });
+            var ws1 = XLSX.utils.aoa_to_sheet(tsData);
+            applyColWidths(ws1, [4, 22, 10, 22, 20, 10, 10]);
+            for (var c = 0; c < tsHeaders.length; c++) {
+                var addr = XLSX.utils.encode_cell({ r: 0, c: c });
+                if (ws1[addr]) ws1[addr].s = goldHeader;
+            }
+            for (var r = 1; r < tsData.length; r++) {
+                var isEven = r % 2 === 0;
+                for (var c2 = 0; c2 < tsHeaders.length; c2++) {
+                    var addr2 = XLSX.utils.encode_cell({ r: r, c: c2 });
+                    if (!ws1[addr2]) continue;
+                    if (c2 === 1) ws1[addr2].s = isEven ? evenRowLeft : cellLeft;
+                    else if (c2 === 3 || c2 === 4) ws1[addr2].s = isEven ? moneyStyleEven : moneyStyle;
+                    else ws1[addr2].s = isEven ? evenRow : cellStyle;
+                }
+            }
             XLSX.utils.book_append_sheet(wb, ws1, 'Teams Summary');
 
-            // Sheet 2: All Sold Players
-            const soldData = (state.auctionState.soldPlayers || []).map(p => ({
-                'Player Name': p.name,
-                'Role': p.role,
-                'Country': p.country,
-                'IPL Team': p.previousTeam || 'Uncapped',
-                'Sold To': p.soldToName,
-                'Price (Cr)': p.soldPrice
-            }));
-            const ws2 = XLSX.utils.json_to_sheet(soldData);
+            // ========== Sheet 2: All Sold Players ==========
+            var spHeaders = ['#', 'Player Name', 'Role', 'Country', 'IPL Team', 'Sold To', 'Price (Cr)'];
+            var spData = [spHeaders];
+            (state.auctionState.soldPlayers || []).forEach(function(p, i) {
+                spData.push([i + 1, p.name, p.role, p.country, p.previousTeam || 'Uncapped', p.soldToName, p.soldPrice]);
+            });
+            var ws2 = XLSX.utils.aoa_to_sheet(spData);
+            applyColWidths(ws2, [4, 24, 16, 14, 16, 20, 14]);
+            for (var c3 = 0; c3 < spHeaders.length; c3++) {
+                var addr3 = XLSX.utils.encode_cell({ r: 0, c: c3 });
+                if (ws2[addr3]) ws2[addr3].s = headerStyle;
+            }
+            for (var r2 = 1; r2 < spData.length; r2++) {
+                var isEven2 = r2 % 2 === 0;
+                for (var c4 = 0; c4 < spHeaders.length; c4++) {
+                    var addr4 = XLSX.utils.encode_cell({ r: r2, c: c4 });
+                    if (!ws2[addr4]) continue;
+                    if (c4 === 1 || c4 === 5) ws2[addr4].s = isEven2 ? evenRowLeft : cellLeft;
+                    else if (c4 === 6) ws2[addr4].s = isEven2 ? moneyStyleEven : moneyStyle;
+                    else if (c4 === 3 && spData[r2][3] !== 'India') ws2[addr4].s = isEven2 ? overseasStyleEven : overseasStyle;
+                    else ws2[addr4].s = isEven2 ? evenRow : cellStyle;
+                }
+            }
             XLSX.utils.book_append_sheet(wb, ws2, 'Sold Players');
 
-            // Individual team sheets
-            state.teams.forEach(t => {
-                const teamPlayers = (t.players || []).map(p => ({
-                    'Player Name': p.name,
-                    'Role': p.role,
-                    'Country': p.country,
-                    'IPL Team': p.previousTeam || 'Uncapped',
-                    'Price (Cr)': p.soldPrice
-                }));
-                if (teamPlayers.length > 0) {
-                    const ws = XLSX.utils.json_to_sheet(teamPlayers);
-                    XLSX.utils.book_append_sheet(wb, ws, t.name.substring(0, 30));
+            // ========== Sheet 3: Unsold Players ==========
+            var unsoldPlayers = (state.auctionState.unsoldPlayers || []);
+            if (unsoldPlayers.length > 0) {
+                var upHeaders = ['#', 'Player Name', 'Role', 'Country', 'IPL Team', 'Base Price (Cr)'];
+                var upData = [upHeaders];
+                unsoldPlayers.forEach(function(p, i) {
+                    upData.push([i + 1, p.name, p.role, p.country, p.previousTeam || 'Uncapped', p.basePrice]);
+                });
+                var ws3 = XLSX.utils.aoa_to_sheet(upData);
+                applyColWidths(ws3, [4, 24, 16, 14, 16, 16]);
+                var redHeader = JSON.parse(JSON.stringify(headerStyle));
+                redHeader.fill = { fgColor: { rgb: 'B71C1C' } };
+                for (var c5 = 0; c5 < upHeaders.length; c5++) {
+                    var addr5 = XLSX.utils.encode_cell({ r: 0, c: c5 });
+                    if (ws3[addr5]) ws3[addr5].s = redHeader;
                 }
+                for (var r3 = 1; r3 < upData.length; r3++) {
+                    var isEven3 = r3 % 2 === 0;
+                    for (var c6 = 0; c6 < upHeaders.length; c6++) {
+                        var addr6 = XLSX.utils.encode_cell({ r: r3, c: c6 });
+                        if (!ws3[addr6]) continue;
+                        if (c6 === 1) ws3[addr6].s = isEven3 ? evenRowLeft : cellLeft;
+                        else if (c6 === 5) ws3[addr6].s = isEven3 ? moneyStyleEven : moneyStyle;
+                        else ws3[addr6].s = isEven3 ? evenRow : cellStyle;
+                    }
+                }
+                XLSX.utils.book_append_sheet(wb, ws3, 'Unsold Players');
+            }
+
+            // ========== Individual Team Sheets ==========
+            state.teams.forEach(function(t) {
+                var players = t.players || [];
+                if (players.length === 0) return;
+                var tpHeaders = ['#', 'Player Name', 'Role', 'Country', 'IPL Team', 'Price (Cr)'];
+                var tpData = [tpHeaders];
+                var totalSpent = 0;
+                players.forEach(function(p, i) {
+                    tpData.push([i + 1, p.name, p.role, p.country, p.previousTeam || 'Uncapped', p.soldPrice]);
+                    totalSpent += (p.soldPrice || 0);
+                });
+                // Total row
+                tpData.push(['', '', '', '', 'TOTAL', totalSpent.toFixed(2)]);
+                tpData.push(['', '', '', '', 'REMAINING', (t.budget || 0).toFixed(2)]);
+
+                var ws = XLSX.utils.aoa_to_sheet(tpData);
+                applyColWidths(ws, [4, 24, 16, 14, 16, 14]);
+
+                // Team header in accent color
+                var teamHeader = JSON.parse(JSON.stringify(headerStyle));
+                teamHeader.fill = { fgColor: { rgb: '0D47A1' } };
+                for (var c7 = 0; c7 < tpHeaders.length; c7++) {
+                    var addr7 = XLSX.utils.encode_cell({ r: 0, c: c7 });
+                    if (ws[addr7]) ws[addr7].s = teamHeader;
+                }
+                for (var r4 = 1; r4 < tpData.length - 2; r4++) {
+                    var isEven4 = r4 % 2 === 0;
+                    for (var c8 = 0; c8 < tpHeaders.length; c8++) {
+                        var addr8 = XLSX.utils.encode_cell({ r: r4, c: c8 });
+                        if (!ws[addr8]) continue;
+                        if (c8 === 1) ws[addr8].s = isEven4 ? evenRowLeft : cellLeft;
+                        else if (c8 === 5) ws[addr8].s = isEven4 ? moneyStyleEven : moneyStyle;
+                        else if (c8 === 3 && tpData[r4][3] !== 'India') ws[addr8].s = isEven4 ? overseasStyleEven : overseasStyle;
+                        else ws[addr8].s = isEven4 ? evenRow : cellStyle;
+                    }
+                }
+                // Style total rows
+                var totalRowStyle = {
+                    font: { bold: true, sz: 11, name: 'Calibri', color: { rgb: '000000' } },
+                    fill: { fgColor: { rgb: 'FFF9C4' } },
+                    alignment: { horizontal: 'center', vertical: 'center' },
+                    border: { top: {style:'medium',color:{rgb:'000000'}}, bottom: {style:'thin',color:{rgb:'000000'}}, left: {style:'thin',color:{rgb:'000000'}}, right: {style:'thin',color:{rgb:'000000'}} }
+                };
+                var totalRowStyleLeft = JSON.parse(JSON.stringify(totalRowStyle));
+                totalRowStyleLeft.alignment = { horizontal: 'right', vertical: 'center' };
+                for (var tr = tpData.length - 2; tr < tpData.length; tr++) {
+                    for (var tc = 0; tc < tpHeaders.length; tc++) {
+                        var addrT = XLSX.utils.encode_cell({ r: tr, c: tc });
+                        if (ws[addrT]) ws[addrT].s = (tc === 4) ? totalRowStyleLeft : totalRowStyle;
+                    }
+                }
+                XLSX.utils.book_append_sheet(wb, ws, t.name.substring(0, 30));
             });
 
             XLSX.writeFile(wb, 'IPL_Auction_' + roomCode + '.xlsx');
