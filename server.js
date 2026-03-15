@@ -766,8 +766,46 @@ io.on('connection', (socket) => {
         room.auctionState.currentBid = amount;
         room.auctionState.currentBidder = team;
         if (!room.auctionState.bidLog) room.auctionState.bidLog = [];
-        room.auctionState.bidLog.push({ type: 'bid', teamName: team.name, amount, time: Date.now() });
+        room.auctionState.bidLog.push({ type: 'bid', teamName: team.name, teamId: team.id, amount, time: Date.now() });
         saveRooms(room.code); // Save after each bid
+        io.to(room.code).emit('auctionUpdate', room.auctionState);
+    });
+
+    // Admin: Undo last bid (up to 2 steps back)
+    socket.on('undoBid', () => {
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+        if (room.auctionState.status !== 'bidding') return;
+
+        const bidLog = room.auctionState.bidLog || [];
+        // Find the last 'bid' entry to remove
+        let lastBidIndex = -1;
+        for (let i = bidLog.length - 1; i >= 0; i--) {
+            if (bidLog[i].type === 'bid') { lastBidIndex = i; break; }
+        }
+        if (lastBidIndex === -1) return; // No bids to undo
+
+        // Remove the last bid
+        bidLog.splice(lastBidIndex, 1);
+
+        // Find the new latest bid to restore state
+        let prevBid = null;
+        for (let i = bidLog.length - 1; i >= 0; i--) {
+            if (bidLog[i].type === 'bid') { prevBid = bidLog[i]; break; }
+        }
+
+        if (prevBid) {
+            // Restore to previous bid
+            room.auctionState.currentBid = prevBid.amount;
+            const prevTeam = room.teams.find(t => t.id === prevBid.teamId);
+            room.auctionState.currentBidder = prevTeam || null;
+        } else {
+            // No bids left, restore to base price
+            room.auctionState.currentBid = room.auctionState.currentPlayer ? room.auctionState.currentPlayer.basePrice : 0.2;
+            room.auctionState.currentBidder = null;
+        }
+
+        saveRooms(room.code);
         io.to(room.code).emit('auctionUpdate', room.auctionState);
     });
 
