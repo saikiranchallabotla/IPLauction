@@ -1555,7 +1555,7 @@
             // Hide landing, show app
             document.getElementById('landing-page').style.display = 'none';
             document.getElementById('main-app').style.display = 'block';
-            document.getElementById('room-code-badge').textContent = roomName || ('Room: ' + roomCode);
+            document.getElementById('room-code-badge').innerHTML = (roomName || 'Auction Room') + ' <span style="opacity:0.5;font-size:0.8em;margin-left:0.4rem;">(' + roomCode + ')</span>';
 
             // Hide admin button by default until we know if we're admin
             document.getElementById('admin-nav-btn').style.display = 'none';
