@@ -1096,7 +1096,7 @@
                                 </div>
                                 <div id="current-bidder-display" style="font-size: 0.9rem; color: white; margin-top: 0.25rem;">No bids yet</div>
                                 <input type="hidden" id="bid-amount" value="0.2">
-                                <button class="btn" onclick="undoBid()" id="undo-bid-btn" style="margin-top: 0.4rem; padding: 0.25rem 0.8rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); border: 1px solid var(--border-light); color: var(--text-secondary); border-radius: 6px; cursor: pointer;" title="Undo last bid (up to 2 steps)">&#8630; Undo Bid <span id="undo-count" style="opacity: 0.6;">(2)</span></button>
+                                <button class="btn" onclick="undoBid()" id="undo-bid-btn" style="margin-top: 0.4rem; padding: 0.25rem 0.8rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); border: 1px solid var(--border-light); color: var(--text-secondary); border-radius: 6px; cursor: pointer; opacity: 0.4;" title="Undo last bid">&#8630; Undo</button>
                             </div>
 
                             <!-- SOLD / UNSOLD Buttons -->
@@ -1362,8 +1362,6 @@
         let roomName = null;
         let isAdmin = false;
         let pendingAdminPassword = null;
-        let undosRemaining = 2;
-        let lastAuctionPlayerId = null;
         let fantasyData = { teams: [], matches: [], lastUpdated: null, configured: false };
         let selectedFantasyMatch = null;
 
@@ -1634,12 +1632,7 @@
             badge.textContent = (auctionState.status || 'waiting').toUpperCase();
 
             if (auctionState.currentPlayer) {
-                // Reset undo count when a new player comes up for auction
-                if (auctionState.currentPlayer.id !== lastAuctionPlayerId) {
-                    lastAuctionPlayerId = auctionState.currentPlayer.id;
-                    undosRemaining = 2;
-                    updateUndoButton();
-                }
+                updateUndoButton();
                 const p = auctionState.currentPlayer;
                 content.innerHTML = `
                     <div class="player-name">${p.name}</div>
@@ -2407,27 +2400,24 @@
         }
 
         function undoBid() {
-            if (undosRemaining <= 0) {
-                showAuctionPopup('Undo Limit', 'You have used both undo steps for this player. No more undos available.', true);
-                return;
-            }
+            var bidLog = (state.auctionState || {}).bidLog || [];
+            var hasBids = bidLog.some(function(b) { return b.type === 'bid'; });
+            if (!hasBids) return;
             if (!socket) return;
             socket.emit('undoBid');
-            undosRemaining--;
-            updateUndoButton();
         }
 
         function updateUndoButton() {
             var btn = document.getElementById('undo-bid-btn');
-            var countEl = document.getElementById('undo-count');
             if (!btn) return;
-            if (countEl) countEl.textContent = '(' + undosRemaining + ')';
-            if (undosRemaining <= 0) {
-                btn.style.opacity = '0.4';
-                btn.style.cursor = 'not-allowed';
-            } else {
+            var bidLog = (state.auctionState || {}).bidLog || [];
+            var hasBids = bidLog.some(function(b) { return b.type === 'bid'; });
+            if (hasBids) {
                 btn.style.opacity = '1';
                 btn.style.cursor = 'pointer';
+            } else {
+                btn.style.opacity = '0.4';
+                btn.style.cursor = 'not-allowed';
             }
         }
 
