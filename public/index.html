@@ -1572,7 +1572,9 @@
             // Initialize socket and join room
             socket = io();
             socket.on('connect', () => {
-                socket.emit('joinRoom', roomCode, pendingAdminPassword || null);
+                // On reconnect, use stored admin password from localStorage
+                var adminPass = pendingAdminPassword || localStorage.getItem('adminPass_' + roomCode) || null;
+                socket.emit('joinRoom', roomCode, adminPass);
             });
 
             socket.on('adminStatus', (data) => {
