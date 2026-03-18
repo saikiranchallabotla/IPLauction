@@ -1104,7 +1104,10 @@
                 <div class="admin-right-panel">
                     <!-- Current Player - Compact -->
                     <div class="card" style="margin-bottom: 0;">
-                        <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Current Player</h3>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <h3 class="card-title" style="font-size: 0.9rem; margin-bottom: 0; border-bottom: none; padding-bottom: 0;">Current Player</h3>
+                            <div id="admin-timer-display" class="auction-timer" style="display:none;"></div>
+                        </div>
                         <div class="auction-display" id="admin-current-player" style="min-height: 80px; padding: 0.5rem;">
                             <div class="player-name" style="font-size: 1.2rem;">No Player Selected</div>
                         </div>
@@ -2559,19 +2562,23 @@
         function stopAuctionTimer() {
             if (auctionTimerInterval) { clearInterval(auctionTimerInterval); auctionTimerInterval = null; }
             lastTimerStart = null;
+            var adminEl = document.getElementById('admin-timer-display');
+            if (adminEl) adminEl.style.display = 'none';
         }
 
         function updateTimerDisplay(timerStart) {
             var el = document.getElementById('auction-timer-display');
-            if (!el) return;
+            var adminEl = document.getElementById('admin-timer-display');
+            if (!el && !adminEl) return;
             var elapsed = Date.now() - timerStart;
             var totalMs = 2 * 60 * 1000; // 2 minutes
             var remaining = totalMs - elapsed;
 
             if (remaining <= 0) {
-                el.textContent = '⏱ 0:00 — TIME UP!';
-                el.className = 'auction-timer danger';
-                el.style.display = 'inline-flex';
+                var text = '⏱ 0:00 — TIME UP!';
+                var cls = 'auction-timer danger';
+                if (el) { el.textContent = text; el.className = cls; el.style.display = 'inline-flex'; }
+                if (adminEl) { adminEl.textContent = text; adminEl.className = cls; adminEl.style.display = 'inline-flex'; }
                 if (auctionTimerInterval) { clearInterval(auctionTimerInterval); auctionTimerInterval = null; }
                 return;
             }
@@ -2579,12 +2586,11 @@
             var secs = Math.ceil(remaining / 1000);
             var m = Math.floor(secs / 60);
             var s = secs % 60;
-            el.textContent = '⏱ ' + m + ':' + (s < 10 ? '0' : '') + s;
-            el.style.display = 'inline-flex';
+            var text = '⏱ ' + m + ':' + (s < 10 ? '0' : '') + s;
+            var cls = remaining <= 30000 ? 'auction-timer danger' : remaining <= 60000 ? 'auction-timer warning' : 'auction-timer';
 
-            if (remaining <= 30000) el.className = 'auction-timer danger';
-            else if (remaining <= 60000) el.className = 'auction-timer warning';
-            else el.className = 'auction-timer';
+            if (el) { el.textContent = text; el.className = cls; el.style.display = 'inline-flex'; }
+            if (adminEl) { adminEl.textContent = text; adminEl.className = cls; adminEl.style.display = 'inline-flex'; }
         }
 
         // Team bid button click - auto increment and set bidder
