@@ -935,13 +935,8 @@ io.on('connection', (socket) => {
             if (overseasCount >= 6) return;
         }
 
-        // Min 12 players budget check - ensure remaining budget can fill squad
-        const remainingBudgetAfterBid = Math.round((team.budget - amount) * 100) / 100;
-        const playersNeededAfterThis = 12 - (playerCount + 1);
-        if (playersNeededAfterThis > 0) {
-            const minBudgetNeeded = Math.round(playersNeededAfterThis * 0.2 * 100) / 100; // 20L minimum per player
-            if (remainingBudgetAfterBid < minBudgetNeeded) return;
-        }
+        // Min 12 players budget check - warn only, do not hard-block bids
+        // (hard-blocking was preventing valid purchases when remaining budget < 20L per slot)
 
         room.auctionState.currentBid = amount;
         room.auctionState.currentBidder = team;

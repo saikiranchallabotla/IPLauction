@@ -2926,13 +2926,9 @@
             const remainingBudgetAfterBid = Math.round((budget - newBid) * 100) / 100;
             const playersNeededAfterThis = MIN_PLAYERS - (currentPlayerCount + 1);
             if (playersNeededAfterThis > 0) {
-                const minPricePerPlayer = 0.2; // 20L minimum base price
+                const minPricePerPlayer = 0.1; // 10L minimum reserve per remaining slot
                 const minBudgetNeeded = Math.round(playersNeededAfterThis * minPricePerPlayer * 100) / 100;
-                if (Math.round(remainingBudgetAfterBid * 100) < Math.round(minBudgetNeeded * 100)) {
-                    showAuctionPopup('Budget Warning - Bid Blocked', `${team.name} cannot place this bid. After buying this player for ${formatPrice(newBid)}, the remaining budget of ${formatPrice(remainingBudgetAfterBid)} is not enough to fill the squad to minimum ${MIN_PLAYERS} players. Need at least ${formatPrice(minBudgetNeeded)} more for ${playersNeededAfterThis} remaining slots at minimum price.`);
-                    return;
-                }
-                // Show warning if budget is getting low (less than double the minimum needed)
+                // Show warning if budget is getting low, but always allow the bid
                 if (remainingBudgetAfterBid < minBudgetNeeded * 2) {
                     showAuctionPopup('Budget Warning', `Warning: ${team.name} will have only ${formatPrice(remainingBudgetAfterBid)} left after this bid. Still need ${playersNeededAfterThis} more players to reach minimum squad size of ${MIN_PLAYERS}. Bid is allowed but be careful!`, true);
                 }
