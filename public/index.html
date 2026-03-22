@@ -1746,8 +1746,8 @@
             });
         }
 
-        function showEnterRoomPopup(clickedRoomName) {
-            document.getElementById('enter-room-code').value = '';
+        function showEnterRoomPopup(clickedRoomName, clickedRoomCode) {
+            document.getElementById('enter-room-code').value = clickedRoomCode || '';
             document.getElementById('enter-room-password').value = '';
             document.getElementById('enter-room-error').style.display = 'none';
             if (clickedRoomName) {
@@ -1756,7 +1756,11 @@
                 document.getElementById('enter-room-title').textContent = 'Enter Room';
             }
             document.getElementById('enter-room-popup').classList.add('active');
-            document.getElementById('enter-room-code').focus();
+            if (clickedRoomCode) {
+                document.getElementById('enter-room-password').focus();
+            } else {
+                document.getElementById('enter-room-code').focus();
+            }
         }
 
         async function confirmEnterRoom() {
@@ -1826,15 +1830,17 @@
                     var isLive = r.status === 'bidding';
                     var age = getTimeAgo(r.createdAt);
                     var safeName = (r.roomName || 'Auction Room').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    return '<div class="room-list-item" onclick="showEnterRoomPopup(\'' + safeName + '\')">' +
+                    var safeCode = (r.code || '').replace(/'/g, "\\'");
+                    return '<div class="room-list-item" onclick="showEnterRoomPopup(\'' + safeName + '\', \'' + safeCode + '\')">' +
                         '<div>' +
                             '<div class="room-info">' +
                                 '<span class="room-status-dot ' + (isLive ? 'live' : 'idle') + '"></span>' +
                                 '<strong>' + (r.roomName || 'Auction Room') + '</strong>' +
+                                (r.code ? '<span style="font-size:0.78em;color:var(--text-secondary);margin-left:0.5rem;">(' + r.code + ')</span>' : '') +
                             '</div>' +
                             '<div class="room-meta">' + r.teamCount + ' teams | ' + r.playersSold + ' sold | ' + age + '</div>' +
                         '</div>' +
-                        '<button class="room-join-btn" onclick="event.stopPropagation(); showEnterRoomPopup(\'' + safeName + '\')">Enter</button>' +
+                        '<button class="room-join-btn" onclick="event.stopPropagation(); showEnterRoomPopup(\'' + safeName + '\', \'' + safeCode + '\')">Enter</button>' +
                     '</div>';
                 }).join('');
             } catch (err) {
