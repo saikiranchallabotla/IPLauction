@@ -2054,7 +2054,7 @@
             const auctionPlayer = state.auctionState?.currentPlayer;
             const bidBtnsHtml = teams.map(t => {
                 const budget = t.budget != null ? t.budget : initialBudget;
-                const canAfford = budget >= nextBid;
+                const canAfford = Math.round(budget * 100) >= Math.round(nextBid * 100);
                 const isCurrentBidder = state.auctionState?.currentBidder?.id === t.id;
                 const playerCount = (t.players || []).length;
                 const overseasCount = (t.players || []).filter(p => p.country !== 'India').length;
@@ -2916,19 +2916,19 @@
             }
             // If no one has bid yet (first bid) or same team clicking again, keep currentBid as is
 
-            // Check if team can afford
-            if (budget < newBid) {
+            // Check if team can afford (use rounded comparison to avoid floating-point issues)
+            if (Math.round(budget * 100) < Math.round(newBid * 100)) {
                 showAuctionPopup('Insufficient Budget', `${team.name} cannot afford ${formatPrice(newBid)}. Remaining budget: ${formatPrice(budget)}.`);
                 return;
             }
 
             // Check if remaining budget after this bid can accommodate minimum 12 players
-            const remainingBudgetAfterBid = budget - newBid;
+            const remainingBudgetAfterBid = Math.round((budget - newBid) * 100) / 100;
             const playersNeededAfterThis = MIN_PLAYERS - (currentPlayerCount + 1);
             if (playersNeededAfterThis > 0) {
                 const minPricePerPlayer = 0.2; // 20L minimum base price
-                const minBudgetNeeded = playersNeededAfterThis * minPricePerPlayer;
-                if (remainingBudgetAfterBid < minBudgetNeeded) {
+                const minBudgetNeeded = Math.round(playersNeededAfterThis * minPricePerPlayer * 100) / 100;
+                if (Math.round(remainingBudgetAfterBid * 100) < Math.round(minBudgetNeeded * 100)) {
                     showAuctionPopup('Budget Warning - Bid Blocked', `${team.name} cannot place this bid. After buying this player for ${formatPrice(newBid)}, the remaining budget of ${formatPrice(remainingBudgetAfterBid)} is not enough to fill the squad to minimum ${MIN_PLAYERS} players. Need at least ${formatPrice(minBudgetNeeded)} more for ${playersNeededAfterThis} remaining slots at minimum price.`);
                     return;
                 }
