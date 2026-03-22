@@ -187,6 +187,13 @@
         }
         .btn-join:hover { box-shadow: 0 8px 25px var(--accent-glow); }
 
+        .btn-import {
+            background: linear-gradient(135deg, #00897b, #26a69a);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(0,137,123,0.4);
+        }
+        .btn-import:hover { box-shadow: 0 8px 25px rgba(0,137,123,0.6); }
+
         .room-code-display {
             display: none;
             text-align: center;
@@ -1195,6 +1202,22 @@
                 <p>Enter the room code shared by the admin to join</p>
                 <button class="btn-large btn-join" onclick="showEnterRoomPopup()">Enter Room</button>
                 <div class="error-msg" id="join-error"></div>
+            </div>
+
+            <div class="landing-section">
+                <h2>Restore from Excel</h2>
+                <p>Lost your room? Import your previously exported Excel file to continue the auction</p>
+                <label class="btn-large btn-import" style="display:inline-block;cursor:pointer;">
+                    Choose Excel File
+                    <input type="file" id="import-excel-file" accept=".xlsx,.xls" style="display:none;" onchange="previewImportFile(this)">
+                </label>
+                <div id="import-file-info" style="display:none; margin-top:0.75rem; padding:0.6rem 1rem; background:rgba(255,255,255,0.05); border-radius:10px; font-size:0.85rem; color:var(--text-secondary);"></div>
+                <div id="import-form" style="display:none; margin-top:1rem;">
+                    <input type="text" id="import-room-name" placeholder="Room name (e.g. IPL 2026 Auction)" style="width:100%;box-sizing:border-box;padding:0.55rem 0.9rem;border:1px solid var(--border-light);border-radius:10px;background:var(--dark-elevated);color:var(--text);font-family:'Outfit',sans-serif;font-size:0.95rem;margin-bottom:0.6rem;">
+                    <input type="password" id="import-admin-pass" placeholder="Set an admin password" style="width:100%;box-sizing:border-box;padding:0.55rem 0.9rem;border:1px solid var(--border-light);border-radius:10px;background:var(--dark-elevated);color:var(--text);font-family:'Outfit',sans-serif;font-size:0.95rem;margin-bottom:0.75rem;">
+                    <button class="btn-large btn-create" style="width:100%;font-size:1rem;" onclick="importFromExcel()">Restore Auction Room</button>
+                </div>
+                <div class="error-msg" id="import-error" style="margin-top:0.5rem;"></div>
             </div>
 
             <div class="landing-section" id="active-rooms-section" style="display: none;">
@@ -3282,6 +3305,144 @@
             document.getElementById('sold-price').textContent = 'for ' + formatPrice(price);
             document.getElementById('sold-overlay').classList.add('active');
             setTimeout(() => document.getElementById('sold-overlay').classList.remove('active'), 3000);
+        }
+
+        // ============ EXCEL IMPORT ============
+
+        var importWorkbook = null;
+
+        function previewImportFile(input) {
+            var file = input.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    importWorkbook = XLSX.read(e.target.result, { type: 'array' });
+                    var sheetNames = importWorkbook.SheetNames;
+                    var info = document.getElementById('import-file-info');
+                    info.style.display = 'block';
+                    info.innerHTML = '<b>File:</b> ' + file.name + '<br><b>Sheets found:</b> ' + sheetNames.join(', ');
+                    document.getElementById('import-form').style.display = 'block';
+                    document.getElementById('import-error').textContent = '';
+                } catch(err) {
+                    document.getElementById('import-error').textContent = 'Could not read file: ' + err.message;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function sheetToRows(wb, sheetName) {
+            var ws = wb.Sheets[sheetName];
+            if (!ws) return [];
+            return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        }
+
+        function importFromExcel() {
+            if (!importWorkbook) {
+                document.getElementById('import-error').textContent = 'Please select an Excel file first.';
+                return;
+            }
+            var importRoomName = document.getElementById('import-room-name').value.trim();
+            var adminPass = document.getElementById('import-admin-pass').value.trim();
+            if (!importRoomName) { document.getElementById('import-error').textContent = 'Please enter a room name.'; return; }
+            if (!adminPass) { document.getElementById('import-error').textContent = 'Please set an admin password.'; return; }
+
+            document.getElementById('import-error').textContent = '';
+
+            // Parse Teams Summary sheet
+            var teamsRows = sheetToRows(importWorkbook, 'Teams Summary');
+            var teams = [];
+            for (var i = 1; i < teamsRows.length; i++) {
+                var row = teamsRows[i];
+                if (!row[1]) continue; // skip empty
+                teams.push({
+                    name: String(row[1]).trim(),
+                    budget: parseFloat(row[3]) || 0
+                });
+            }
+            if (teams.length === 0) {
+                document.getElementById('import-error').textContent = 'No teams found in "Teams Summary" sheet.';
+                return;
+            }
+
+            // Parse Sold Players sheet
+            var soldRows = sheetToRows(importWorkbook, 'Sold Players');
+            var soldPlayers = [];
+            for (var j = 1; j < soldRows.length; j++) {
+                var r = soldRows[j];
+                if (!r[1]) continue;
+                soldPlayers.push({
+                    name: String(r[1]).trim(),
+                    role: String(r[2]).trim(),
+                    country: String(r[3]).trim(),
+                    previousTeam: String(r[4]).trim(),
+                    soldToName: String(r[5]).trim(),
+                    soldPrice: parseFloat(r[6]) || 0
+                });
+            }
+
+            // Parse Unsold Players sheet (optional)
+            var unsoldPlayers = [];
+            if (importWorkbook.SheetNames.indexOf('Unsold Players') >= 0) {
+                var unsoldRows = sheetToRows(importWorkbook, 'Unsold Players');
+                for (var k = 1; k < unsoldRows.length; k++) {
+                    var ur = unsoldRows[k];
+                    if (!ur[1]) continue;
+                    unsoldPlayers.push({
+                        name: String(ur[1]).trim(),
+                        role: String(ur[2]).trim(),
+                        country: String(ur[3]).trim(),
+                        previousTeam: String(ur[4]).trim(),
+                        basePrice: parseFloat(ur[5]) || 0.2
+                    });
+                }
+            }
+
+            // Parse All Players (IPL Team) sheet
+            var allPlayers = [];
+            if (importWorkbook.SheetNames.indexOf('All Players (IPL Team)') >= 0) {
+                var aplRows = sheetToRows(importWorkbook, 'All Players (IPL Team)');
+                for (var m = 1; m < aplRows.length; m++) {
+                    var ar = aplRows[m];
+                    if (!ar[1] || ar[0] === '') continue; // skip headers/separators
+                    var statusRaw = String(ar[5]).trim().toUpperCase();
+                    var status = statusRaw === 'SOLD' ? 'sold' : statusRaw === 'UNSOLD' ? 'unsold' : 'available';
+                    allPlayers.push({
+                        name: String(ar[1]).trim(),
+                        role: String(ar[2]).trim(),
+                        country: String(ar[3]).trim(),
+                        basePrice: parseFloat(ar[4]) || 0.2,
+                        status: status
+                    });
+                }
+            }
+
+            // Send to backend
+            var importBtn = document.querySelector('#import-form .btn-large');
+            if (importBtn) { importBtn.disabled = true; importBtn.textContent = 'Restoring...'; }
+            fetch('/api/room/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminPassword: adminPass, roomName: importRoomName, teams: teams, soldPlayers: soldPlayers, unsoldPlayers: unsoldPlayers, allPlayers: allPlayers })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (importBtn) { importBtn.disabled = false; importBtn.textContent = 'Restore Auction Room'; }
+                if (data.error) {
+                    document.getElementById('import-error').textContent = data.error;
+                    return;
+                }
+                // Auto-enter the restored room as admin
+                roomCode = data.code;
+                roomName = importRoomName;
+                pendingAdminPassword = adminPass;
+                localStorage.setItem('adminPass_' + data.code, adminPass);
+                enterAuction();
+            })
+            .catch(function(err) {
+                if (importBtn) { importBtn.disabled = false; importBtn.textContent = 'Restore Auction Room'; }
+                document.getElementById('import-error').textContent = 'Import failed: ' + err.message;
+            });
         }
 
         function exportToExcel() {
