@@ -476,6 +476,166 @@ app.post('/api/room/create', (req, res) => {
     res.json({ code });
 });
 
+// Import auction data from Excel export to create a new room
+app.post('/api/room/import', (req, res) => {
+    const { adminPassword, roomName, teams, soldPlayers, unsoldPlayers, allPlayers } = req.body || {};
+    if (!adminPassword || adminPassword.trim().length === 0) {
+        return res.status(400).json({ error: 'Admin password is required.' });
+    }
+    if (!roomName || roomName.trim().length === 0) {
+        return res.status(400).json({ error: 'Room name is required.' });
+    }
+    if (!teams || !Array.isArray(teams) || teams.length === 0) {
+        return res.status(400).json({ error: 'No teams found in Excel data.' });
+    }
+
+    let code = generateRoomCode();
+    while (rooms.has(code)) code = generateRoomCode();
+
+    // Build players list: start from allPlayers (with base prices), fall back to players.json
+    const basePlayerMap = new Map(playersData.map(p => [p.name.toLowerCase(), p]));
+
+    // Build a map from player name → base price from allPlayers sheet
+    const allPlayersMap = new Map();
+    (allPlayers || []).forEach(p => {
+        if (p.name) allPlayersMap.set(p.name.toLowerCase(), p);
+    });
+
+    // Collect all unique player names across sold + unsold + allPlayers
+    const playerNames = new Set();
+    (allPlayers || []).forEach(p => p.name && playerNames.add(p.name));
+    (soldPlayers || []).forEach(p => p.name && playerNames.add(p.name));
+    (unsoldPlayers || []).forEach(p => p.name && playerNames.add(p.name));
+
+    // Build reconstructed players array
+    let playerIdCounter = 1;
+    const reconstructedPlayers = [];
+    const playerIdByName = new Map();
+
+    for (const name of playerNames) {
+        const key = name.toLowerCase();
+        const fromAll = allPlayersMap.get(key);
+        const fromBase = basePlayerMap.get(key);
+        const player = {
+            id: playerIdCounter++,
+            name: fromAll?.name || fromBase?.name || name,
+            role: fromAll?.role || fromBase?.role || 'Batsman',
+            country: fromAll?.country || fromBase?.country || 'India',
+            previousTeam: fromAll?.previousTeam || fromBase?.previousTeam || 'Uncapped',
+            basePrice: fromAll?.basePrice || fromBase?.basePrice || 0.2,
+            status: fromAll?.status || 'available',
+            soldTo: null,
+            soldToName: null,
+            soldPrice: null
+        };
+        playerIdByName.set(key, player.id);
+        reconstructedPlayers.push(player);
+    }
+
+    // Build team objects
+    const reconstructedTeams = teams.map((t, i) => ({
+        id: `team_${Date.now()}_${i}`,
+        name: t.name,
+        ownerName: t.ownerName || '',
+        budget: typeof t.budget === 'number' ? t.budget : INITIAL_BUDGET,
+        players: []
+    }));
+    const teamByName = new Map(reconstructedTeams.map(t => [t.name.toLowerCase(), t]));
+
+    // Apply sold players: update player status and add to teams
+    const reconstructedSoldPlayers = [];
+    (soldPlayers || []).forEach(sp => {
+        if (!sp.name || !sp.soldToName) return;
+        const key = sp.name.toLowerCase();
+        let player = reconstructedPlayers.find(p => p.name.toLowerCase() === key);
+        if (!player) {
+            // Player not in allPlayers sheet - create it
+            const fromBase = basePlayerMap.get(key);
+            player = {
+                id: playerIdCounter++,
+                name: sp.name,
+                role: sp.role || fromBase?.role || 'Batsman',
+                country: sp.country || fromBase?.country || 'India',
+                previousTeam: sp.previousTeam || fromBase?.previousTeam || 'Uncapped',
+                basePrice: fromBase?.basePrice || 0.2,
+                status: 'available',
+                soldTo: null, soldToName: null, soldPrice: null
+            };
+            playerIdByName.set(key, player.id);
+            reconstructedPlayers.push(player);
+        }
+        const team = teamByName.get(sp.soldToName.toLowerCase());
+        if (!team) return;
+
+        const soldPrice = typeof sp.soldPrice === 'number' ? sp.soldPrice : 0;
+        player.status = 'sold';
+        player.soldTo = team.id;
+        player.soldToName = team.name;
+        player.soldPrice = soldPrice;
+
+        const playerForTeam = { ...player };
+        team.players.push(playerForTeam);
+        reconstructedSoldPlayers.push({ ...player });
+    });
+
+    // Apply unsold players
+    const reconstructedUnsoldPlayers = [];
+    (unsoldPlayers || []).forEach(up => {
+        if (!up.name) return;
+        const key = up.name.toLowerCase();
+        let player = reconstructedPlayers.find(p => p.name.toLowerCase() === key);
+        if (!player) {
+            const fromBase = basePlayerMap.get(key);
+            player = {
+                id: playerIdCounter++,
+                name: up.name,
+                role: up.role || fromBase?.role || 'Batsman',
+                country: up.country || fromBase?.country || 'India',
+                previousTeam: up.previousTeam || fromBase?.previousTeam || 'Uncapped',
+                basePrice: up.basePrice || fromBase?.basePrice || 0.2,
+                status: 'available',
+                soldTo: null, soldToName: null, soldPrice: null
+            };
+            reconstructedPlayers.push(player);
+        }
+        player.status = 'unsold';
+        reconstructedUnsoldPlayers.push({ ...player });
+    });
+
+    // Any player still 'available' in allPlayers with SOLD/UNSOLD status from that sheet
+    reconstructedPlayers.forEach(p => {
+        const fromAll = allPlayersMap.get(p.name.toLowerCase());
+        if (!fromAll) return;
+        if (fromAll.status === 'sold' && p.status === 'available') p.status = 'sold';
+        else if (fromAll.status === 'unsold' && p.status === 'available') p.status = 'unsold';
+    });
+
+    const room = {
+        code,
+        roomName: roomName.trim(),
+        createdAt: Date.now(),
+        adminPassword: adminPassword.trim(),
+        teams: reconstructedTeams,
+        players: reconstructedPlayers,
+        auctionState: {
+            status: 'waiting',
+            currentPlayer: null,
+            currentBid: 0,
+            currentBidder: null,
+            soldPlayers: reconstructedSoldPlayers,
+            unsoldPlayers: reconstructedUnsoldPlayers,
+            bidLog: [],
+            bidHistory: [],
+            auctionFinished: false
+        }
+    };
+
+    rooms.set(code, room);
+    saveRooms(code);
+    console.log(`Room imported: ${code} (${roomName.trim()}) - ${reconstructedTeams.length} teams, ${reconstructedSoldPlayers.length} sold players`);
+    res.json({ code });
+});
+
 // Join an existing room
 app.post('/api/room/join', (req, res) => {
     const { code } = req.body;
