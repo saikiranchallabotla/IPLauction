@@ -1204,6 +1204,50 @@ io.on('connection', (socket) => {
         io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
     });
 
+    // Admin: Release player from team (return to unsold pool)
+    socket.on('releasePlayer', ({ teamId, playerName }) => {
+        const room = getRoom(socket.roomCode);
+        if (!room) return;
+
+        const team = room.teams.find(t => t.id === teamId);
+        if (!team) return;
+
+        const playerIndex = team.players.findIndex(p => p.name === playerName);
+        if (playerIndex === -1) return;
+
+        const player = team.players[playerIndex];
+        const refundAmount = player.soldPrice || 0;
+
+        // Remove player from team
+        team.players.splice(playerIndex, 1);
+
+        // Refund budget (round to avoid floating-point drift)
+        team.budget = Math.round((team.budget + refundAmount) * 100) / 100;
+
+        // Update global player status back to unsold
+        const globalPlayer = room.players.find(p => p.name === playerName);
+        if (globalPlayer) {
+            globalPlayer.status = 'unsold';
+            globalPlayer.soldTo = null;
+            globalPlayer.soldToName = null;
+            globalPlayer.soldPrice = null;
+        }
+
+        // Remove from soldPlayers list
+        room.auctionState.soldPlayers = room.auctionState.soldPlayers.filter(
+            p => p.name !== playerName
+        );
+
+        // Add to unsoldPlayers list (so they can be re-auctioned)
+        if (globalPlayer) {
+            room.auctionState.unsoldPlayers.push(globalPlayer);
+        }
+
+        saveRooms(room.code);
+        console.log(`Released: ${playerName} from ${team.name}, refunded ${refundAmount} Cr`);
+        io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+    });
+
     // Admin: Add new player and assign to a team
     socket.on('addPlayer', ({ name, role, country, previousTeam, basePrice, assignToTeamId }) => {
         const room = getRoom(socket.roomCode);

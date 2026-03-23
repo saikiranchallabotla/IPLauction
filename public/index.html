@@ -606,6 +606,38 @@
         }
         .delete-btn:hover { background: var(--danger-glow); transform: scale(1.1); }
 
+        /* Squad player action buttons */
+        .squad-action-btn {
+            background: none; border: none; cursor: pointer;
+            font-size: 0.85rem; padding: 0.15rem 0.4rem; border-radius: 4px;
+            transition: all 0.2s ease; opacity: 0.7;
+        }
+        .squad-action-btn:hover { opacity: 1; transform: scale(1.15); }
+        .squad-action-btn.release-btn { color: var(--danger); }
+        .squad-action-btn.release-btn:hover { background: var(--danger-glow); }
+        .squad-action-btn.move-btn { color: var(--accent); }
+        .squad-action-btn.move-btn:hover { background: rgba(255, 193, 7, 0.15); }
+
+        /* Trade modal */
+        .trade-modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); z-index: 10000;
+            justify-content: center; align-items: center;
+        }
+        .trade-modal-overlay.active { display: flex; }
+        .trade-modal {
+            background: var(--card); border: 2px solid var(--accent);
+            border-radius: 16px; padding: 1.5rem; max-width: 400px; width: 90%;
+            backdrop-filter: blur(20px);
+        }
+        .trade-modal h3 { color: var(--accent); font-size: 1.1rem; margin-bottom: 1rem; }
+        .trade-modal label { font-size: 0.78rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem; }
+        .trade-modal select, .trade-modal input {
+            width: 100%; padding: 0.5rem; border: 1px solid var(--border-light);
+            border-radius: 8px; background: var(--dark-elevated); color: var(--text);
+            font-family: 'Outfit', sans-serif; margin-bottom: 0.6rem;
+        }
+
         /* ============ HISTORY ============ */
         .history-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
         .stat-box {
@@ -1601,6 +1633,28 @@
         </div>
     </div>
 
+    <!-- Trade Modal (for Move/Trade from Team Squads) -->
+    <div class="trade-modal-overlay" id="trade-modal">
+        <div class="trade-modal">
+            <h3 id="trade-modal-title">Move Player</h3>
+            <p id="trade-modal-player" style="color: var(--text); margin-bottom: 0.8rem; font-weight: 600;"></p>
+            <div>
+                <label>Destination Team</label>
+                <select id="trade-modal-dest-team">
+                    <option value="">Select team...</option>
+                </select>
+            </div>
+            <div>
+                <label>Trade Price (Cr) <span style="opacity: 0.5;">(leave empty = same as bought)</span></label>
+                <input type="number" id="trade-modal-price" step="0.1" min="0.2" placeholder="Same as bought">
+            </div>
+            <div style="display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem;">
+                <button class="popup-btn popup-btn-confirm" id="trade-modal-confirm">Move Player</button>
+                <button class="popup-btn popup-btn-cancel" onclick="closeTradeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Auction Warning Popup -->
     <div class="auction-popup-overlay" id="auction-popup">
         <div class="auction-popup">
@@ -2354,9 +2408,15 @@
             // Team squads
             const teamsHtml = state.teams.map(t => {
                 const teamPlayers = (t.players || []).map(p => `
-                    <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
                         <span>${p.name} (${p.role})</span>
-                        <span style="color: var(--accent);">${formatPrice(p.soldPrice || 0)}</span>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="color: var(--accent);">${formatPrice(p.soldPrice || 0)}</span>
+                            ${isAdmin ? `
+                                <button class="squad-action-btn move-btn" onclick="openTradeModal('${t.id}', '${p.name.replace(/'/g, "\\\\'")}', ${p.soldPrice || 0})" title="Move/Trade">&#8644;</button>
+                                <button class="squad-action-btn release-btn" onclick="releasePlayer('${t.id}', '${p.name.replace(/'/g, "\\\\'")}')" title="Release Player">&#10005;</button>
+                            ` : ''}
+                        </div>
                     </div>
                 `).join('');
                 const budget = t.budget != null ? t.budget : (state.config?.initialBudget || 100);
@@ -2414,6 +2474,68 @@
             const yes = await showConfirmPopup('Re-Auction', 'Bring this player back into auction?', 'Re-Auction');
             if (!yes) return;
             if (socket) socket.emit('reAuctionPlayer', playerId);
+        }
+
+        async function releasePlayer(teamId, playerName) {
+            const team = (state.teams || []).find(t => t.id === teamId);
+            const teamName = team ? team.name : 'Unknown';
+            const player = team ? (team.players || []).find(p => p.name === playerName) : null;
+            const price = player ? formatPrice(player.soldPrice || 0) : '?';
+
+            const yes = await showConfirmPopup(
+                'Release Player',
+                'Release ' + playerName + ' from ' + teamName + '? The sold price (' + price + ') will be refunded to the team budget.',
+                'Release'
+            );
+            if (!yes) return;
+            if (socket) socket.emit('releasePlayer', { teamId: teamId, playerName: playerName });
+        }
+
+        function openTradeModal(fromTeamId, playerName, soldPrice) {
+            const fromTeam = (state.teams || []).find(t => t.id === fromTeamId);
+            document.getElementById('trade-modal-title').textContent = 'Move Player';
+            document.getElementById('trade-modal-player').textContent = playerName + ' (from ' + (fromTeam ? fromTeam.name : '?') + ') - ' + formatPrice(soldPrice);
+
+            var destSelect = document.getElementById('trade-modal-dest-team');
+            destSelect.innerHTML = '<option value="">Select team...</option>' +
+                (state.teams || []).filter(t => t.id !== fromTeamId).map(t =>
+                    '<option value="' + t.id + '">' + t.name + ' (Budget: ' + (t.budget || 0).toFixed(2) + ' Cr)</option>'
+                ).join('');
+
+            document.getElementById('trade-modal-price').value = '';
+
+            var confirmBtn = document.getElementById('trade-modal-confirm');
+            confirmBtn.onclick = async function() {
+                var toTeamId = destSelect.value;
+                if (!toTeamId) {
+                    showAuctionPopup('Missing Info', 'Please select a destination team.', true);
+                    return;
+                }
+                var tradePriceInput = document.getElementById('trade-modal-price').value;
+                var tradePrice = tradePriceInput ? parseFloat(tradePriceInput) : null;
+
+                var toTeam = (state.teams || []).find(t => t.id === toTeamId);
+                var msg = 'Move ' + playerName + ' from ' + (fromTeam ? fromTeam.name : '?') + ' to ' + (toTeam ? toTeam.name : '?');
+                if (tradePrice != null) msg += ' for ' + tradePrice.toFixed(2) + ' Cr';
+                msg += '?';
+
+                var yes = await showConfirmPopup('Confirm Trade', msg, 'Trade');
+                if (!yes) return;
+
+                socket.emit('tradePlayer', {
+                    playerName: playerName,
+                    fromTeamId: fromTeamId,
+                    toTeamId: toTeamId,
+                    tradePrice: tradePrice
+                });
+                closeTradeModal();
+            };
+
+            document.getElementById('trade-modal').classList.add('active');
+        }
+
+        function closeTradeModal() {
+            document.getElementById('trade-modal').classList.remove('active');
         }
 
         function renderUnsoldAdmin() {
