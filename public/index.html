@@ -2054,7 +2054,7 @@
             const auctionPlayer = state.auctionState?.currentPlayer;
             const bidBtnsHtml = teams.map(t => {
                 const budget = t.budget != null ? t.budget : initialBudget;
-                const canAfford = budget >= nextBid;
+                const canAfford = roundBid(budget) >= nextBid;
                 const isCurrentBidder = state.auctionState?.currentBidder?.id === t.id;
                 const playerCount = (t.players || []).length;
                 const overseasCount = (t.players || []).filter(p => p.country !== 'India').length;
@@ -2917,17 +2917,17 @@
             // If no one has bid yet (first bid) or same team clicking again, keep currentBid as is
 
             // Check if team can afford
-            if (budget < newBid) {
+            if (roundBid(budget) < newBid) {
                 showAuctionPopup('Insufficient Budget', `${team.name} cannot afford ${formatPrice(newBid)}. Remaining budget: ${formatPrice(budget)}.`);
                 return;
             }
 
             // Check if remaining budget after this bid can accommodate minimum 12 players
-            const remainingBudgetAfterBid = budget - newBid;
+            const remainingBudgetAfterBid = roundBid(budget - newBid);
             const playersNeededAfterThis = MIN_PLAYERS - (currentPlayerCount + 1);
             if (playersNeededAfterThis > 0) {
                 const minPricePerPlayer = 0.2; // 20L minimum base price
-                const minBudgetNeeded = playersNeededAfterThis * minPricePerPlayer;
+                const minBudgetNeeded = roundBid(playersNeededAfterThis * minPricePerPlayer);
                 if (remainingBudgetAfterBid < minBudgetNeeded) {
                     showAuctionPopup('Budget Warning - Bid Blocked', `${team.name} cannot place this bid. After buying this player for ${formatPrice(newBid)}, the remaining budget of ${formatPrice(remainingBudgetAfterBid)} is not enough to fill the squad to minimum ${MIN_PLAYERS} players. Need at least ${formatPrice(minBudgetNeeded)} more for ${playersNeededAfterThis} remaining slots at minimum price.`);
                     return;

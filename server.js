@@ -921,8 +921,8 @@ io.on('connection', (socket) => {
         const team = room.teams.find(t => t.id === teamId);
         if (!team || room.auctionState.status !== 'bidding') return;
 
-        // Budget check
-        if (amount > team.budget) return;
+        // Budget check (round to handle floating-point precision)
+        if (amount > Math.round(team.budget * 100) / 100) return;
 
         // Max 16 players check
         const playerCount = (team.players || []).length;
@@ -936,10 +936,10 @@ io.on('connection', (socket) => {
         }
 
         // Min 12 players budget check - ensure remaining budget can fill squad
-        const remainingBudgetAfterBid = team.budget - amount;
+        const remainingBudgetAfterBid = Math.round((team.budget - amount) * 100) / 100;
         const playersNeededAfterThis = 12 - (playerCount + 1);
         if (playersNeededAfterThis > 0) {
-            const minBudgetNeeded = playersNeededAfterThis * 0.2; // 20L minimum per player
+            const minBudgetNeeded = Math.round(playersNeededAfterThis * 0.2 * 100) / 100; // 20L minimum per player
             if (remainingBudgetAfterBid < minBudgetNeeded) return;
         }
 
@@ -1013,8 +1013,8 @@ io.on('connection', (socket) => {
         room.players[playerIndex].soldToName = team.name;
         room.players[playerIndex].soldPrice = price;
 
-        // Update team
-        room.teams[teamIndex].budget -= price;
+        // Update team (round to avoid floating-point drift)
+        room.teams[teamIndex].budget = Math.round((room.teams[teamIndex].budget - price) * 100) / 100;
         room.teams[teamIndex].players.push({
             ...room.players[playerIndex],
             soldPrice: price
@@ -1160,8 +1160,8 @@ io.on('connection', (socket) => {
         const player = fromTeam.players[playerIndex];
         const price = tradePrice != null ? tradePrice : player.soldPrice;
 
-        // Check target team budget
-        if (price > toTeam.budget) return;
+        // Check target team budget (round to handle floating-point precision)
+        if (price > Math.round(toTeam.budget * 100) / 100) return;
 
         // Check max 16 players
         if ((toTeam.players || []).length >= 16) return;
@@ -1174,14 +1174,14 @@ io.on('connection', (socket) => {
 
         // Remove from source team
         fromTeam.players.splice(playerIndex, 1);
-        fromTeam.budget += player.soldPrice;
+        fromTeam.budget = Math.round((fromTeam.budget + player.soldPrice) * 100) / 100;
 
         // Add to target team
         player.soldTo = toTeamId;
         player.soldToName = toTeam.name;
         player.soldPrice = price;
         toTeam.players.push(player);
-        toTeam.budget -= price;
+        toTeam.budget = Math.round((toTeam.budget - price) * 100) / 100;
 
         // Update in players array too
         const globalPlayer = room.players.find(p => p.name === playerName);
@@ -1228,13 +1228,13 @@ io.on('connection', (socket) => {
             const team = room.teams.find(t => t.id === assignToTeamId);
             if (team) {
                 const price = newPlayer.basePrice;
-                if (price <= team.budget && (team.players || []).length < 16) {
+                if (price <= Math.round(team.budget * 100) / 100 && (team.players || []).length < 16) {
                     newPlayer.status = 'sold';
                     newPlayer.soldTo = team.id;
                     newPlayer.soldToName = team.name;
                     newPlayer.soldPrice = price;
                     team.players.push({ ...newPlayer });
-                    team.budget -= price;
+                    team.budget = Math.round((team.budget - price) * 100) / 100;
                     room.auctionState.soldPlayers.push({ ...newPlayer });
                 }
             }
