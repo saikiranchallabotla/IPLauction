@@ -1953,10 +1953,12 @@
 
             // Initialize socket and join room
             socket = io();
+            var isReconnect = false;
             socket.on('connect', () => {
-                // On reconnect, use stored admin password from localStorage
-                var adminPass = pendingAdminPassword || localStorage.getItem('adminPass_' + roomCode) || null;
+                // Only use stored admin password on reconnects, not fresh page loads
+                var adminPass = pendingAdminPassword || (isReconnect ? localStorage.getItem('adminPass_' + roomCode) : null) || null;
                 socket.emit('joinRoom', roomCode, adminPass);
+                isReconnect = true;
             });
 
             socket.on('adminStatus', (data) => {
