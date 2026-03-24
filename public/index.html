@@ -2407,18 +2407,16 @@
 
             // Team squads
             const teamsHtml = state.teams.map(t => {
-                const teamPlayers = (t.players || []).map(p => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-                        <span>${p.name} (${p.role})</span>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <span style="color: var(--accent);">${formatPrice(p.soldPrice || 0)}</span>
-                            ${isAdmin ? `
-                                <button class="squad-action-btn move-btn" onclick="openTradeModal('${t.id}', '${p.name.replace(/'/g, "\\\\'")}', ${p.soldPrice || 0})" title="Move/Trade">&#8644;</button>
-                                <button class="squad-action-btn release-btn" onclick="releasePlayer('${t.id}', '${p.name.replace(/'/g, "\\\\'")}')" title="Release Player">&#10005;</button>
-                            ` : ''}
-                        </div>
-                    </div>
-                `).join('');
+                const teamPlayers = (t.players || []).map(p => {
+                    const safeName = p.name.replace(/'/g, '&#39;');
+                    const actionBtns = isAdmin ? '<button class="squad-action-btn move-btn" onclick="openTradeModal(\'' + t.id + '\', \'' + safeName + '\', ' + (p.soldPrice || 0) + ')" title="Move/Trade">&#8644;</button><button class="squad-action-btn release-btn" onclick="releasePlayer(\'' + t.id + '\', \'' + safeName + '\')" title="Release Player">&#10005;</button>' : '';
+                    return '<div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border);">' +
+                        '<span>' + p.name + ' (' + p.role + ')</span>' +
+                        '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+                            '<span style="color: var(--accent);">' + formatPrice(p.soldPrice || 0) + '</span>' +
+                            actionBtns +
+                        '</div></div>';
+                }).join('');
                 const budget = t.budget != null ? t.budget : (state.config?.initialBudget || 100);
                 const spent = (state.config?.initialBudget || 100) - budget;
                 return `
@@ -2477,6 +2475,7 @@
         }
 
         async function releasePlayer(teamId, playerName) {
+            playerName = playerName.replace(/&#39;/g, "'");
             const team = (state.teams || []).find(t => t.id === teamId);
             const teamName = team ? team.name : 'Unknown';
             const player = team ? (team.players || []).find(p => p.name === playerName) : null;
@@ -2492,6 +2491,7 @@
         }
 
         function openTradeModal(fromTeamId, playerName, soldPrice) {
+            playerName = playerName.replace(/&#39;/g, "'");
             const fromTeam = (state.teams || []).find(t => t.id === fromTeamId);
             document.getElementById('trade-modal-title').textContent = 'Move Player';
             document.getElementById('trade-modal-player').textContent = playerName + ' (from ' + (fromTeam ? fromTeam.name : '?') + ') - ' + formatPrice(soldPrice);
