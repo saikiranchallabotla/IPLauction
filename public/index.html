@@ -1979,6 +1979,7 @@
                         showView('auction');
                     }
                 }
+                renderHistory();
             });
 
             socket.on('fullUpdate', (data) => { try { state = data; renderAll(); } catch(e) { console.error('fullUpdate render error:', e); } });
@@ -2409,7 +2410,7 @@
             const teamsHtml = state.teams.map(t => {
                 const teamPlayers = (t.players || []).map(p => {
                     const safeName = p.name.replace(/'/g, '&#39;');
-                    const actionBtns = '<button class="squad-action-btn move-btn" onclick="openTradeModal(\'' + t.id + '\', \'' + safeName + '\', ' + (p.soldPrice || 0) + ')" title="Move/Trade">&#8644;</button><button class="squad-action-btn release-btn" onclick="releasePlayer(\'' + t.id + '\', \'' + safeName + '\')" title="Release Player">&#10005;</button>';
+                    const actionBtns = isAdmin ? '<button class="squad-action-btn move-btn" onclick="openTradeModal(\'' + t.id + '\', \'' + safeName + '\', ' + (p.soldPrice || 0) + ')" title="Move/Trade">&#8644;</button><button class="squad-action-btn release-btn" onclick="releasePlayer(\'' + t.id + '\', \'' + safeName + '\')" title="Release Player">&#10005;</button>' : '';
                     return '<div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border);">' +
                         '<span>' + p.name + ' (' + p.role + ')</span>' +
                         '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
