@@ -1034,6 +1034,7 @@
         .fantasy-team-name { font-weight: 700; font-size: 1.1rem; }
         .fantasy-team-meta { font-size: 0.8rem; color: var(--text-secondary); }
         .fantasy-total-points { font-size: 1.8rem; font-weight: 800; color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
+        .fantasy-squad-points { font-size: 0.9rem; font-weight: 600; color: var(--text-secondary); }
         .fantasy-total-label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
         .fantasy-expand-icon { color: var(--text-secondary); font-size: 1.2rem; transition: transform 0.3s ease; margin-left: 1rem; }
         .fantasy-team-row.expanded .fantasy-expand-icon { transform: rotate(180deg); }
@@ -1043,9 +1044,30 @@
             display: flex; justify-content: space-between; align-items: center;
             padding: 0.6rem 0; border-bottom: 1px solid var(--border);
         }
+        .fantasy-player-row.bench-player { opacity: 0.72; }
         .fantasy-player-row:last-child { border-bottom: none; }
-        .fantasy-player-name { font-weight: 600; font-size: 0.9rem; }
+        .fantasy-player-name { font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
         .fantasy-player-role { font-size: 0.75rem; color: var(--text-secondary); }
+        .fantasy-best11-badge {
+            font-size: 0.62rem;
+            padding: 0.08rem 0.4rem;
+            border-radius: 999px;
+            border: 1px solid rgba(0, 200, 83, 0.35);
+            color: var(--success);
+            background: rgba(0, 200, 83, 0.12);
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .fantasy-bench-badge {
+            font-size: 0.62rem;
+            padding: 0.08rem 0.4rem;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            background: var(--glass);
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
         .fantasy-player-points { font-weight: 700; color: var(--accent); font-size: 1rem; }
         .fantasy-player-points.negative { color: var(--danger); }
         .fantasy-match-tabs {
@@ -2612,7 +2634,7 @@
             const emptyMsg = el('fantasy-empty');
             if (!leaderboard) return;
 
-            if (teams.length === 0 || matchesPlayed === 0) {
+            if (teams.length === 0) {
                 leaderboard.innerHTML = '';
                 if (emptyMsg) {
                     emptyMsg.style.display = 'block';
@@ -2632,9 +2654,13 @@
                 const rankClass = rank <= 3 ? 'rank-' + rank : '';
                 const playerRows = (team.playerBreakdowns || [])
                     .sort((a, b) => b.totalPoints - a.totalPoints)
-                    .map(p => '<div class="fantasy-player-row">' +
+                    .map(p => '<div class="fantasy-player-row ' + (p.isInBest11 ? '' : 'bench-player') + '">' +
                         '<div>' +
-                            '<div class="fantasy-player-name">' + p.playerName + '</div>' +
+                            '<div class="fantasy-player-name">' + p.playerName +
+                                '<span class="' + (p.isInBest11 ? 'fantasy-best11-badge' : 'fantasy-bench-badge') + '">' +
+                                    (p.isInBest11 ? 'Best 11' : 'Bench') +
+                                '</span>' +
+                            '</div>' +
                             '<div class="fantasy-player-role">' + p.role + ' | ' + p.country + ' | Paid: ' + formatPrice(p.soldPrice || 0) + '</div>' +
                         '</div>' +
                         '<div style="text-align: right;">' +
@@ -2648,11 +2674,12 @@
                         '<div class="fantasy-rank ' + rankClass + '">#' + rank + '</div>' +
                         '<div class="fantasy-team-info">' +
                             '<div class="fantasy-team-name">' + team.teamName + '</div>' +
-                            '<div class="fantasy-team-meta">' + (team.playerBreakdowns || []).length + ' players</div>' +
+                            '<div class="fantasy-team-meta">' + (team.playerBreakdowns || []).length + ' players | Best ' + (team.countedPlayers || 0) + ' counted | Ranking by Best 11</div>' +
                         '</div>' +
                         '<div style="text-align: right;">' +
                             '<div class="fantasy-total-points">' + team.totalPoints.toFixed(1) + '</div>' +
-                            '<div class="fantasy-total-label">points</div>' +
+                            '<div class="fantasy-squad-points">Squad: ' + ((team.squadTotalPoints || 0).toFixed(1)) + '</div>' +
+                            '<div class="fantasy-total-label">best 11 points</div>' +
                         '</div>' +
                         '<div class="fantasy-expand-icon">&#9660;</div>' +
                     '</div>' +
@@ -2709,10 +2736,10 @@
             const matchTeamData = teams.map(team => {
                 const playerMatchPoints = (team.playerBreakdowns || []).map(p => {
                     const mp = (p.matchPoints || []).find(mp => mp.matchId === matchId);
-                    return { playerName: p.playerName, role: p.role, points: mp ? mp.points : 0 };
+                    return { playerName: p.playerName, role: p.role, points: mp ? mp.points : 0, isInBest11: !!p.isInBest11 };
                 }).sort((a, b) => b.points - a.points);
-                const matchTotal = playerMatchPoints.reduce((sum, p) => sum + p.points, 0);
-                return { teamName: team.teamName, matchTotal, players: playerMatchPoints };
+                const matchTotal = playerMatchPoints.filter(p => p.isInBest11).reduce((sum, p) => sum + p.points, 0);
+                return { teamName: team.teamName, matchTotal, players: playerMatchPoints, countedPlayers: team.countedPlayers || 0 };
             }).sort((a, b) => b.matchTotal - a.matchTotal);
 
             content.innerHTML = '<h4 style="color: var(--accent); margin-bottom: 1rem;">' + match.matchName + '</h4>' +
@@ -2720,12 +2747,13 @@
                 matchTeamData.map((td, idx) =>
                     '<div style="margin-bottom: 1.5rem;">' +
                         '<div style="display: flex; justify-content: space-between; padding: 0.5rem 0.75rem; background: ' + (idx === 0 ? 'var(--accent-dim)' : 'var(--glass)') + '; border-radius: 8px; margin-bottom: 0.5rem; border-left: 3px solid ' + (idx === 0 ? 'var(--accent)' : 'var(--border)') + ';">' +
-                            '<strong>' + td.teamName + '</strong>' +
+                            '<strong>' + td.teamName + ' <span style="font-size:0.75rem;color:var(--text-secondary);">(Best ' + td.countedPlayers + ')</span></strong>' +
                             '<span style="color: var(--accent); font-weight: 700;">' + td.matchTotal.toFixed(1) + ' pts</span>' +
                         '</div>' +
                         td.players.map(p =>
                             '<div style="display: flex; justify-content: space-between; padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--border);">' +
-                                '<span>' + p.playerName + ' <span style="font-size: 0.75rem; color: var(--text-secondary);">(' + p.role + ')</span></span>' +
+                                '<span>' + p.playerName + ' <span style="font-size: 0.75rem; color: var(--text-secondary);">(' + p.role + ')</span> ' +
+                                '<span style="font-size:0.62rem;padding:0.08rem 0.35rem;border-radius:999px;border:1px solid ' + (p.isInBest11 ? 'rgba(0,200,83,0.35)' : 'var(--border)') + ';color:' + (p.isInBest11 ? 'var(--success)' : 'var(--text-secondary)') + ';">' + (p.isInBest11 ? 'Best 11' : 'Bench') + '</span></span>' +
                                 '<span style="color: ' + (p.points > 0 ? 'var(--accent)' : p.points < 0 ? 'var(--danger)' : 'var(--text-secondary)') + '; font-weight: 600;">' + p.points.toFixed(1) + '</span>' +
                             '</div>'
                         ).join('') +

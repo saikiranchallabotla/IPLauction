@@ -326,11 +326,8 @@ function buildNameMapping(matches) {
 }
 
 function computeRoomFantasyPoints(room) {
-    if (!fantasyCache || !fantasyCache.matches.length) {
-        return { teams: [], matches: [], lastUpdated: null };
-    }
-
-    const nameMapping = fantasyCache.nameMapping || {};
+    const matches = fantasyCache?.matches || [];
+    const nameMapping = fantasyCache?.nameMapping || {};
     // Reverse mapping: our player name -> array of CricAPI names
     const reverseMapping = {};
     for (const [apiName, ourName] of Object.entries(nameMapping)) {
@@ -338,10 +335,10 @@ function computeRoomFantasyPoints(room) {
         reverseMapping[ourName].push(apiName);
     }
 
-    const teamPoints = room.teams.map(team => {
+    const teamPoints = (room.teams || []).map(team => {
         const playerBreakdowns = (team.players || []).map(player => {
             const apiNames = reverseMapping[player.name] || [];
-            const matchPoints = fantasyCache.matches.map(match => {
+            const matchPoints = matches.map(match => {
                 let pts = 0;
                 for (const apiName of apiNames) {
                     const found = match.playerPoints.find(pp => pp.cricApiName === apiName);
@@ -360,26 +357,38 @@ function computeRoomFantasyPoints(room) {
             };
         });
 
-        const teamTotal = playerBreakdowns.reduce((sum, pb) => sum + pb.totalPoints, 0);
+        const sortedByPoints = [...playerBreakdowns].sort((a, b) => b.totalPoints - a.totalPoints);
+        const best11Names = new Set(sortedByPoints.slice(0, 11).map(pb => pb.playerName));
+        const markedBreakdowns = playerBreakdowns.map(pb => ({
+            ...pb,
+            isInBest11: best11Names.has(pb.playerName)
+        }));
+        const squadTotalPoints = markedBreakdowns.reduce((sum, pb) => sum + pb.totalPoints, 0);
+        const teamTotal = markedBreakdowns
+            .filter(pb => pb.isInBest11)
+            .reduce((sum, pb) => sum + pb.totalPoints, 0);
+
         return {
             teamId: team.id,
             teamName: team.name,
             totalPoints: teamTotal,
-            playerBreakdowns
+            squadTotalPoints,
+            playerBreakdowns: markedBreakdowns,
+            countedPlayers: Math.min(11, playerBreakdowns.length)
         };
     });
 
-    teamPoints.sort((a, b) => b.totalPoints - a.totalPoints);
+    teamPoints.sort((a, b) => b.totalPoints - a.totalPoints || a.teamName.localeCompare(b.teamName));
 
     return {
         teams: teamPoints,
-        matches: fantasyCache.matches.map(m => ({
+        matches: matches.map(m => ({
             matchId: m.matchId,
             matchName: m.matchName,
             matchDate: m.matchDate,
             status: m.status
         })),
-        lastUpdated: fantasyCache.lastFetchedAt
+        lastUpdated: fantasyCache?.lastFetchedAt || null
     };
 }
 
