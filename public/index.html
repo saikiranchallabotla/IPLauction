@@ -905,10 +905,12 @@
             .fantasy-container { padding: 0.75rem; }
             .fantasy-header { margin-bottom: 1rem; }
             .fantasy-header h2 { font-size: 1.2rem; }
-            .fantasy-team-header { padding: 0.75rem 1rem; }
-            .fantasy-rank { font-size: 1.1rem; min-width: 2rem; }
-            .fantasy-team-name { font-size: 0.95rem; }
-            .fantasy-total-points { font-size: 1.4rem; }
+            .fantasy-col-header { grid-template-columns: 2rem 1fr 5rem 5rem 1rem; padding: 0.5rem 0.75rem; font-size: 0.62rem; }
+            .fantasy-team-header { grid-template-columns: 2rem 1fr 5rem 5rem 1rem; padding: 0.65rem 0.75rem; }
+            .fantasy-rank { font-size: 1rem; }
+            .fantasy-team-name { font-size: 0.9rem; }
+            .fantasy-pts-main { font-size: 1rem; }
+            .fantasy-squad-pts-val { font-size: 0.85rem; }
             .fantasy-player-breakdown { padding: 0 0.75rem 0.75rem; }
 
             /* === Fantasy Admin Config grid === */
@@ -1012,61 +1014,83 @@
         .fantasy-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
         .fantasy-header h2 { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
         .fantasy-last-updated { font-size: 0.8rem; color: var(--text-secondary); }
-        .fantasy-leaderboard { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
-        .fantasy-team-row {
-            background: var(--dark-elevated); border: 1px solid var(--border);
-            border-radius: 14px; overflow: hidden; transition: all 0.3s ease;
+        .fantasy-leaderboard { display: flex; flex-direction: column; gap: 0; margin-bottom: 1.5rem; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+        /* Column header row */
+        .fantasy-col-header {
+            display: grid;
+            grid-template-columns: 3rem 1fr 7rem 7rem 1.5rem;
+            align-items: center;
+            padding: 0.6rem 1.2rem;
+            background: rgba(245,197,24,0.08);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-secondary);
         }
-        .fantasy-team-row:hover { border-color: var(--border-light); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .fantasy-col-header .col-pts { text-align: right; }
+        .fantasy-team-row {
+            background: var(--dark-elevated);
+            border-bottom: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+        .fantasy-team-row:last-child { border-bottom: none; }
+        .fantasy-team-row:hover { background: rgba(255,255,255,0.02); }
         .fantasy-team-row.rank-1 { border-left: 4px solid var(--accent); background: var(--accent-dim); }
         .fantasy-team-row.rank-2 { border-left: 4px solid #c0c0c0; }
         .fantasy-team-row.rank-3 { border-left: 4px solid #cd7f32; }
         .fantasy-team-header {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 1rem 1.2rem; cursor: pointer; transition: background 0.2s ease;
+            display: grid;
+            grid-template-columns: 3rem 1fr 7rem 7rem 1.5rem;
+            align-items: center;
+            padding: 0.85rem 1.2rem; cursor: pointer; transition: background 0.2s ease;
+            gap: 0;
         }
         .fantasy-team-header:hover { background: rgba(255,255,255,0.03); }
-        .fantasy-rank { font-size: 1.5rem; font-weight: 800; color: var(--accent); min-width: 2.5rem; text-align: center; }
+        .fantasy-rank { font-size: 1.3rem; font-weight: 800; color: var(--accent); text-align: center; }
         .fantasy-rank.rank-1 { color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
         .fantasy-rank.rank-2 { color: #c0c0c0; }
         .fantasy-rank.rank-3 { color: #cd7f32; }
-        .fantasy-team-info { flex: 1; margin-left: 1rem; }
-        .fantasy-team-name { font-weight: 700; font-size: 1.1rem; }
-        .fantasy-team-meta { font-size: 0.8rem; color: var(--text-secondary); }
-        .fantasy-total-points { font-size: 1.8rem; font-weight: 800; color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
-        .fantasy-squad-points { font-size: 0.9rem; font-weight: 600; color: var(--text-secondary); }
+        .fantasy-team-info { padding-left: 0.75rem; }
+        .fantasy-team-name { font-weight: 700; font-size: 1rem; }
+        .fantasy-team-meta { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.1rem; }
+        /* Dual points column */
+        .fantasy-pts-col { text-align: right; padding: 0 0.5rem; }
+        .fantasy-pts-main { font-size: 1.4rem; font-weight: 800; color: var(--accent); text-shadow: 0 0 8px var(--accent-glow); line-height: 1.1; }
+        .fantasy-pts-main.zero { color: var(--text-secondary); text-shadow: none; }
+        .fantasy-pts-label { font-size: 0.62rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.1rem; }
+        .fantasy-squad-pts-col { text-align: right; padding: 0 0.5rem; }
+        .fantasy-squad-pts-val { font-size: 1.1rem; font-weight: 700; color: var(--text-secondary); line-height: 1.1; }
+        .fantasy-squad-pts-val.nonzero { color: #7eb8f5; }
         .fantasy-total-label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
-        .fantasy-expand-icon { color: var(--text-secondary); font-size: 1.2rem; transition: transform 0.3s ease; margin-left: 1rem; }
+        .fantasy-expand-icon { color: var(--text-secondary); font-size: 1rem; transition: transform 0.3s ease; text-align: center; }
         .fantasy-team-row.expanded .fantasy-expand-icon { transform: rotate(180deg); }
         .fantasy-player-breakdown { display: none; padding: 0 1.2rem 1rem; border-top: 1px solid var(--border); }
         .fantasy-team-row.expanded .fantasy-player-breakdown { display: block; }
+        /* Player breakdown header */
+        .fantasy-breakdown-header {
+            display: flex; gap: 1rem; padding: 0.6rem 0 0.4rem;
+            font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.05em; color: var(--text-secondary);
+            border-bottom: 1px solid var(--border); margin-bottom: 0.25rem;
+        }
+        .fantasy-breakdown-header .bh-name { flex: 1; }
+        .fantasy-breakdown-header .bh-pts { min-width: 3.5rem; text-align: right; }
         .fantasy-player-row {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 0.6rem 0; border-bottom: 1px solid var(--border);
+            padding: 0.55rem 0; border-bottom: 1px solid var(--border);
         }
         .fantasy-player-row.bench-player { opacity: 0.72; }
         .fantasy-player-row:last-child { border-bottom: none; }
         .fantasy-player-name { font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
         .fantasy-player-role { font-size: 0.75rem; color: var(--text-secondary); }
         .fantasy-best11-badge {
-            font-size: 0.62rem;
-            padding: 0.08rem 0.4rem;
-            border-radius: 999px;
-            border: 1px solid rgba(0, 200, 83, 0.35);
-            color: var(--success);
-            background: rgba(0, 200, 83, 0.12);
-            font-weight: 700;
-            letter-spacing: 0.02em;
+            font-size: 0.62rem; padding: 0.08rem 0.4rem; border-radius: 999px;
+            border: 1px solid rgba(0, 200, 83, 0.35); color: var(--success);
+            background: rgba(0, 200, 83, 0.12); font-weight: 700; letter-spacing: 0.02em;
         }
         .fantasy-bench-badge {
-            font-size: 0.62rem;
-            padding: 0.08rem 0.4rem;
-            border-radius: 999px;
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            background: var(--glass);
-            font-weight: 700;
-            letter-spacing: 0.02em;
+            font-size: 0.62rem; padding: 0.08rem 0.4rem; border-radius: 999px;
+            border: 1px solid var(--border); color: var(--text-secondary);
+            background: var(--glass); font-weight: 700; letter-spacing: 0.02em;
         }
         .fantasy-player-points { font-weight: 700; color: var(--accent); font-size: 1rem; }
         .fantasy-player-points.negative { color: var(--danger); }
@@ -1083,10 +1107,13 @@
         .fantasy-match-tab.active { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; border-color: transparent; }
         .fantasy-not-configured { text-align: center; padding: 3rem 1.5rem; color: var(--text-secondary); }
         .fantasy-not-configured h3 { color: var(--accent); margin-bottom: 1rem; }
-        @media (max-width: 900px) {
+        @media (max-width: 700px) {
             .fantasy-header { flex-direction: column; gap: 0.5rem; align-items: flex-start; }
-            .fantasy-total-points { font-size: 1.4rem; }
-            .fantasy-rank { font-size: 1.2rem; min-width: 2rem; }
+            .fantasy-col-header { grid-template-columns: 2.2rem 1fr 5.5rem 5.5rem 1.2rem; padding: 0.5rem 0.75rem; }
+            .fantasy-team-header { grid-template-columns: 2.2rem 1fr 5.5rem 5.5rem 1.2rem; padding: 0.75rem; }
+            .fantasy-pts-main { font-size: 1.1rem; }
+            .fantasy-squad-pts-val { font-size: 0.9rem; }
+            .fantasy-rank { font-size: 1.1rem; }
         }
 
         /* History tabs row */
@@ -1588,8 +1615,8 @@
         <div class="fantasy-container">
             <div class="fantasy-header">
                 <div>
-                    <h2>Fantasy Points Table</h2>
-                    <div class="fantasy-last-updated" id="fantasy-last-updated"></div>
+                    <h2>IPL Fantasy Points Table</h2>
+                    <div class="fantasy-last-updated" id="fantasy-last-updated">Awaiting IPL 2025 matches</div>
                 </div>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
                     <button class="btn btn-secondary" onclick="refreshFantasyPoints()" id="fantasy-refresh-btn">Refresh Points</button>
@@ -1617,15 +1644,15 @@
 
             <div class="card">
                 <div class="tabs" style="margin-bottom: 1rem;">
-                    <button class="tab active" onclick="showFantasyTab('leaderboard', this)">Team Rankings</button>
+                    <button class="tab active" onclick="showFantasyTab('leaderboard', this)">Points Table</button>
                     <button class="tab" onclick="showFantasyTab('match-view', this)">Match-by-Match</button>
                 </div>
 
                 <div id="fantasy-leaderboard-tab">
                     <div class="fantasy-leaderboard" id="fantasy-leaderboard"></div>
-                    <div class="fantasy-not-configured" id="fantasy-empty">
-                        <h3>No Fantasy Data Yet</h3>
-                        <p>Fantasy points will appear here once configured and matches are played.</p>
+                    <div class="fantasy-not-configured" id="fantasy-empty" style="display:none;">
+                        <h3>No Teams Yet</h3>
+                        <p>Add teams to the room to see the points table.</p>
                     </div>
                 </div>
 
@@ -2602,11 +2629,15 @@
             if (statMatches) statMatches.textContent = matchesPlayed;
 
             const lastUpdated = el('fantasy-last-updated');
-            if (lastUpdated && fantasyData.lastUpdated) {
-                const ago = Math.round((Date.now() - fantasyData.lastUpdated) / 60000);
-                lastUpdated.textContent = ago < 1 ? 'Updated just now' :
-                    ago < 60 ? 'Updated ' + ago + 'm ago' :
-                    'Updated ' + Math.round(ago / 60) + 'h ago';
+            if (lastUpdated) {
+                if (fantasyData.lastUpdated) {
+                    const ago = Math.round((Date.now() - fantasyData.lastUpdated) / 60000);
+                    lastUpdated.textContent = ago < 1 ? 'Updated just now' :
+                        ago < 60 ? 'Updated ' + ago + 'm ago' :
+                        'Updated ' + Math.round(ago / 60) + 'h ago';
+                } else {
+                    lastUpdated.textContent = matchesPlayed === 0 ? 'Awaiting IPL 2025 matches' : '';
+                }
             }
 
             const teams = fantasyData.teams || [];
@@ -2639,9 +2670,9 @@
                 if (emptyMsg) {
                     emptyMsg.style.display = 'block';
                     if (!fantasyData.configured) {
-                        emptyMsg.innerHTML = '<h3>Fantasy Points Not Configured</h3><p>Set the CricAPI key and IPL series ID below to enable fantasy point tracking.</p>';
+                        emptyMsg.innerHTML = '<h3>Fantasy Points Not Configured</h3><p>Set the CricAPI key and IPL Series ID below to start tracking official IPL fantasy points.</p>';
                     } else {
-                        emptyMsg.innerHTML = '<h3>No Fantasy Data Yet</h3><p>Points will appear here once IPL matches are played and data is fetched.</p><button class="btn btn-secondary" onclick="refreshFantasyPoints()" style="margin-top: 1rem;">Fetch Points Now</button>';
+                        emptyMsg.innerHTML = '<h3>No Teams Yet</h3><p>Add teams to the room to see the points table.</p>';
                     }
                 }
                 return;
@@ -2649,16 +2680,31 @@
 
             if (emptyMsg) emptyMsg.style.display = 'none';
 
-            leaderboard.innerHTML = teams.map((team, index) => {
+            // Column header row + team rows
+            const colHeader =
+                '<div class="fantasy-col-header">' +
+                    '<div></div>' +
+                    '<div>Team</div>' +
+                    '<div class="col-pts">Best XI Pts</div>' +
+                    '<div class="col-pts">Squad Pts</div>' +
+                    '<div></div>' +
+                '</div>';
+
+            const teamRows = teams.map((team, index) => {
                 const rank = index + 1;
                 const rankClass = rank <= 3 ? 'rank-' + rank : '';
+                const rankEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '#' + rank;
+                const playerCount = (team.playerBreakdowns || []).length;
+                const ownerLabel = team.ownerName ? team.ownerName + ' | ' : '';
+
                 const playerRows = (team.playerBreakdowns || [])
                     .sort((a, b) => b.totalPoints - a.totalPoints)
-                    .map(p => '<div class="fantasy-player-row ' + (p.isInBest11 ? '' : 'bench-player') + '">' +
+                    .map(p =>
+                        '<div class="fantasy-player-row ' + (p.isInBest11 ? '' : 'bench-player') + '">' +
                         '<div>' +
                             '<div class="fantasy-player-name">' + p.playerName +
-                                '<span class="' + (p.isInBest11 ? 'fantasy-best11-badge' : 'fantasy-bench-badge') + '">' +
-                                    (p.isInBest11 ? 'Best 11' : 'Bench') +
+                                ' <span class="' + (p.isInBest11 ? 'fantasy-best11-badge' : 'fantasy-bench-badge') + '">' +
+                                    (p.isInBest11 ? 'Best XI' : 'Bench') +
                                 '</span>' +
                             '</div>' +
                             '<div class="fantasy-player-role">' + p.role + ' | ' + p.country + ' | Paid: ' + formatPrice(p.soldPrice || 0) + '</div>' +
@@ -2667,28 +2713,40 @@
                             '<div class="fantasy-player-points ' + (p.totalPoints < 0 ? 'negative' : '') + '">' + p.totalPoints.toFixed(1) + '</div>' +
                             '<div style="font-size: 0.7rem; color: var(--text-secondary);">pts</div>' +
                         '</div>' +
-                    '</div>').join('');
+                        '</div>'
+                    ).join('');
+
+                const best11Pts = team.totalPoints || 0;
+                const squadPts = team.squadTotalPoints || 0;
+                const isZero = best11Pts === 0 && squadPts === 0;
 
                 return '<div class="fantasy-team-row ' + rankClass + '" id="fantasy-team-' + team.teamId + '">' +
                     '<div class="fantasy-team-header" onclick="toggleFantasyTeam(\'' + team.teamId + '\')">' +
-                        '<div class="fantasy-rank ' + rankClass + '">#' + rank + '</div>' +
+                        '<div class="fantasy-rank ' + rankClass + '">' + rankEmoji + '</div>' +
                         '<div class="fantasy-team-info">' +
                             '<div class="fantasy-team-name">' + team.teamName + '</div>' +
-                            '<div class="fantasy-team-meta">' + (team.playerBreakdowns || []).length + ' players | Best ' + (team.countedPlayers || 0) + ' counted | Ranking by Best 11</div>' +
+                            '<div class="fantasy-team-meta">' + ownerLabel + playerCount + ' players</div>' +
                         '</div>' +
-                        '<div style="text-align: right;">' +
-                            '<div class="fantasy-total-points">' + team.totalPoints.toFixed(1) + '</div>' +
-                            '<div class="fantasy-squad-points">Squad: ' + ((team.squadTotalPoints || 0).toFixed(1)) + '</div>' +
-                            '<div class="fantasy-total-label">best 11 points</div>' +
+                        '<div class="fantasy-pts-col">' +
+                            '<div class="fantasy-pts-main' + (isZero ? ' zero' : '') + '">' + best11Pts.toFixed(1) + '</div>' +
+                            '<div class="fantasy-pts-label">Best XI</div>' +
+                        '</div>' +
+                        '<div class="fantasy-squad-pts-col">' +
+                            '<div class="fantasy-squad-pts-val' + (!isZero ? ' nonzero' : '') + '">' + squadPts.toFixed(1) + '</div>' +
+                            '<div class="fantasy-pts-label">Squad</div>' +
                         '</div>' +
                         '<div class="fantasy-expand-icon">&#9660;</div>' +
                     '</div>' +
                     '<div class="fantasy-player-breakdown">' +
-                        (playerRows || '<p style="color: var(--text-secondary); padding: 1rem;">No players in this team</p>') +
+                        (playerRows
+                            ? '<div class="fantasy-breakdown-header"><div class="bh-name">Player</div><div class="bh-pts">Total Pts</div></div>' + playerRows
+                            : '<p style="color: var(--text-secondary); padding: 1rem 0;">No players in this team yet</p>'
+                        ) +
                     '</div>' +
                 '</div>';
             }).join('');
 
+            leaderboard.innerHTML = colHeader + teamRows;
             renderFantasyMatchTabs();
         }
 
