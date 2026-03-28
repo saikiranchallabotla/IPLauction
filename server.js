@@ -20,7 +20,7 @@ const CRICAPI_KEY = process.env.CRICAPI_KEY || '';
 const CRICAPI_SERIES_ID = process.env.CRICAPI_SERIES_ID || '';
 const IPL_FANTASY_UID = process.env.IPL_FANTASY_UID || '';
 const IPL_FANTASY_AUTH_TOKEN = process.env.IPL_FANTASY_AUTH_TOKEN || '';
-const FANTASY_REFRESH_INTERVAL = parseInt(process.env.FANTASY_REFRESH_INTERVAL) || 30; // minutes
+const FANTASY_REFRESH_INTERVAL = parseInt(process.env.FANTASY_REFRESH_INTERVAL) || 5; // minutes
 
 // Store multiple auction rooms (in-memory cache)
 let rooms = new Map();
@@ -166,6 +166,8 @@ function loadRoomsFromFile() {
 const Fuse = require('fuse.js');
 let fantasyCache = null;
 let fantasyFetchTimer = null;
+let liveMatchTimer = null;
+let isRefreshing = false;
 
 function isFantasyConfigured() {
     const iplUid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
@@ -205,11 +207,38 @@ function startFantasyRefreshTimer() {
     console.log(`Fantasy points auto-refresh every ${FANTASY_REFRESH_INTERVAL} minutes`);
 }
 
+function startLiveMatchTimer() {
+    if (liveMatchTimer) return; // already running
+    liveMatchTimer = setInterval(() => {
+        fetchAllFantasyPoints().catch(err =>
+            console.error('Live match refresh failed:', err.message)
+        );
+    }, 2 * 60 * 1000); // every 2 minutes during live matches
+    console.log('Live match detected: accelerated refresh every 2 minutes');
+}
+
+function stopLiveMatchTimer() {
+    if (liveMatchTimer) {
+        clearInterval(liveMatchTimer);
+        liveMatchTimer = null;
+        console.log('No live matches: stopped live refresh timer');
+    }
+}
+
 async function fetchAllFantasyPoints() {
-    const iplUid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
-    const iplToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
-    if (iplUid && iplToken) return fetchFromIPLFantasy();
-    return fetchFromCricAPI();
+    if (isRefreshing) {
+        console.log('Fantasy refresh already in progress, skipping...');
+        return { totalMatches: fantasyCache?.matches?.length || 0, newMatches: 0 };
+    }
+    isRefreshing = true;
+    try {
+        const iplUid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
+        const iplToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
+        if (iplUid && iplToken) return await fetchFromIPLFantasy();
+        return await fetchFromCricAPI();
+    } finally {
+        isRefreshing = false;
+    }
 }
 
 async function fetchFromIPLFantasy() {
@@ -312,48 +341,80 @@ async function fetchFromIPLFantasy() {
 
     console.log(`IPL Fantasy updated: ${allMatches.length} total matches, ${newMatches.length} new/updated`);
     broadcastFantasyUpdate();
+    // Accelerate polling if any live match is ongoing
+    if (allMatches.some(m => m.status === 'live')) startLiveMatchTimer();
+    else stopLiveMatchTimer();
     return { totalMatches: allMatches.length, newMatches: newMatches.length };
 }
 
 function parseIPLFixtures(json) {
     const fixtures = [];
+
+    // Collect all fixture objects regardless of nesting structure
+    let allFixtureObjects = [];
+
+    // 1. Stage-based structure (classic IPL Fantasy API: data.Stages[].Fixtures[])
     const stages = json?.data?.Stages || json?.data?.stages || json?.Stages || json?.stages ||
-                   json?.data?.stage || json?.stage || json?.data?.fixtures || json?.fixtures || [];
-    const stageArray = Array.isArray(stages) ? stages : [stages];
+                   json?.data?.stage || json?.stage || [];
+    const stageArray = Array.isArray(stages) ? stages : (stages ? [stages] : []);
     for (const stage of stageArray) {
-        const stageFixtures = stage?.Fixtures || stage?.fixtures || stage?.matches || stage?.Match || stage?.match || [];
-        const fixtureArray = Array.isArray(stageFixtures) ? stageFixtures : [stageFixtures];
-        for (const f of fixtureArray) {
-            if (!f || typeof f !== 'object') continue;
-            const statusId = f?.StatusId ?? f?.statusId ?? f?.MatchStatus ?? f?.matchStatus ?? f?.status ?? 0;
-            const statusStr = String(statusId).toLowerCase();
-            // Status IDs: 2=live, 3=completed (classic API); also handle 1=completed in some versions
-            // and string statuses like "completed", "result", "finished"
-            const isLive = statusId === 2 || statusStr === '2' || !!(f?.IsLive || f?.isLive) ||
-                           statusStr === 'live' || statusStr === 'inprogress';
-            const isCompleted = statusId === 3 || statusStr === '3' ||
-                                !!(f?.IsCompleted || f?.isCompleted || f?.MatchEnded || f?.matchEnded) ||
-                                statusStr === 'completed' || statusStr === 'result' ||
-                                statusStr === 'finished' || statusStr === 'post';
-            if (!isLive && !isCompleted) continue;
+        const sf = stage?.Fixtures || stage?.fixtures || stage?.matches || stage?.Match || stage?.match || [];
+        const fa = Array.isArray(sf) ? sf : [sf];
+        allFixtureObjects.push(...fa);
+    }
 
-            const gamedayId = f?.GamedayId || f?.gamedayId || f?.GameDayId || f?.gameDayId ||
-                              f?.MatchId || f?.matchId || f?.FixtureId || f?.fixtureId;
-            if (!gamedayId) continue;
-
-            const home = f?.HomeTeam?.ShortName || f?.HomeTeam?.Name || f?.HomeTeam || f?.Team1 || f?.team1 || '';
-            const away = f?.AwayTeam?.ShortName || f?.AwayTeam?.Name || f?.AwayTeam || f?.Team2 || f?.team2 || '';
-            const matchName = f?.MatchName || f?.matchName || (home && away ? `${home} vs ${away}` : `Match ${gamedayId}`);
-
-            fixtures.push({
-                matchId: String(f?.FixtureId || f?.fixtureId || f?.MatchId || f?.matchId || gamedayId),
-                matchName,
-                matchDate: f?.StartDate || f?.startDate || f?.MatchDate || f?.matchDate || '',
-                status: isCompleted ? 'completed' : 'live',
-                gamedayId: String(gamedayId),
-                phaseId: String(f?.PhaseId || f?.phaseId || 1)
-            });
+    // 2. Flat list structures — tried when stage-based yields nothing
+    if (allFixtureObjects.length === 0) {
+        const flat = json?.data?.fixtures || json?.data?.matches || json?.data?.matchList ||
+                     json?.data?.Matches || json?.data?.MatchList || json?.data?.Fixtures ||
+                     json?.fixtures || json?.matches || json?.matchList || json?.Matches || [];
+        if (Array.isArray(flat)) allFixtureObjects.push(...flat);
+        // data itself may be a plain array
+        if (allFixtureObjects.length === 0 && Array.isArray(json?.data)) {
+            allFixtureObjects.push(...json.data);
         }
+    }
+
+    if (allFixtureObjects.length === 0) {
+        console.log('parseIPLFixtures: no fixture array found. Response keys:', Object.keys(json || {}),
+            '| data keys:', Object.keys(json?.data || {}));
+    }
+
+    for (const f of allFixtureObjects) {
+        if (!f || typeof f !== 'object') continue;
+
+        const statusId = f?.StatusId ?? f?.statusId ?? f?.MatchStatus ?? f?.matchStatus ?? f?.status;
+        const statusStr = statusId !== undefined && statusId !== null ? String(statusId).toLowerCase() : '';
+
+        // Status IDs: 2=live, 3=completed in the classic API.
+        // Some versions use 1=completed or 4=live; also accept boolean/string flags.
+        const isLive = statusId === 2 || statusId === 4 || statusStr === '2' || statusStr === '4' ||
+                       !!(f?.IsLive || f?.isLive || f?.matchStarted || f?.MatchStarted || f?.IsStarted || f?.isStarted) ||
+                       statusStr === 'live' || statusStr === 'inprogress' || statusStr === 'started';
+        const isCompleted = statusId === 1 || statusId === 3 || statusStr === '1' || statusStr === '3' ||
+                            !!(f?.IsCompleted || f?.isCompleted || f?.MatchEnded || f?.matchEnded) ||
+                            statusStr === 'completed' || statusStr === 'result' ||
+                            statusStr === 'finished' || statusStr === 'post';
+
+        // A "live" flag takes priority over "completed" classification
+        if (!isLive && !isCompleted) continue;
+
+        const gamedayId = f?.GamedayId || f?.gamedayId || f?.GameDayId || f?.gameDayId ||
+                          f?.MatchId || f?.matchId || f?.FixtureId || f?.fixtureId;
+        if (!gamedayId) continue;
+
+        const home = f?.HomeTeam?.ShortName || f?.HomeTeam?.Name || f?.HomeTeam || f?.Team1 || f?.team1 || '';
+        const away = f?.AwayTeam?.ShortName || f?.AwayTeam?.Name || f?.AwayTeam || f?.Team2 || f?.team2 || '';
+        const matchName = f?.MatchName || f?.matchName || (home && away ? `${home} vs ${away}` : `Match ${gamedayId}`);
+
+        fixtures.push({
+            matchId: String(f?.FixtureId || f?.fixtureId || f?.MatchId || f?.matchId || gamedayId),
+            matchName,
+            matchDate: f?.StartDate || f?.startDate || f?.MatchDate || f?.matchDate || '',
+            status: isLive ? 'live' : 'completed',
+            gamedayId: String(gamedayId),
+            phaseId: String(f?.PhaseId || f?.phaseId || 1)
+        });
     }
     return fixtures;
 }
@@ -474,6 +535,9 @@ async function fetchFromCricAPI() {
 
     console.log(`Fantasy points updated: ${allMatches.length} total matches, ${newMatches.length} new/updated`);
     broadcastFantasyUpdate();
+    // Accelerate polling if any live match is ongoing
+    if (allMatches.some(m => m.status === 'live')) startLiveMatchTimer();
+    else stopLiveMatchTimer();
     return { totalMatches: allMatches.length, newMatches: newMatches.length };
 }
 
