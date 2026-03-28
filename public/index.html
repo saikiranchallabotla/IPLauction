@@ -1669,15 +1669,23 @@
                 <div style="margin-bottom: 1rem;">
                     <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Data Source</label>
                     <select id="fantasy-source" onchange="toggleFantasySource(this.value)" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                        <option value="ipl">IPL Fantasy Official (Recommended)</option>
+                        <option value="auto">Auto — Official IPL Stats (No setup needed)</option>
+                        <option value="ipl">IPL Fantasy Official (Session cookies)</option>
                         <option value="cric">CricAPI</option>
                     </select>
                 </div>
 
-                <!-- IPL Fantasy Official fields -->
-                <div id="ipl-fantasy-fields">
+                <!-- Auto / IPL public stats (default, no credentials needed) -->
+                <div id="ipl-stats-fields">
+                    <p style="color: var(--text-secondary); font-size: 0.8rem; line-height: 1.5;">
+                        Points are pulled automatically from the <strong style="color: var(--text);">official IPL stats website in real-time</strong> — no login, no cookies, no API keys needed. Fantasy points are computed from live batting, bowling &amp; fielding data using standard IPL Fantasy scoring rules and refresh every 5 minutes.
+                    </p>
+                </div>
+
+                <!-- IPL Fantasy Official cookie fields (hidden by default) -->
+                <div id="ipl-fantasy-fields" style="display:none">
                     <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
-                        Log in to <a href="https://fantasy.iplt20.com" target="_blank" style="color: var(--accent);">fantasy.iplt20.com</a>, open DevTools (F12) &rarr; Application &rarr; Cookies, and copy the two cookie values below.
+                        Log in to <a href="https://fantasy.iplt20.com" target="_blank" style="color: var(--accent);">fantasy.iplt20.com</a>, open DevTools (F12) &rarr; Application &rarr; Cookies, and copy the two values below.
                     </p>
                     <div class="fantasy-config-grid">
                         <div>
@@ -2876,8 +2884,9 @@
         }
 
         function toggleFantasySource(val) {
-            document.getElementById('ipl-fantasy-fields').style.display = val === 'ipl' ? '' : 'none';
-            document.getElementById('cricapi-fields').style.display = val === 'cric' ? '' : 'none';
+            document.getElementById('ipl-stats-fields').style.display  = val === 'auto' ? '' : 'none';
+            document.getElementById('ipl-fantasy-fields').style.display = val === 'ipl'  ? '' : 'none';
+            document.getElementById('cricapi-fields').style.display     = val === 'cric' ? '' : 'none';
         }
 
         async function saveFantasyConfig() {
@@ -2885,7 +2894,9 @@
             const source = document.getElementById('fantasy-source').value;
             let body = {};
 
-            if (source === 'ipl') {
+            if (source === 'auto') {
+                body = { source: 'auto' };
+            } else if (source === 'ipl') {
                 const uid = document.getElementById('ipl-fantasy-uid').value.trim();
                 const token = document.getElementById('ipl-fantasy-token').value.trim();
                 if (!uid || !token) {
