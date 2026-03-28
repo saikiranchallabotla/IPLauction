@@ -1006,6 +1006,10 @@ app.post('/api/room/:code/fantasy-config', (req, res) => {
 
     if (isFantasyConfigured()) {
         startFantasyRefreshTimer();
+        // Immediately fetch points in background so clients get data without a separate refresh
+        fetchAllFantasyPoints().catch(err =>
+            console.error('Fantasy fetch after config save failed:', err.message)
+        );
     }
 
     res.json({ success: true, configured: isFantasyConfigured() });
@@ -1303,7 +1307,7 @@ io.on('connection', (socket) => {
         const room = getRoom(socket.roomCode);
         if (!room) return;
         const data = computeRoomFantasyPoints(room);
-        data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
+        data.configured = isFantasyConfigured();
         socket.emit('fantasyPointsUpdate', data);
     });
 

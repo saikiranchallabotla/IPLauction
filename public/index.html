@@ -2859,6 +2859,15 @@
                 const pointsRes = await fetch('/api/room/' + roomCode + '/fantasy-points');
                 fantasyData = await pointsRes.json();
                 renderPointsTable();
+                const total = data.totalMatches || 0;
+                const newM = data.newMatches || 0;
+                if (total === 0) {
+                    showAuctionPopup('No Match Data', 'No completed or live IPL matches found yet. Points will appear once matches start.', false);
+                    setTimeout(() => closeAuctionPopup(), 3000);
+                } else if (newM > 0) {
+                    showAuctionPopup('Points Updated', 'Fetched ' + newM + ' new match(es). Total: ' + total + ' match(es).', false);
+                    setTimeout(() => closeAuctionPopup(), 2000);
+                }
             } catch (err) {
                 showAuctionPopup('Refresh Failed', err.message, true);
             } finally {
@@ -2902,8 +2911,8 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showAuctionPopup('Saved', 'Configuration saved! Fetching points...', false);
-                    setTimeout(() => { closeAuctionPopup(); refreshFantasyPoints(); }, 1500);
+                    showAuctionPopup('Saved', 'Configuration saved! Fetching match points in background — the table will update automatically.', false);
+                    setTimeout(() => closeAuctionPopup(), 3000);
                 }
             } catch (err) {
                 showAuctionPopup('Error', 'Failed to save config: ' + err.message, true);
