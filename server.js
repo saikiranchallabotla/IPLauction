@@ -194,6 +194,10 @@ async function initFantasyPoints() {
     }
     if (isFantasyConfigured()) {
         startFantasyRefreshTimer();
+        // Fetch immediately on startup so we don't serve stale data for up to FANTASY_REFRESH_INTERVAL minutes
+        fetchAllFantasyPoints().catch(err =>
+            console.error('Initial fantasy fetch failed:', err.message)
+        );
     }
 }
 
@@ -275,8 +279,15 @@ async function fetchFromIPLFantasy() {
     console.log(`Found ${fixtures.length} completed/live IPL fixtures`);
 
     const existingMatches = (fantasyCache?.matches || []);
+    // Only skip completed matches that are older than 24 hours — recent ones
+    // may still have points being updated on the IPL Fantasy server.
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const existingCompleted = new Set(
-        existingMatches.filter(m => m.status === 'completed').map(m => m.matchId)
+        existingMatches.filter(m => {
+            if (m.status !== 'completed') return false;
+            const matchTime = new Date(m.matchDate).getTime();
+            return !isNaN(matchTime) && matchTime < oneDayAgo;
+        }).map(m => m.matchId)
     );
 
     const newMatches = [];
@@ -462,15 +473,22 @@ async function fetchFromCricAPI() {
 
     // Step 2: For each completed/live match, fetch fantasy points
     const existingMatches = (fantasyCache?.matches || []);
+    // Only skip completed matches older than 24 hours — recent ones may still
+    // have points being updated on the fantasy server.
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const existingCompleted = new Set(
-        existingMatches.filter(m => m.status === 'completed').map(m => m.matchId)
+        existingMatches.filter(m => {
+            if (m.status !== 'completed') return false;
+            const matchTime = new Date(m.matchDate).getTime();
+            return !isNaN(matchTime) && matchTime < oneDayAgo;
+        }).map(m => m.matchId)
     );
 
     const newMatches = [];
     let apiCalls = 0;
 
     for (const match of matchList) {
-        // Skip already-fetched completed matches
+        // Skip already-fetched completed matches (older than 24 hours)
         if (existingCompleted.has(match.id)) continue;
         // Skip future matches
         if (!match.matchStarted && !match.matchEnded) continue;
