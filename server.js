@@ -262,6 +262,81 @@ async function fetchAllFantasyPoints() {
     }
 }
 
+// ---- CricAPI scorecard parser (free-tier, computes fantasy points locally) ----
+function computeCricAPIMatchPoints(matchData) {
+    const playerMap = new Map();
+    const ensure = (name) => {
+        if (!name) return null;
+        const trimmed = name.trim();
+        if (!trimmed) return null;
+        if (!playerMap.has(trimmed)) {
+            playerMap.set(trimmed, {
+                name: trimmed, playingXI: true, batting: null, bowling: null,
+                fielding: { catches: 0, stumpings: 0, directRunOuts: 0, indirectRunOuts: 0 }
+            });
+        }
+        return playerMap.get(trimmed);
+    };
+
+    for (const inning of (matchData.scorecard || [])) {
+        // Batting
+        for (const b of (inning.batting || [])) {
+            const name = b.batsman;
+            if (!name) continue;
+            const p = ensure(name);
+            const dcode = String(b['dismissal-code'] || b.dismissal || '').toLowerCase();
+            const isOut = !dcode.includes('not out') && dcode !== '' && dcode !== 'not-out';
+            p.batting = {
+                runs: parseInt(b.r ?? 0),
+                balls: parseInt(b.b ?? 0),
+                fours: parseInt(b['4s'] ?? 0),
+                sixes: parseInt(b['6s'] ?? 0),
+                dismissed: isOut
+            };
+
+            // Extract fielding credits from dismissal text
+            const dtext = String(b.dismissal || '');
+            if (dcode === 'caught' || dcode === 'c') {
+                const m = dtext.match(/^c\s+(.+?)\s+b\s+/i);
+                if (m?.[1]) { const fp = ensure(m[1]); if (fp) fp.fielding.catches++; }
+            } else if (dcode === 'stumped' || dcode === 'st') {
+                const m = dtext.match(/^st\s+(.+?)\s+b\s+/i);
+                if (m?.[1]) { const fp = ensure(m[1]); if (fp) fp.fielding.stumpings++; }
+            } else if (dcode === 'run out') {
+                const m = dtext.match(/\((.+?)\)/);
+                if (m?.[1]) { const fp = ensure(m[1]); if (fp) fp.fielding.directRunOuts++; }
+            } else if (dcode === 'bowled' || dcode === 'lbw') {
+                // Count LBW/Bowled bonus for bowler
+                const m = dtext.match(/\bb\s+(.+)$/i);
+                if (m?.[1]) {
+                    const bp = playerMap.get(m[1].trim());
+                    if (bp?.bowling) bp.bowling.lbwBowled = (bp.bowling.lbwBowled || 0) + 1;
+                }
+            }
+        }
+
+        // Bowling
+        for (const bw of (inning.bowling || [])) {
+            const name = bw.bowler;
+            if (!name) continue;
+            const p = ensure(name);
+            const [ov, partial] = String(bw.o ?? '0').split('.').map(Number);
+            p.bowling = {
+                wickets: parseInt(bw.w ?? 0),
+                lbwBowled: p.bowling?.lbwBowled || 0, // already set from batting above
+                maidens: parseInt(bw.m ?? 0),
+                balls: (ov || 0) * 6 + (isNaN(partial) ? 0 : partial),
+                runs: parseInt(bw.r ?? 0)
+            };
+        }
+    }
+
+    return [...playerMap.values()].map(s => ({
+        cricApiName: s.name,
+        points: calcIPLFantasyPoints(s.batting, s.bowling, s.fielding, s.playingXI)
+    }));
+}
+
 // ---- ESPN Cricinfo (public, no auth) ----
 async function fetchFromESPN() {
     const year = new Date().getFullYear();
@@ -306,13 +381,24 @@ async function fetchFromESPN() {
     if (!schedRes.ok) throw new Error(`ESPN schedule HTTP ${schedRes.status}`);
     const schedData = await schedRes.json();
 
-    const matchList = schedData?.content?.matches || schedData?.matches || schedData?.fixtures || [];
+    const matchList = schedData?.content?.matches ||
+                      schedData?.content?.matchGroups?.flatMap(g => g.matches || []) ||
+                      schedData?.matches || schedData?.fixtures || schedData?.data?.matches || [];
+
+    const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
     const toFetch = matchList.filter(m => {
-        const stage = String(m?.stage || m?.status || m?.matchStatus || '').toLowerCase();
-        return stage === 'finished' || stage === 'completed' || stage === 'in_progress' ||
-               stage === 'live' || stage.includes('result');
+        const stage = String(m?.stage || m?.status || m?.matchStatus || m?.state || '').toLowerCase();
+        const isCompleted = stage === 'finished' || stage === 'complete' || stage === 'completed' ||
+                            stage === 'result'   || stage === 'post'     || stage === 'closed' ||
+                            stage.includes('result') || stage.includes('finish') || stage.includes('complet') ||
+                            m?.isComplete === true || m?.matchEnded === true;
+        const isLive = stage === 'live' || stage.includes('progress') || m?.isLive === true;
+        // Fallback: include any match whose scheduled start was >3 hours ago (likely completed/started)
+        const startDate = m?.startDate || m?.date || m?.dateTimeGMT;
+        const likelyPast = startDate && new Date(startDate).getTime() < threeHoursAgo;
+        return isCompleted || isLive || likelyPast;
     });
-    console.log(`ESPN: ${toFetch.length} completed/live matches found`);
+    console.log(`ESPN: ${matchList.length} total, ${toFetch.length} completed/live/past matches`);
 
     const existingMatches = fantasyCache?.matches || [];
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
@@ -697,13 +783,13 @@ async function fetchFromCricAPI() {
         throw new Error(`CricAPI series_info error: ${JSON.stringify(seriesData.info || 'unknown')}`);
     }
 
-    const matchList = seriesData.data?.matchList || [];
+    // CricAPI uses 'matchList' or 'matches' depending on version
+    const matchList = seriesData.data?.matchList || seriesData.data?.matches || [];
     console.log(`Found ${matchList.length} matches in series`);
 
-    // Step 2: For each completed/live match, fetch fantasy points
+    // Step 2: For each completed/live match, fetch scorecard and compute fantasy points
+    // NOTE: match_points requires a paid CricAPI plan; match_scorecard is free tier
     const existingMatches = (fantasyCache?.matches || []);
-    // Only skip completed matches older than 24 hours — recent ones may still
-    // have points being updated on the fantasy server.
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const existingCompleted = new Set(
         existingMatches.filter(m => {
@@ -717,41 +803,40 @@ async function fetchFromCricAPI() {
     let apiCalls = 0;
 
     for (const match of matchList) {
-        // Skip already-fetched completed matches (older than 24 hours)
         if (existingCompleted.has(match.id)) continue;
-        // Skip future matches
-        if (!match.matchStarted && !match.matchEnded) continue;
-        // Rate limit
-        if (apiCalls >= 50) {
-            console.log('Rate limit reached, will fetch remaining next cycle');
-            break;
-        }
+        // Skip clearly future matches (neither started nor ended)
+        const statusStr = String(match.status || '').toLowerCase();
+        const isStarted = match.matchStarted || match.matchEnded ||
+                          statusStr.includes('won') || statusStr.includes('lost') ||
+                          statusStr.includes('draw') || statusStr.includes('tie') ||
+                          statusStr.includes('live') || statusStr.includes('progress');
+        if (!isStarted) continue;
+        if (apiCalls >= 40) { console.log('Rate limit reached, resuming next cycle'); break; }
 
         try {
-            const pointsRes = await fetch(
-                `https://api.cricapi.com/v1/match_points?apikey=${apiKey}&id=${match.id}&ruleset=0&offset=0`
+            await new Promise(r => setTimeout(r, 250));
+            const scRes = await fetch(
+                `https://api.cricapi.com/v1/match_scorecard?apikey=${apiKey}&id=${match.id}`
             );
-            const pointsData = await pointsRes.json();
+            const scData = await scRes.json();
             apiCalls++;
 
-            if (pointsData.status === 'success' && pointsData.data?.totals) {
-                newMatches.push({
-                    matchId: match.id,
-                    matchName: match.name || `Match`,
-                    matchDate: match.date || match.dateTimeGMT || '',
-                    status: match.matchEnded ? 'completed' : 'live',
-                    playerPoints: pointsData.data.totals.map(p => ({
-                        cricApiId: p.id || '',
-                        cricApiName: p.name,
-                        points: parseFloat(p.points) || 0
-                    }))
-                });
+            if (scData.status === 'success' && scData.data?.scorecard?.length) {
+                const playerPoints = computeCricAPIMatchPoints(scData.data);
+                if (playerPoints.length > 0) {
+                    newMatches.push({
+                        matchId: match.id,
+                        matchName: match.name || scData.data.name || 'Match',
+                        matchDate: match.date || match.dateTimeGMT || scData.data.date || '',
+                        status: (match.matchEnded || statusStr.includes('won') || statusStr.includes('lost')) ? 'completed' : 'live',
+                        playerPoints
+                    });
+                    console.log(`  CricAPI: ${playerPoints.length} players for ${newMatches.at(-1).matchName}`);
+                }
             }
         } catch (err) {
-            console.error(`Failed to fetch points for match ${match.id}:`, err.message);
+            console.error(`Failed scorecard for match ${match.id}:`, err.message);
         }
-
-        await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     // Step 3: Merge
