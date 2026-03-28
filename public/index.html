@@ -2903,6 +2903,8 @@
                 body = { apiKey, seriesId };
             }
 
+            const saveBtn = document.querySelector('#fantasy-admin-config .btn-primary');
+            if (saveBtn) { saveBtn.textContent = 'Saving...'; saveBtn.disabled = true; }
             try {
                 const res = await fetch('/api/room/' + roomCode + '/fantasy-config', {
                     method: 'POST',
@@ -2911,11 +2913,14 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showAuctionPopup('Saved', 'Configuration saved! Fetching match points in background — the table will update automatically.', false);
-                    setTimeout(() => closeAuctionPopup(), 3000);
+                    if (saveBtn) { saveBtn.textContent = 'Fetching Points...'; }
+                    // Now trigger a real refresh so the user sees actual results or errors
+                    await refreshFantasyPoints();
                 }
             } catch (err) {
                 showAuctionPopup('Error', 'Failed to save config: ' + err.message, true);
+            } finally {
+                if (saveBtn) { saveBtn.textContent = 'Save & Fetch Points'; saveBtn.disabled = false; }
             }
         }
 
