@@ -170,35 +170,47 @@ let liveMatchTimer = null;
 let isRefreshing = false;
 
 function isFantasyConfigured() {
+    // Public IPL stats API is always available — no credentials required.
+    // Manual overrides (IPL Fantasy cookies or CricAPI) are optional.
+    return true;
+}
+
+function getFantasySource() {
     const iplUid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
     const iplToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
+    if (iplUid && iplToken) return 'ipl_cookie';
     const cricKey = process.env.CRICAPI_KEY || CRICAPI_KEY;
     const cricSeries = process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID;
-    return !!(iplUid && iplToken) || !!(cricKey && cricSeries);
+    if (cricKey && cricSeries) return 'cricapi';
+    return 'ipl_stats'; // public, no auth
 }
 
 async function initFantasyPoints() {
     if (db) {
-        // Prefer IPL Fantasy cache over CricAPI cache
-        const iplDoc = await db.collection('fantasy_points').findOne({ seriesId: 'ipl_fantasy_official' });
-        if (iplDoc) {
-            fantasyCache = iplDoc;
-            console.log(`Loaded IPL Fantasy data: ${iplDoc.matches?.length || 0} matches cached`);
-        } else if (CRICAPI_SERIES_ID) {
-            const cricDoc = await db.collection('fantasy_points').findOne({ seriesId: CRICAPI_SERIES_ID });
-            if (cricDoc) {
-                fantasyCache = cricDoc;
-                console.log(`Loaded CricAPI fantasy data: ${cricDoc.matches?.length || 0} matches cached`);
+        // Prefer IPL Fantasy cookies cache > public stats cache > CricAPI cache
+        const iplCookieDoc = await db.collection('fantasy_points').findOne({ seriesId: 'ipl_fantasy_official' });
+        if (iplCookieDoc) {
+            fantasyCache = iplCookieDoc;
+            console.log(`Loaded IPL Fantasy (cookie) cache: ${iplCookieDoc.matches?.length || 0} matches`);
+        } else {
+            const statsDoc = await db.collection('fantasy_points').findOne({ seriesId: 'ipl_public_stats' });
+            if (statsDoc) {
+                fantasyCache = statsDoc;
+                console.log(`Loaded IPL public stats cache: ${statsDoc.matches?.length || 0} matches`);
+            } else if (CRICAPI_SERIES_ID) {
+                const cricDoc = await db.collection('fantasy_points').findOne({ seriesId: CRICAPI_SERIES_ID });
+                if (cricDoc) {
+                    fantasyCache = cricDoc;
+                    console.log(`Loaded CricAPI cache: ${cricDoc.matches?.length || 0} matches`);
+                }
             }
         }
     }
-    if (isFantasyConfigured()) {
-        startFantasyRefreshTimer();
-        // Fetch immediately on startup so we don't serve stale data for up to FANTASY_REFRESH_INTERVAL minutes
-        fetchAllFantasyPoints().catch(err =>
-            console.error('Initial fantasy fetch failed:', err.message)
-        );
-    }
+    // Always start — public IPL stats requires no credentials
+    startFantasyRefreshTimer();
+    fetchAllFantasyPoints().catch(err =>
+        console.error('Initial fantasy fetch failed:', err.message)
+    );
 }
 
 function startFantasyRefreshTimer() {
@@ -236,10 +248,10 @@ async function fetchAllFantasyPoints() {
     }
     isRefreshing = true;
     try {
-        const iplUid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
-        const iplToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
-        if (iplUid && iplToken) return await fetchFromIPLFantasy();
-        return await fetchFromCricAPI();
+        const source = getFantasySource();
+        if (source === 'ipl_cookie') return await fetchFromIPLFantasy();
+        if (source === 'cricapi')    return await fetchFromCricAPI();
+        return await fetchFromIPLStats(); // default: public stats, no auth needed
     } finally {
         isRefreshing = false;
     }
@@ -556,6 +568,266 @@ async function fetchFromCricAPI() {
     // Accelerate polling if any live match is ongoing
     if (allMatches.some(m => m.status === 'live')) startLiveMatchTimer();
     else stopLiveMatchTimer();
+    return { totalMatches: allMatches.length, newMatches: newMatches.length };
+}
+
+// ============ IPL PUBLIC STATS — no authentication required ============
+
+// Official IPL Fantasy / my11Circle T20 scoring rules
+function calcIPLFantasyPoints(batting, bowling, fielding, playingXI) {
+    let pts = playingXI ? 4 : 0;
+
+    if (batting) {
+        const { runs = 0, balls = 0, fours = 0, sixes = 0, dismissed = false } = batting;
+        pts += runs;           // +1 per run
+        pts += fours;          // +1 per boundary
+        pts += sixes * 2;      // +2 per six
+        if (runs >= 100) pts += 16;
+        else if (runs >= 50) pts += 8;
+        else if (runs >= 30) pts += 4;
+        if (dismissed && runs === 0) pts -= 2; // duck
+        if (balls >= 10) {
+            const sr = (runs / balls) * 100;
+            if (sr >= 170) pts += 6;
+            else if (sr >= 150) pts += 4;
+            else if (sr >= 130) pts += 2;
+            else if (sr < 50) pts -= 6;
+            else if (sr < 60) pts -= 4;
+            else if (sr < 70) pts -= 2;
+        }
+    }
+
+    if (bowling) {
+        const { wickets = 0, lbwBowled = 0, maidens = 0, balls = 0, runs = 0 } = bowling;
+        pts += wickets * 25;
+        pts += lbwBowled * 8;
+        pts += maidens * 4;
+        if (wickets >= 5) pts += 16;
+        else if (wickets >= 4) pts += 8;
+        else if (wickets >= 3) pts += 4;
+        if (balls >= 12) { // min 2 overs
+            const er = runs / (balls / 6);
+            if (er < 5) pts += 6;
+            else if (er < 6) pts += 4;
+            else if (er < 7) pts += 2;
+            else if (er >= 12) pts -= 6;
+            else if (er >= 11) pts -= 4;
+            else if (er >= 10) pts -= 2;
+        }
+    }
+
+    if (fielding) {
+        const { catches = 0, stumpings = 0, directRunOuts = 0, indirectRunOuts = 0 } = fielding;
+        pts += catches * 8;
+        pts += stumpings * 12;
+        pts += directRunOuts * 12;
+        pts += indirectRunOuts * 6;
+    }
+
+    return Math.round(pts * 10) / 10;
+}
+
+function parseIPLStatsSchedule(json) {
+    const fixtures = [];
+    const matchList = json?.Matchsummary || json?.matchsummary ||
+                      json?.MatchSchedule || json?.matches ||
+                      json?.data?.matches || json?.data || [];
+    for (const m of (Array.isArray(matchList) ? matchList : [])) {
+        if (!m) continue;
+        const status = String(m?.MatchStatus || m?.matchStatus || m?.status || '').toLowerCase();
+        const isLive = status.includes('progress') || status === 'live';
+        const isCompleted = status === 'result' || status === 'completed' || status.includes('result');
+        if (!isLive && !isCompleted) continue;
+
+        const matchCode = m?.MatchCode || m?.matchCode || m?.MatchID || m?.id;
+        if (!matchCode) continue;
+
+        const team1 = m?.Team1ShortName || m?.TeamAShortName || m?.team1 || '';
+        const team2 = m?.Team2ShortName || m?.TeamBShortName || m?.team2 || '';
+        const matchName = m?.MatchName || m?.matchName ||
+            (team1 && team2 ? `${team1} vs ${team2}` : `Match ${matchCode}`);
+
+        fixtures.push({
+            matchId: String(matchCode),
+            matchCode: String(matchCode),
+            matchName,
+            matchDate: m?.MatchDate || m?.matchDate || m?.date || '',
+            status: isLive ? 'live' : 'completed'
+        });
+    }
+    return fixtures;
+}
+
+async function fetchIPLScorecard(matchCode, headers) {
+    const urls = [
+        `https://ipl-stats.iplt20.com/ipl/json/${matchCode}/GetMatchScorecard.json`,
+        `https://ipl-stats.iplt20.com/ipl/json/MatchScorecard.json?MatchCode=${matchCode}`,
+        `https://ipl-stats.iplt20.com/ipl/json/${matchCode}/Scorecard.json`,
+    ];
+    for (const url of urls) {
+        try {
+            const res = await fetch(url, { headers });
+            if (res.ok) return await res.json();
+        } catch (_) { /* try next */ }
+    }
+    return null;
+}
+
+function computeMatchFantasyPoints(scorecardJson) {
+    const playerMap = new Map();
+    const ensure = (name) => {
+        if (!name) return null;
+        if (!playerMap.has(name)) {
+            playerMap.set(name, {
+                name, playingXI: true,
+                batting: null, bowling: null,
+                fielding: { catches: 0, stumpings: 0, directRunOuts: 0, indirectRunOuts: 0 }
+            });
+        }
+        return playerMap.get(name);
+    };
+
+    const innings = scorecardJson?.Innings || scorecardJson?.innings ||
+                    scorecardJson?.ScoreCard || scorecardJson?.scorecard || [];
+
+    for (const inning of (Array.isArray(innings) ? innings : [])) {
+        // Batting
+        for (const b of (inning?.InningBatsmen || inning?.batsmen || [])) {
+            const name = b?.StrikerName || b?.BatsmanName || b?.name;
+            if (!name) continue;
+            const p = ensure(name);
+            p.batting = {
+                runs: parseInt(b?.Runs ?? b?.runs ?? 0),
+                balls: parseInt(b?.Balls ?? b?.balls ?? 0),
+                fours: parseInt(b?.Fours ?? b?.fours ?? 0),
+                sixes: parseInt(b?.Sixes ?? b?.sixes ?? 0),
+                dismissed: !!(b?.IsOut || b?.isOut || b?.Out ||
+                    (b?.StrikerDismissal && !String(b.StrikerDismissal).toLowerCase().includes('not out')))
+            };
+        }
+
+        // Bowling
+        for (const bw of (inning?.InningBowlers || inning?.bowlers || [])) {
+            const name = bw?.BowlerName || bw?.name;
+            if (!name) continue;
+            const p = ensure(name);
+            const oversStr = String(bw?.Overs ?? bw?.overs ?? '0');
+            const [ov, partial] = oversStr.split('.').map(Number);
+            const totalBalls = (ov || 0) * 6 + (isNaN(partial) ? 0 : partial);
+            p.bowling = {
+                wickets: parseInt(bw?.Wickets ?? bw?.wickets ?? 0),
+                lbwBowled: 0, // populated from wickets list below
+                maidens: parseInt(bw?.Maidens ?? bw?.maidens ?? 0),
+                balls: totalBalls,
+                runs: parseInt(bw?.Runs ?? bw?.runs ?? 0)
+            };
+        }
+
+        // Fielding + LBW/Bowled from dismissal records
+        for (const w of (inning?.InningWickets || inning?.wickets || inning?.dismissals || [])) {
+            const dtype = String(w?.DismissalType || w?.dismissalType ||
+                                 w?.Wicket || w?.wicket || '').toLowerCase();
+            const fielder = w?.FielderName || w?.fielder;
+            const bowler  = w?.BowlerName  || w?.bowler;
+
+            if ((dtype.includes('lbw') || dtype === 'bowled') && bowler) {
+                const bp = playerMap.get(bowler);
+                if (bp?.bowling) bp.bowling.lbwBowled = (bp.bowling.lbwBowled || 0) + 1;
+            }
+            if (fielder) {
+                const fp = ensure(fielder);
+                if (dtype.includes('caught'))   fp.fielding.catches++;
+                else if (dtype.includes('stump')) fp.fielding.stumpings++;
+            }
+            if (dtype.includes('run out')) {
+                const direct   = w?.FielderName || w?.DirectFielder;
+                const indirect = w?.IndirectFielder;
+                if (direct)   { const p = ensure(direct);   p.fielding.directRunOuts++; }
+                if (indirect) { const p = ensure(indirect); p.fielding.indirectRunOuts++; }
+            }
+        }
+    }
+
+    return [...playerMap.values()].map(s => ({
+        cricApiName: s.name,
+        points: calcIPLFantasyPoints(s.batting, s.bowling, s.fielding, s.playingXI)
+    }));
+}
+
+async function fetchFromIPLStats() {
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.iplt20.com/',
+        'Origin': 'https://www.iplt20.com',
+        'Cache-Control': 'no-cache'
+    };
+
+    console.log('Fetching IPL stats from public API (no auth required)...');
+
+    const scheduleUrls = [
+        'https://ipl-stats.iplt20.com/ipl/json/MatchSchedule.json',
+        'https://ipl-stats.iplt20.com/ipl/json/Fixtures.json',
+        'https://ipl-stats.iplt20.com/ipl/json/matchschedule/MatchSchedule.json',
+    ];
+
+    let scheduleData = null;
+    for (const url of scheduleUrls) {
+        try {
+            const res = await fetch(url, { headers });
+            if (res.ok) { scheduleData = await res.json(); console.log(`IPL schedule from: ${url}`); break; }
+            else console.log(`Schedule URL HTTP ${res.status}: ${url}`);
+        } catch (err) { console.log(`Schedule URL error (${url}): ${err.message}`); }
+    }
+    if (!scheduleData) throw new Error('IPL public stats API unreachable — all schedule URLs failed (HTTP 403 / network error)');
+
+    const fixtures = parseIPLStatsSchedule(scheduleData);
+    console.log(`Found ${fixtures.length} completed/live fixtures from public IPL stats`);
+
+    const existingMatches = fantasyCache?.matches || [];
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const existingCompleted = new Set(
+        existingMatches
+            .filter(m => m.status === 'completed' && !isNaN(new Date(m.matchDate)) && new Date(m.matchDate) < oneDayAgo)
+            .map(m => m.matchId)
+    );
+
+    const newMatches = [];
+    for (const fixture of fixtures) {
+        if (existingCompleted.has(fixture.matchId)) continue;
+        try {
+            await new Promise(r => setTimeout(r, 200));
+            const scorecard = await fetchIPLScorecard(fixture.matchCode, headers);
+            if (!scorecard) { console.warn(`  No scorecard for ${fixture.matchName}`); continue; }
+            const playerPoints = computeMatchFantasyPoints(scorecard);
+            if (playerPoints.length > 0) {
+                newMatches.push({ matchId: fixture.matchId, matchName: fixture.matchName,
+                    matchDate: fixture.matchDate, status: fixture.status, playerPoints });
+                console.log(`  ${playerPoints.length} players computed for ${fixture.matchName}`);
+            }
+        } catch (err) { console.error(`Error for ${fixture.matchName}:`, err.message); }
+    }
+
+    const allMatches = [...existingMatches];
+    for (const nm of newMatches) {
+        const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
+        if (idx >= 0) allMatches[idx] = nm; else allMatches.push(nm);
+    }
+    allMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+
+    const nameMapping = buildNameMapping(allMatches);
+    fantasyCache = { seriesId: 'ipl_public_stats', lastFetchedAt: Date.now(), matches: allMatches, nameMapping };
+
+    if (db) {
+        await db.collection('fantasy_points').updateOne(
+            { seriesId: 'ipl_public_stats' }, { $set: fantasyCache }, { upsert: true }
+        );
+    }
+
+    console.log(`IPL public stats: ${allMatches.length} total matches, ${newMatches.length} updated`);
+    broadcastFantasyUpdate();
+    if (allMatches.some(m => m.status === 'live')) startLiveMatchTimer(); else stopLiveMatchTimer();
     return { totalMatches: allMatches.length, newMatches: newMatches.length };
 }
 
@@ -1083,42 +1355,40 @@ app.get('/api/room/:code/fantasy-points', (req, res) => {
 
 // Admin: Trigger manual fantasy points refresh
 app.post('/api/room/:code/fantasy-points/refresh', async (req, res) => {
-    if (!isFantasyConfigured()) {
-        return res.status(400).json({
-            error: 'Fantasy points not configured. Set up IPL Fantasy cookies or CricAPI credentials.'
-        });
-    }
-
     try {
         const result = await fetchAllFantasyPoints();
-        res.json({ success: true, ...result });
+        res.json({ success: true, source: getFantasySource(), ...result });
     } catch (err) {
         console.error('Manual fantasy refresh failed:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
-// Admin: Update fantasy configuration at runtime (supports IPL Fantasy official or CricAPI)
+// Admin: Update fantasy data source at runtime
 app.post('/api/room/:code/fantasy-config', (req, res) => {
-    const { apiKey, seriesId, iplFantasyUid, iplFantasyToken } = req.body;
+    const { apiKey, seriesId, iplFantasyUid, iplFantasyToken, source } = req.body;
 
-    // IPL Fantasy official credentials take priority
-    if (iplFantasyUid) process.env.IPL_FANTASY_UID = iplFantasyUid;
-    if (iplFantasyToken) process.env.IPL_FANTASY_AUTH_TOKEN = iplFantasyToken;
-
-    // CricAPI credentials (fallback)
-    if (apiKey) process.env.CRICAPI_KEY = apiKey;
-    if (seriesId) process.env.CRICAPI_SERIES_ID = seriesId;
-
-    if (isFantasyConfigured()) {
-        startFantasyRefreshTimer();
-        // Immediately fetch points in background so clients get data without a separate refresh
-        fetchAllFantasyPoints().catch(err =>
-            console.error('Fantasy fetch after config save failed:', err.message)
-        );
+    if (source === 'auto') {
+        // Reset to default: public IPL stats (no credentials)
+        process.env.IPL_FANTASY_UID = '';
+        process.env.IPL_FANTASY_AUTH_TOKEN = '';
+        process.env.CRICAPI_KEY = '';
+        process.env.CRICAPI_SERIES_ID = '';
+    } else {
+        // IPL Fantasy cookies (most accurate)
+        if (iplFantasyUid !== undefined)   process.env.IPL_FANTASY_UID = iplFantasyUid;
+        if (iplFantasyToken !== undefined)  process.env.IPL_FANTASY_AUTH_TOKEN = iplFantasyToken;
+        // CricAPI
+        if (apiKey !== undefined)  process.env.CRICAPI_KEY = apiKey;
+        if (seriesId !== undefined) process.env.CRICAPI_SERIES_ID = seriesId;
     }
 
-    res.json({ success: true, configured: isFantasyConfigured() });
+    startFantasyRefreshTimer();
+    fetchAllFantasyPoints().catch(err =>
+        console.error('Fantasy fetch after config save failed:', err.message)
+    );
+
+    res.json({ success: true, source: getFantasySource() });
 });
 
 // ============ SOCKET.IO EVENTS ============
