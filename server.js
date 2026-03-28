@@ -191,6 +191,7 @@ async function initFantasyPoints() {
         const year = new Date().getFullYear();
         const preferred = [
             'ipl_fantasy_official',
+            'cricbuzz_ipl',
             `espn_ipl_${year}`,
             `espn_ipl_${year - 1}`,
             'ipl_public_stats',
@@ -250,19 +251,224 @@ async function fetchAllFantasyPoints() {
         const source = getFantasySource();
         if (source === 'ipl_cookie') return await fetchFromIPLFantasy();
         if (source === 'cricapi')    return await fetchFromCricAPI();
-        // 'auto': try ESPN Cricinfo first, then fall back to IPL stats
-        try {
-            return await fetchFromESPN();
-        } catch (espnErr) {
-            console.warn(`ESPN Cricinfo failed (${espnErr.message}), trying IPL stats...`);
-            return await fetchFromIPLStats();
+        // 'auto': Cricbuzz → ESPN → IPL Stats (each is direct, no API key)
+        const sources = [
+            { name: 'Cricbuzz', fn: fetchFromCricbuzz },
+            { name: 'ESPN Cricinfo', fn: fetchFromESPN },
+            { name: 'IPL Stats', fn: fetchFromIPLStats },
+        ];
+        let lastErr;
+        for (const src of sources) {
+            try {
+                return await src.fn();
+            } catch (err) {
+                lastErr = err;
+                console.warn(`${src.name} failed: ${err.message} — trying next source...`);
+            }
         }
+        throw lastErr;
     } finally {
         isRefreshing = false;
     }
 }
 
-// ---- CricAPI scorecard parser (free-tier, computes fantasy points locally) ----
+// ============================================================
+// CRICBUZZ — direct source (same data CricAPI uses internally)
+// No API key, no cookies required.
+// ============================================================
+
+async function fetchFromCricbuzz() {
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.105 Mobile Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-IN,en;q=0.9',
+        'Referer': 'https://www.cricbuzz.com/',
+        'Origin': 'https://www.cricbuzz.com',
+        'x-requested-with': 'com.cricbuzz.android'
+    };
+
+    console.log('Fetching live IPL matches from Cricbuzz...');
+
+    // Step 1 — get all current/recent matches
+    const liveRes = await fetch('https://www.cricbuzz.com/api/cricket-match/live', { headers });
+    if (!liveRes.ok) throw new Error(`Cricbuzz live API HTTP ${liveRes.status}`);
+    const liveData = await liveRes.json();
+
+    // Cricbuzz returns { typeMatches: [ { matchType, seriesMatches: [ { seriesAdWrapper: { seriesName, matches: [...] } } ] } ] }
+    const allMatches = [];
+    for (const typeGroup of (liveData.typeMatches || [])) {
+        for (const seriesGroup of (typeGroup.seriesMatches || [])) {
+            const seriesName = (seriesGroup.seriesAdWrapper?.seriesName || seriesGroup.seriesName || '').toLowerCase();
+            if (!seriesName.includes('ipl') && !seriesName.includes('indian premier')) continue;
+            const matches = seriesGroup.seriesAdWrapper?.matches || seriesGroup.matches || [];
+            allMatches.push(...matches);
+        }
+    }
+
+    // Also check recent/completed matches if live list is empty
+    if (allMatches.length === 0) {
+        const recentRes = await fetch('https://www.cricbuzz.com/api/cricket-match/recent', { headers });
+        if (recentRes.ok) {
+            const recentData = await recentRes.json();
+            for (const typeGroup of (recentData.typeMatches || [])) {
+                for (const seriesGroup of (typeGroup.seriesMatches || [])) {
+                    const seriesName = (seriesGroup.seriesAdWrapper?.seriesName || seriesGroup.seriesName || '').toLowerCase();
+                    if (!seriesName.includes('ipl') && !seriesName.includes('indian premier')) continue;
+                    const matches = seriesGroup.seriesAdWrapper?.matches || seriesGroup.matches || [];
+                    allMatches.push(...matches);
+                }
+            }
+        }
+    }
+
+    console.log(`Cricbuzz: found ${allMatches.length} IPL matches`);
+    if (allMatches.length === 0) throw new Error('Cricbuzz: no IPL matches found in live/recent feed');
+
+    const existingMatches = fantasyCache?.matches || [];
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const existingCompleted = new Set(
+        existingMatches
+            .filter(m => m.status === 'completed' && new Date(m.matchDate) < oneDayAgo)
+            .map(m => m.matchId)
+    );
+
+    const newMatches = [];
+    for (const m of allMatches) {
+        const info = m.matchInfo || m;
+        const matchId = String(info.matchId || info.id || '');
+        if (!matchId) continue;
+
+        const state = String(info.state || info.matchState || info.status || '').toLowerCase();
+        const isLive = state === 'in progress' || state === 'live' || state === 'innings break';
+        const isComplete = state === 'complete' || state === 'finished' || state === 'result' ||
+                           state === 'post' || info.matchFormat === 'T20' && state.includes('won');
+        if (!isLive && !isComplete) continue;
+        if (existingCompleted.has(matchId)) continue;
+
+        try {
+            await new Promise(r => setTimeout(r, 300));
+            const scRes = await fetch(`https://www.cricbuzz.com/api/cricket-scorecard/${matchId}`, { headers });
+            if (!scRes.ok) {
+                console.warn(`Cricbuzz scorecard HTTP ${scRes.status} for ${matchId}`);
+                continue;
+            }
+            const scData = await scRes.json();
+            const playerPoints = computeCricbuzzMatchPoints(scData);
+            if (playerPoints.length === 0) continue;
+
+            const t1 = info.team1?.teamSName || info.team1?.teamName || '';
+            const t2 = info.team2?.teamSName || info.team2?.teamName || '';
+            newMatches.push({
+                matchId,
+                matchName: info.matchDesc || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchId}`),
+                matchDate: info.startDate ? new Date(parseInt(info.startDate)).toISOString() : '',
+                status: isLive ? 'live' : 'completed',
+                playerPoints
+            });
+            console.log(`  Cricbuzz: ${playerPoints.length} players for ${newMatches.at(-1).matchName}`);
+        } catch (e) { console.error(`Cricbuzz match ${matchId}:`, e.message); }
+    }
+
+    const allCached = [...existingMatches];
+    for (const nm of newMatches) {
+        const idx = allCached.findIndex(x => x.matchId === nm.matchId);
+        if (idx >= 0) allCached[idx] = nm; else allCached.push(nm);
+    }
+    allCached.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+
+    const nameMapping = buildNameMapping(allCached);
+    fantasyCache = { seriesId: 'cricbuzz_ipl', lastFetchedAt: Date.now(), matches: allCached, nameMapping };
+    if (db) {
+        await db.collection('fantasy_points').updateOne(
+            { seriesId: 'cricbuzz_ipl' }, { $set: fantasyCache }, { upsert: true }
+        );
+    }
+    console.log(`Cricbuzz: ${allCached.length} total matches, ${newMatches.length} updated`);
+    broadcastFantasyUpdate();
+    if (allCached.some(m => m.status === 'live')) startLiveMatchTimer(); else stopLiveMatchTimer();
+    return { totalMatches: allCached.length, newMatches: newMatches.length };
+}
+
+function computeCricbuzzMatchPoints(scData) {
+    // Cricbuzz scorecard format:
+    // { scoreCard: [ { inningsId, batTeamDetails: { batsmenData: { bat_1: { batName, runs, balls, fours, sixes, outDesc } } },
+    //                  bowlTeamDetails: { bowlersData: { bowl_1: { bowlName, overs, maidens, runs, wickets } } } } ] }
+    const playerMap = new Map();
+    const ensure = (name) => {
+        if (!name) return null;
+        const n = name.trim();
+        if (!n) return null;
+        if (!playerMap.has(n)) {
+            playerMap.set(n, {
+                name: n, playingXI: true, batting: null, bowling: null,
+                fielding: { catches: 0, stumpings: 0, directRunOuts: 0, indirectRunOuts: 0 }
+            });
+        }
+        return playerMap.get(n);
+    };
+
+    for (const inning of (scData.scoreCard || scData.scorecard || [])) {
+        // Batting
+        const batsmenData = inning.batTeamDetails?.batsmenData || {};
+        for (const key of Object.keys(batsmenData)) {
+            const b = batsmenData[key];
+            const name = b.batName || b.name;
+            if (!name) continue;
+            const p = ensure(name);
+            const outDesc = String(b.outDesc || b.dismissal || '').toLowerCase();
+            const isOut = outDesc && !outDesc.includes('not out') && !outDesc.includes('batting') && outDesc !== '';
+            p.batting = {
+                runs:  parseInt(b.runs  ?? 0),
+                balls: parseInt(b.balls ?? 0),
+                fours: parseInt(b.fours ?? 0),
+                sixes: parseInt(b.sixes ?? 0),
+                dismissed: isOut
+            };
+
+            // Fielding from dismissal description
+            if (outDesc.startsWith('caught') || outDesc.startsWith('c ')) {
+                const m = outDesc.match(/(?:caught|c)\s+(.+?)\s+(?:b|bowled)\s+/i);
+                if (m?.[1]) { const fp = ensure(m[1]); if (fp) fp.fielding.catches++; }
+            } else if (outDesc.startsWith('stumped') || outDesc.startsWith('st ')) {
+                const m = outDesc.match(/(?:stumped|st)\s+(.+?)\s+(?:b|bowled)\s+/i);
+                if (m?.[1]) { const fp = ensure(m[1]); if (fp) fp.fielding.stumpings++; }
+            } else if (outDesc.includes('run out')) {
+                const m = outDesc.match(/\((.+?)\)/);
+                if (m?.[1]) { const fp = ensure(m[1]); if (fp) fp.fielding.directRunOuts++; }
+            } else if (outDesc.startsWith('b ') || outDesc === 'bowled') {
+                const m = outDesc.match(/^b\s+(.+)$/i);
+                if (m?.[1]) { const bp = playerMap.get(m[1].trim()); if (bp?.bowling) bp.bowling.lbwBowled = (bp.bowling.lbwBowled || 0) + 1; }
+            } else if (outDesc.startsWith('lbw')) {
+                const m = outDesc.match(/b\s+(.+)$/i);
+                if (m?.[1]) { const bp = playerMap.get(m[1].trim()); if (bp?.bowling) bp.bowling.lbwBowled = (bp.bowling.lbwBowled || 0) + 1; }
+            }
+        }
+
+        // Bowling
+        const bowlersData = inning.bowlTeamDetails?.bowlersData || {};
+        for (const key of Object.keys(bowlersData)) {
+            const bw = bowlersData[key];
+            const name = bw.bowlName || bw.name;
+            if (!name) continue;
+            const p = ensure(name);
+            const [ov, partial] = String(bw.overs ?? '0').split('.').map(Number);
+            p.bowling = {
+                wickets: parseInt(bw.wickets ?? 0),
+                lbwBowled: p.bowling?.lbwBowled || 0,
+                maidens: parseInt(bw.maidens ?? bw.maiden ?? 0),
+                balls: (ov || 0) * 6 + (isNaN(partial) ? 0 : partial),
+                runs: parseInt(bw.runs ?? 0)
+            };
+        }
+    }
+
+    return [...playerMap.values()].map(s => ({
+        cricApiName: s.name,
+        points: calcIPLFantasyPoints(s.batting, s.bowling, s.fielding, s.playingXI)
+    }));
+}
+
+
 function computeCricAPIMatchPoints(matchData) {
     const playerMap = new Map();
     const ensure = (name) => {

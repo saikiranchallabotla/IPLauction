@@ -1669,16 +1669,16 @@
                 <div style="margin-bottom: 1rem;">
                     <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Data Source</label>
                     <select id="fantasy-source" onchange="toggleFantasySource(this.value)" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                        <option value="auto">Auto (ESPN Cricinfo — No setup needed)</option>
+                        <option value="auto">Auto (Cricbuzz / ESPN / IPL Stats — No setup needed)</option>
                         <option value="cric">CricAPI (Free key — Most reliable)</option>
                         <option value="ipl">IPL Fantasy Official (Session cookies)</option>
                     </select>
                 </div>
 
-                <!-- Auto / ESPN fields (default, no credentials needed) -->
+                <!-- Auto fields (default, no credentials needed) -->
                 <div id="ipl-stats-fields">
                     <p style="color: var(--text-secondary); font-size: 0.8rem; line-height: 1.5;">
-                        Points are fetched automatically from <strong style="color: var(--text);">ESPN Cricinfo</strong> in real-time — no login or API keys needed. Fantasy points are computed from live batting, bowling &amp; fielding data and refresh every 5 minutes. <em>If ESPN blocks the server, switch to CricAPI below.</em>
+                        Points are fetched automatically from <strong style="color: var(--text);">Cricbuzz → ESPN Cricinfo → IPL Stats</strong> — tried in order, no login or API keys needed. Fantasy points are computed from live batting, bowling &amp; fielding data using IPL Fantasy scoring rules and refresh every 5 minutes.
                     </p>
                 </div>
 
