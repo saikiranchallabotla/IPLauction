@@ -1787,6 +1787,7 @@
         let isAdmin = false;
         let pendingAdminPassword = null;
         let auctionTimerInterval = null;
+        let fantasyPollInterval = null;
         let fantasyData = { teams: [], matches: [], lastUpdated: null, configured: false };
         let selectedFantasyMatch = null;
 
@@ -3305,6 +3306,7 @@
             isAdmin = false;
             pendingAdminPassword = null;
             stopAuctionTimer();
+            if (fantasyPollInterval) { clearInterval(fantasyPollInterval); fantasyPollInterval = null; }
             state = { teams: [], players: [], auctionState: {} };
             selectedPlayer = null;
             currentCategory = '2cr-home';
@@ -3453,15 +3455,24 @@
             showAuctionPopup('Player Added', name + ' has been added to the player pool. Set the price using the dropdown.', false);
         }
 
+        function fetchAndRenderFantasy() {
+            if (!roomCode) return;
+            fetch('/api/room/' + roomCode + '/fantasy-points')
+                .then(r => r.json())
+                .then(data => { fantasyData = data; renderPointsTable(); })
+                .catch(err => console.error('Failed to fetch fantasy points:', err));
+        }
+
         function showView(view) {
             if (view === 'admin' && !isAdmin) return;
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(view + '-view').classList.add('active');
-            if (view === 'fantasy' && roomCode) {
-                fetch('/api/room/' + roomCode + '/fantasy-points')
-                    .then(r => r.json())
-                    .then(data => { fantasyData = data; renderPointsTable(); })
-                    .catch(err => console.error('Failed to fetch fantasy points:', err));
+            // Stop any existing fantasy poll
+            if (fantasyPollInterval) { clearInterval(fantasyPollInterval); fantasyPollInterval = null; }
+            if (view === 'fantasy') {
+                fetchAndRenderFantasy();
+                // Auto-refresh every 20 seconds while on Points Table tab
+                fantasyPollInterval = setInterval(fetchAndRenderFantasy, 20000);
             }
         }
 
