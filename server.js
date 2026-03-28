@@ -287,72 +287,112 @@ async function fetchFromCricbuzz() {
         'x-requested-with': 'com.cricbuzz.android'
     };
 
-    console.log('Fetching live IPL matches from Cricbuzz...');
+    console.log('Fetching IPL matches from Cricbuzz...');
 
-    // Step 1 — get all current/recent matches
-    const liveRes = await fetch('https://www.cricbuzz.com/api/cricket-match/live', { headers });
-    if (!liveRes.ok) throw new Error(`Cricbuzz live API HTTP ${liveRes.status}`);
-    const liveData = await liveRes.json();
-
-    // Cricbuzz returns { typeMatches: [ { matchType, seriesMatches: [ { seriesAdWrapper: { seriesName, matches: [...] } } ] } ] }
-    const allMatches = [];
-    for (const typeGroup of (liveData.typeMatches || [])) {
-        for (const seriesGroup of (typeGroup.seriesMatches || [])) {
-            const seriesName = (seriesGroup.seriesAdWrapper?.seriesName || seriesGroup.seriesName || '').toLowerCase();
-            if (!seriesName.includes('ipl') && !seriesName.includes('indian premier')) continue;
-            const matches = seriesGroup.seriesAdWrapper?.matches || seriesGroup.matches || [];
-            allMatches.push(...matches);
-        }
-    }
-
-    // Also check recent/completed matches if live list is empty
-    if (allMatches.length === 0) {
-        const recentRes = await fetch('https://www.cricbuzz.com/api/cricket-match/recent', { headers });
-        if (recentRes.ok) {
-            const recentData = await recentRes.json();
-            for (const typeGroup of (recentData.typeMatches || [])) {
-                for (const seriesGroup of (typeGroup.seriesMatches || [])) {
-                    const seriesName = (seriesGroup.seriesAdWrapper?.seriesName || seriesGroup.seriesName || '').toLowerCase();
-                    if (!seriesName.includes('ipl') && !seriesName.includes('indian premier')) continue;
-                    const matches = seriesGroup.seriesAdWrapper?.matches || seriesGroup.matches || [];
-                    allMatches.push(...matches);
+    // Helper: extract IPL matches + series ID from a typeMatches response
+    function extractIPLMatches(data, matchMap, seriesIds) {
+        for (const typeGroup of (data.typeMatches || [])) {
+            for (const seriesGroup of (typeGroup.seriesMatches || [])) {
+                const wrapper = seriesGroup.seriesAdWrapper || seriesGroup;
+                const seriesName = (wrapper.seriesName || '').toLowerCase();
+                if (!seriesName.includes('ipl') && !seriesName.includes('indian premier')) continue;
+                const seriesId = wrapper.seriesId || wrapper.seriesid;
+                if (seriesId) seriesIds.add(String(seriesId));
+                const matches = wrapper.matches || [];
+                for (const m of matches) {
+                    const info = m.matchInfo || m;
+                    const matchId = String(info.matchId || info.id || '');
+                    if (matchId && !matchMap.has(matchId)) matchMap.set(matchId, m);
                 }
             }
         }
     }
 
-    console.log(`Cricbuzz: found ${allMatches.length} IPL matches`);
-    if (allMatches.length === 0) throw new Error('Cricbuzz: no IPL matches found in live/recent feed');
+    // Step 1: fetch live + recent in parallel, collect all IPL matches
+    const [liveRes, recentRes] = await Promise.allSettled([
+        fetch('https://www.cricbuzz.com/api/cricket-match/live', { headers }),
+        fetch('https://www.cricbuzz.com/api/cricket-match/recent', { headers }),
+    ]);
 
+    const matchMap = new Map(); // matchId -> raw match object (deduped)
+    const seriesIds = new Set();
+
+    for (const result of [liveRes, recentRes]) {
+        if (result.status === 'fulfilled' && result.value.ok) {
+            try {
+                const data = await result.value.json();
+                extractIPLMatches(data, matchMap, seriesIds);
+            } catch (_) {}
+        }
+    }
+
+    // Step 2: if we have a series ID, fetch ALL series matches (includes completed ones)
+    if (seriesIds.size > 0) {
+        for (const sid of seriesIds) {
+            try {
+                const schedRes = await fetch(`https://www.cricbuzz.com/api/series/${sid}/matches`, { headers });
+                if (schedRes.ok) {
+                    const schedData = await schedRes.json();
+                    // Format: { matchDetails: [ { matchDetailsMap: { match: [ { matchInfo, matchScore } ] } } ] }
+                    for (const detail of (schedData.matchDetails || [])) {
+                        const matches = detail.matchDetailsMap?.match || detail.matches || [];
+                        for (const m of matches) {
+                            const info = m.matchInfo || m;
+                            const matchId = String(info.matchId || info.id || '');
+                            if (matchId && !matchMap.has(matchId)) matchMap.set(matchId, m);
+                        }
+                    }
+                    console.log(`Cricbuzz series ${sid}: fetched schedule, now ${matchMap.size} IPL matches total`);
+                }
+            } catch (e) { console.warn(`Cricbuzz series schedule error for ${sid}:`, e.message); }
+        }
+    }
+
+    console.log(`Cricbuzz: found ${matchMap.size} IPL matches (live+recent+schedule)`);
+    if (matchMap.size === 0) throw new Error('Cricbuzz: no IPL matches found in any feed');
+
+    const now = Date.now();
     const existingMatches = fantasyCache?.matches || [];
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    // Skip matches we already have that are completed and > 24h old
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const existingCompleted = new Set(
         existingMatches
-            .filter(m => m.status === 'completed' && new Date(m.matchDate) < oneDayAgo)
+            .filter(m => m.status === 'completed' && new Date(m.matchDate).getTime() < oneDayAgo)
             .map(m => m.matchId)
     );
 
     const newMatches = [];
-    for (const m of allMatches) {
-        const info = m.matchInfo || m;
-        const matchId = String(info.matchId || info.id || '');
-        if (!matchId) continue;
-
-        const state = String(info.state || info.matchState || info.status || '').toLowerCase();
-        const isLive = state === 'in progress' || state === 'live' || state === 'innings break';
-        const isComplete = state === 'complete' || state === 'finished' || state === 'result' ||
-                           state === 'post' || info.matchFormat === 'T20' && state.includes('won');
-        if (!isLive && !isComplete) continue;
+    for (const [matchId, m] of matchMap) {
         if (existingCompleted.has(matchId)) continue;
+
+        const info = m.matchInfo || m;
+        const state = String(info.state || info.matchState || info.status || info.matchDesc || '').toLowerCase();
+
+        // Skip only clearly upcoming/scheduled matches that haven't started
+        const isUpcoming = state === 'upcoming' || state === 'scheduled' || state === 'preview' ||
+                           state === 'dormant' || (state === 'toss' && !state.includes('won'));
+        // Also skip by date: if match starts more than 1 hour in the future, skip
+        const startMs = info.startDate ? parseInt(info.startDate) : 0;
+        const isFuture = startMs > 0 && (startMs - now) > 60 * 60 * 1000;
+        if (isUpcoming || isFuture) continue;
+
+        const isLive = state.includes('progress') || state === 'live' || state.includes('innings break') ||
+                       state.includes('lunch') || state.includes('tea') || state.includes('rain') ||
+                       state.includes('stumps');
 
         try {
             await new Promise(r => setTimeout(r, 300));
             const scRes = await fetch(`https://www.cricbuzz.com/api/cricket-scorecard/${matchId}`, { headers });
             if (!scRes.ok) {
-                console.warn(`Cricbuzz scorecard HTTP ${scRes.status} for ${matchId}`);
+                console.warn(`Cricbuzz scorecard HTTP ${scRes.status} for match ${matchId}`);
                 continue;
             }
             const scData = await scRes.json();
+            // Only process if there's actual innings data
+            if (!scData.scoreCard?.length && !scData.scorecard?.length) {
+                console.warn(`Cricbuzz match ${matchId}: scorecard has no innings data yet`);
+                continue;
+            }
             const playerPoints = computeCricbuzzMatchPoints(scData);
             if (playerPoints.length === 0) continue;
 
@@ -361,7 +401,7 @@ async function fetchFromCricbuzz() {
             newMatches.push({
                 matchId,
                 matchName: info.matchDesc || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchId}`),
-                matchDate: info.startDate ? new Date(parseInt(info.startDate)).toISOString() : '',
+                matchDate: startMs ? new Date(startMs).toISOString() : new Date().toISOString(),
                 status: isLive ? 'live' : 'completed',
                 playerPoints
             });
@@ -377,7 +417,7 @@ async function fetchFromCricbuzz() {
     allCached.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
     const nameMapping = buildNameMapping(allCached);
-    fantasyCache = { seriesId: 'cricbuzz_ipl', lastFetchedAt: Date.now(), matches: allCached, nameMapping };
+    fantasyCache = { seriesId: 'cricbuzz_ipl', lastFetchedAt: now, matches: allCached, nameMapping };
     if (db) {
         await db.collection('fantasy_points').updateOne(
             { seriesId: 'cricbuzz_ipl' }, { $set: fantasyCache }, { upsert: true }
