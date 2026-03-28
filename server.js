@@ -964,6 +964,55 @@ app.post('/api/room/:code/reset', (req, res) => {
 
 // ============ FANTASY POINTS API ============
 
+// Debug: inspect raw IPL Fantasy API responses to diagnose parsing issues
+app.get('/api/fantasy-debug', async (req, res) => {
+    const uid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
+    const authToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
+    if (!uid || !authToken) return res.status(400).json({ error: 'IPL Fantasy credentials not set' });
+
+    const headers = {
+        'Cookie': `my11c-uid=${uid}; my11c-authToken=${authToken}`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://fantasy.iplt20.com/classic/home',
+        'Accept': 'application/json, text/plain, */*',
+        'Origin': 'https://fantasy.iplt20.com',
+        'x-access-token': authToken
+    };
+
+    try {
+        // Fetch fixtures
+        const fixturesRes = await fetch('https://fantasy.iplt20.com/classic/api/feed/tour-fixtures', { headers });
+        const fixturesStatus = fixturesRes.status;
+        const fixturesJson = fixturesRes.ok ? await fixturesRes.json() : await fixturesRes.text();
+
+        // Try to find the first completed/live fixture for gamedayplayers sample
+        let gamedaySample = null;
+        if (fixturesRes.ok && typeof fixturesJson === 'object') {
+            const parsedFixtures = parseIPLFixtures(fixturesJson);
+            if (parsedFixtures.length > 0) {
+                const f = parsedFixtures[0];
+                const gpRes = await fetch(
+                    `https://fantasy.iplt20.com/classic/api/feed/gamedayplayers?optType=1&gamedayId=${f.gamedayId}&phaseId=${f.phaseId}&pageNo=0&topNo=10&pageChunk=10&minCount=0`,
+                    { headers }
+                );
+                gamedaySample = {
+                    fixture: f,
+                    status: gpRes.status,
+                    body: gpRes.ok ? await gpRes.json() : await gpRes.text()
+                };
+            }
+        }
+
+        res.json({
+            fixtures: { status: fixturesStatus, body: fixturesJson },
+            parsedFixtures: typeof fixturesJson === 'object' ? parseIPLFixtures(fixturesJson) : [],
+            gamedaySample
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Get fantasy points for a room
 app.get('/api/room/:code/fantasy-points', (req, res) => {
     const room = getRoom(req.params.code);
