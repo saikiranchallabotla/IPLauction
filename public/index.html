@@ -1666,17 +1666,46 @@
 
             <div class="card" id="fantasy-admin-config" style="margin-top: 1rem;">
                 <h3 class="card-title">Fantasy Points Configuration</h3>
-                <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">Get a free API key from <a href="https://cricketdata.org" target="_blank" style="color: var(--accent);">cricketdata.org</a> and find the IPL series ID.</p>
-                <div class="fantasy-config-grid">
-                    <div>
-                        <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">CricAPI Key</label>
-                        <input type="password" id="fantasy-api-key" placeholder="Enter CricAPI key" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                    </div>
-                    <div>
-                        <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">IPL Series ID</label>
-                        <input type="text" id="fantasy-series-id" placeholder="e.g., d5a498c8-7596-..." style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                <div style="margin-bottom: 1rem;">
+                    <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Data Source</label>
+                    <select id="fantasy-source" onchange="toggleFantasySource(this.value)" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                        <option value="ipl">IPL Fantasy Official (Recommended)</option>
+                        <option value="cric">CricAPI</option>
+                    </select>
+                </div>
+
+                <!-- IPL Fantasy Official fields -->
+                <div id="ipl-fantasy-fields">
+                    <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
+                        Log in to <a href="https://fantasy.iplt20.com" target="_blank" style="color: var(--accent);">fantasy.iplt20.com</a>, open DevTools (F12) &rarr; Application &rarr; Cookies, and copy the two cookie values below.
+                    </p>
+                    <div class="fantasy-config-grid">
+                        <div>
+                            <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">my11c-uid</label>
+                            <input type="text" id="ipl-fantasy-uid" placeholder="Paste my11c-uid cookie value" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">my11c-authToken</label>
+                            <input type="password" id="ipl-fantasy-token" placeholder="Paste my11c-authToken cookie value" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                        </div>
                     </div>
                 </div>
+
+                <!-- CricAPI fields (hidden by default) -->
+                <div id="cricapi-fields" style="display:none">
+                    <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">Get a free API key from <a href="https://cricketdata.org" target="_blank" style="color: var(--accent);">cricketdata.org</a> and find the IPL series ID.</p>
+                    <div class="fantasy-config-grid">
+                        <div>
+                            <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">CricAPI Key</label>
+                            <input type="password" id="fantasy-api-key" placeholder="Enter CricAPI key" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">IPL Series ID</label>
+                            <input type="text" id="fantasy-series-id" placeholder="e.g., d5a498c8-7596-..." style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                        </div>
+                    </div>
+                </div>
+
                 <button class="btn btn-primary" onclick="saveFantasyConfig()" style="margin-top: 0.75rem;">Save & Fetch Points</button>
             </div>
         </div>
@@ -2837,19 +2866,39 @@
             }
         }
 
+        function toggleFantasySource(val) {
+            document.getElementById('ipl-fantasy-fields').style.display = val === 'ipl' ? '' : 'none';
+            document.getElementById('cricapi-fields').style.display = val === 'cric' ? '' : 'none';
+        }
+
         async function saveFantasyConfig() {
             if (!roomCode) return;
-            const apiKey = document.getElementById('fantasy-api-key').value.trim();
-            const seriesId = document.getElementById('fantasy-series-id').value.trim();
-            if (!apiKey || !seriesId) {
-                showAuctionPopup('Missing Fields', 'Both API Key and Series ID are required.', true);
-                return;
+            const source = document.getElementById('fantasy-source').value;
+            let body = {};
+
+            if (source === 'ipl') {
+                const uid = document.getElementById('ipl-fantasy-uid').value.trim();
+                const token = document.getElementById('ipl-fantasy-token').value.trim();
+                if (!uid || !token) {
+                    showAuctionPopup('Missing Fields', 'Both my11c-uid and my11c-authToken cookie values are required.', true);
+                    return;
+                }
+                body = { iplFantasyUid: uid, iplFantasyToken: token };
+            } else {
+                const apiKey = document.getElementById('fantasy-api-key').value.trim();
+                const seriesId = document.getElementById('fantasy-series-id').value.trim();
+                if (!apiKey || !seriesId) {
+                    showAuctionPopup('Missing Fields', 'Both API Key and Series ID are required.', true);
+                    return;
+                }
+                body = { apiKey, seriesId };
             }
+
             try {
                 const res = await fetch('/api/room/' + roomCode + '/fantasy-config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ apiKey, seriesId })
+                    body: JSON.stringify(body)
                 });
                 const data = await res.json();
                 if (data.success) {

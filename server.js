@@ -18,6 +18,8 @@ const ROOMS_FILE = path.join(__dirname, 'data', 'rooms.json');
 const MONGODB_URI = process.env.MONGODB_URI;
 const CRICAPI_KEY = process.env.CRICAPI_KEY || '';
 const CRICAPI_SERIES_ID = process.env.CRICAPI_SERIES_ID || '';
+const IPL_FANTASY_UID = process.env.IPL_FANTASY_UID || '';
+const IPL_FANTASY_AUTH_TOKEN = process.env.IPL_FANTASY_AUTH_TOKEN || '';
 const FANTASY_REFRESH_INTERVAL = parseInt(process.env.FANTASY_REFRESH_INTERVAL) || 30; // minutes
 
 // Store multiple auction rooms (in-memory cache)
@@ -165,17 +167,30 @@ const Fuse = require('fuse.js');
 let fantasyCache = null;
 let fantasyFetchTimer = null;
 
+function isFantasyConfigured() {
+    const iplUid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
+    const iplToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
+    const cricKey = process.env.CRICAPI_KEY || CRICAPI_KEY;
+    const cricSeries = process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID;
+    return !!(iplUid && iplToken) || !!(cricKey && cricSeries);
+}
+
 async function initFantasyPoints() {
-    if (!db) {
-        console.log('Fantasy points require MongoDB - skipping');
-        return;
+    if (db) {
+        // Prefer IPL Fantasy cache over CricAPI cache
+        const iplDoc = await db.collection('fantasy_points').findOne({ seriesId: 'ipl_fantasy_official' });
+        if (iplDoc) {
+            fantasyCache = iplDoc;
+            console.log(`Loaded IPL Fantasy data: ${iplDoc.matches?.length || 0} matches cached`);
+        } else if (CRICAPI_SERIES_ID) {
+            const cricDoc = await db.collection('fantasy_points').findOne({ seriesId: CRICAPI_SERIES_ID });
+            if (cricDoc) {
+                fantasyCache = cricDoc;
+                console.log(`Loaded CricAPI fantasy data: ${cricDoc.matches?.length || 0} matches cached`);
+            }
+        }
     }
-    const doc = await db.collection('fantasy_points').findOne({ seriesId: CRICAPI_SERIES_ID });
-    if (doc) {
-        fantasyCache = doc;
-        console.log(`Loaded fantasy data: ${doc.matches?.length || 0} matches cached`);
-    }
-    if (CRICAPI_KEY && CRICAPI_SERIES_ID) {
+    if (isFantasyConfigured()) {
         startFantasyRefreshTimer();
     }
 }
@@ -191,6 +206,155 @@ function startFantasyRefreshTimer() {
 }
 
 async function fetchAllFantasyPoints() {
+    const iplUid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
+    const iplToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
+    if (iplUid && iplToken) return fetchFromIPLFantasy();
+    return fetchFromCricAPI();
+}
+
+async function fetchFromIPLFantasy() {
+    const uid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
+    const authToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
+    if (!uid || !authToken) throw new Error('IPL_FANTASY_UID and IPL_FANTASY_AUTH_TOKEN must be set');
+
+    const headers = {
+        'Cookie': `my11c-uid=${uid}; my11c-authToken=${authToken}`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://fantasy.iplt20.com/classic/home',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Origin': 'https://fantasy.iplt20.com',
+        'x-access-token': authToken
+    };
+
+    console.log('Fetching IPL Fantasy fixtures...');
+    const fixturesRes = await fetch('https://fantasy.iplt20.com/classic/api/feed/tour-fixtures', { headers });
+    if (fixturesRes.status === 401 || fixturesRes.status === 403) {
+        throw new Error('IPL Fantasy session expired — please refresh your cookies (my11c-uid, my11c-authToken)');
+    }
+    if (!fixturesRes.ok) {
+        throw new Error(`IPL Fantasy fixtures fetch failed: HTTP ${fixturesRes.status}`);
+    }
+    const fixturesJson = await fixturesRes.json();
+    const fixtures = parseIPLFixtures(fixturesJson);
+    console.log(`Found ${fixtures.length} completed/live IPL fixtures`);
+
+    const existingMatches = (fantasyCache?.matches || []);
+    const existingCompleted = new Set(
+        existingMatches.filter(m => m.status === 'completed').map(m => m.matchId)
+    );
+
+    const newMatches = [];
+    for (const fixture of fixtures) {
+        if (existingCompleted.has(fixture.matchId)) continue;
+        try {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            const url = `https://fantasy.iplt20.com/classic/api/feed/gamedayplayers?optType=1&gamedayId=${fixture.gamedayId}&phaseId=${fixture.phaseId}&pageNo=0&topNo=500&pageChunk=500&minCount=0`;
+            const playersRes = await fetch(url, { headers });
+            if (playersRes.status === 401 || playersRes.status === 403) {
+                throw new Error('IPL Fantasy session expired — please refresh your cookies');
+            }
+            if (!playersRes.ok) {
+                console.warn(`Skipping gameday ${fixture.gamedayId}: HTTP ${playersRes.status}`);
+                continue;
+            }
+            const playersJson = await playersRes.json();
+            const playerPoints = parseIPLPlayerPoints(playersJson);
+            if (playerPoints.length > 0) {
+                newMatches.push({
+                    matchId: fixture.matchId,
+                    matchName: fixture.matchName,
+                    matchDate: fixture.matchDate,
+                    status: fixture.status,
+                    playerPoints: playerPoints.map(p => ({
+                        cricApiId: String(p.playerId),
+                        cricApiName: p.playerName,
+                        points: p.points
+                    }))
+                });
+                console.log(`  Fetched ${playerPoints.length} players for ${fixture.matchName}`);
+            }
+        } catch (err) {
+            if (err.message.includes('session expired')) throw err;
+            console.error(`Error fetching gameday ${fixture.gamedayId}:`, err.message);
+        }
+    }
+
+    const allMatches = [...existingMatches];
+    for (const nm of newMatches) {
+        const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
+        if (idx >= 0) allMatches[idx] = nm;
+        else allMatches.push(nm);
+    }
+    allMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+
+    const nameMapping = buildNameMapping(allMatches);
+    fantasyCache = {
+        seriesId: 'ipl_fantasy_official',
+        lastFetchedAt: Date.now(),
+        matches: allMatches,
+        nameMapping
+    };
+
+    if (db) {
+        await db.collection('fantasy_points').updateOne(
+            { seriesId: 'ipl_fantasy_official' },
+            { $set: fantasyCache },
+            { upsert: true }
+        );
+    }
+
+    console.log(`IPL Fantasy updated: ${allMatches.length} total matches, ${newMatches.length} new/updated`);
+    broadcastFantasyUpdate();
+    return { totalMatches: allMatches.length, newMatches: newMatches.length };
+}
+
+function parseIPLFixtures(json) {
+    const fixtures = [];
+    const stages = json?.data?.Stages || json?.data?.stages || json?.Stages || json?.stages || [];
+    for (const stage of stages) {
+        const stageFixtures = stage?.Fixtures || stage?.fixtures || [];
+        for (const f of stageFixtures) {
+            const statusId = f?.StatusId ?? f?.statusId ?? f?.MatchStatus ?? 0;
+            const isLive = statusId === 2 || !!(f?.IsLive || f?.isLive);
+            const isCompleted = statusId === 3 || !!(f?.IsCompleted || f?.isCompleted || f?.MatchEnded || f?.matchEnded);
+            if (!isLive && !isCompleted) continue;
+
+            const gamedayId = f?.GamedayId || f?.gamedayId || f?.GameDayId || f?.gameDayId;
+            if (!gamedayId) continue;
+
+            const home = f?.HomeTeam?.ShortName || f?.HomeTeam?.Name || f?.HomeTeam || f?.Team1 || '';
+            const away = f?.AwayTeam?.ShortName || f?.AwayTeam?.Name || f?.AwayTeam || f?.Team2 || '';
+            const matchName = f?.MatchName || f?.matchName || (home && away ? `${home} vs ${away}` : `Match ${gamedayId}`);
+
+            fixtures.push({
+                matchId: String(f?.FixtureId || f?.fixtureId || f?.MatchId || f?.matchId || gamedayId),
+                matchName,
+                matchDate: f?.StartDate || f?.startDate || f?.MatchDate || f?.matchDate || '',
+                status: isCompleted ? 'completed' : 'live',
+                gamedayId: String(gamedayId),
+                phaseId: String(f?.PhaseId || f?.phaseId || 1)
+            });
+        }
+    }
+    return fixtures;
+}
+
+function parseIPLPlayerPoints(json) {
+    const players = [];
+    const list = json?.data?.Players || json?.data?.players ||
+                 json?.data?.PlayerList || json?.data?.playerList ||
+                 json?.Players || json?.players || [];
+    for (const p of list) {
+        const name = p?.PlayerName || p?.playerName || p?.Name || p?.name || p?.DisplayName || p?.displayName;
+        const pts = parseFloat(p?.TotalPoints || p?.totalPoints || p?.Points || p?.points || 0);
+        const id = String(p?.PlayerId || p?.playerId || p?.Id || p?.id || '');
+        if (name) players.push({ playerId: id, playerName: name, points: pts });
+    }
+    return players;
+}
+
+async function fetchFromCricAPI() {
     const apiKey = process.env.CRICAPI_KEY || CRICAPI_KEY;
     const seriesId = process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID;
     if (!apiKey || !seriesId) {
@@ -396,7 +560,7 @@ function computeRoomFantasyPoints(room) {
 function broadcastFantasyUpdate() {
     for (const [code, room] of rooms) {
         const data = computeRoomFantasyPoints(room);
-        data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
+        data.configured = isFantasyConfigured();
         io.to(code).emit('fantasyPointsUpdate', data);
     }
 }
@@ -406,7 +570,7 @@ function emitFantasyUpdate(roomCode) {
     const room = getRoom(roomCode);
     if (!room) return;
     const data = computeRoomFantasyPoints(room);
-    data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
+    data.configured = isFantasyConfigured();
     io.to(roomCode).emit('fantasyPointsUpdate', data);
 }
 
@@ -807,17 +971,15 @@ app.get('/api/room/:code/fantasy-points', (req, res) => {
 
     // Always compute — returns all teams with 0 pts when no data yet
     const data = computeRoomFantasyPoints(room);
-    data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
+    data.configured = isFantasyConfigured();
     res.json(data);
 });
 
 // Admin: Trigger manual fantasy points refresh
 app.post('/api/room/:code/fantasy-points/refresh', async (req, res) => {
-    const apiKey = process.env.CRICAPI_KEY || CRICAPI_KEY;
-    const seriesId = process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID;
-    if (!apiKey || !seriesId) {
+    if (!isFantasyConfigured()) {
         return res.status(400).json({
-            error: 'Fantasy points not configured. Set CRICAPI_KEY and CRICAPI_SERIES_ID environment variables.'
+            error: 'Fantasy points not configured. Set up IPL Fantasy cookies or CricAPI credentials.'
         });
     }
 
@@ -830,17 +992,23 @@ app.post('/api/room/:code/fantasy-points/refresh', async (req, res) => {
     }
 });
 
-// Admin: Update fantasy API configuration at runtime
+// Admin: Update fantasy configuration at runtime (supports IPL Fantasy official or CricAPI)
 app.post('/api/room/:code/fantasy-config', (req, res) => {
-    const { apiKey, seriesId } = req.body;
+    const { apiKey, seriesId, iplFantasyUid, iplFantasyToken } = req.body;
+
+    // IPL Fantasy official credentials take priority
+    if (iplFantasyUid) process.env.IPL_FANTASY_UID = iplFantasyUid;
+    if (iplFantasyToken) process.env.IPL_FANTASY_AUTH_TOKEN = iplFantasyToken;
+
+    // CricAPI credentials (fallback)
     if (apiKey) process.env.CRICAPI_KEY = apiKey;
     if (seriesId) process.env.CRICAPI_SERIES_ID = seriesId;
 
-    if (apiKey && seriesId) {
+    if (isFantasyConfigured()) {
         startFantasyRefreshTimer();
     }
 
-    res.json({ success: true, configured: !!(process.env.CRICAPI_KEY && process.env.CRICAPI_SERIES_ID) });
+    res.json({ success: true, configured: isFantasyConfigured() });
 });
 
 // ============ SOCKET.IO EVENTS ============
@@ -1324,7 +1492,7 @@ initPersistence().then(async () => {
     ║     Server running on port ${PORT}        ║
     ╠═══════════════════════════════════════╣
     ║  Storage: ${db ? 'MongoDB (persistent)' : 'File (local only)'}        ║
-    ║  Fantasy: ${(process.env.CRICAPI_KEY || CRICAPI_KEY) ? 'Configured' : 'Not configured'}               ║
+    ║  Fantasy: ${isFantasyConfigured() ? 'Configured' : 'Not configured'}               ║
     ╚═══════════════════════════════════════╝
 
     Open http://localhost:${PORT} in your browser
