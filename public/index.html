@@ -1669,17 +1669,29 @@
                 <div style="margin-bottom: 1rem;">
                     <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Data Source</label>
                     <select id="fantasy-source" onchange="toggleFantasySource(this.value)" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                        <option value="auto">Auto — Official IPL Stats (No setup needed)</option>
+                        <option value="auto">Auto (ESPN Cricinfo — No setup needed)</option>
+                        <option value="cric">CricAPI (Free key — Most reliable)</option>
                         <option value="ipl">IPL Fantasy Official (Session cookies)</option>
-                        <option value="cric">CricAPI</option>
                     </select>
                 </div>
 
-                <!-- Auto / IPL public stats (default, no credentials needed) -->
+                <!-- Auto / ESPN fields (default, no credentials needed) -->
                 <div id="ipl-stats-fields">
                     <p style="color: var(--text-secondary); font-size: 0.8rem; line-height: 1.5;">
-                        Points are pulled automatically from the <strong style="color: var(--text);">official IPL stats website in real-time</strong> — no login, no cookies, no API keys needed. Fantasy points are computed from live batting, bowling &amp; fielding data using standard IPL Fantasy scoring rules and refresh every 5 minutes.
+                        Points are fetched automatically from <strong style="color: var(--text);">ESPN Cricinfo</strong> in real-time — no login or API keys needed. Fantasy points are computed from live batting, bowling &amp; fielding data and refresh every 5 minutes. <em>If ESPN blocks the server, switch to CricAPI below.</em>
                     </p>
+                </div>
+
+                <!-- CricAPI fields — API key only, series auto-discovered -->
+                <div id="cricapi-fields" style="display:none">
+                    <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
+                        Get a <strong style="color: var(--text);">free API key</strong> (30 seconds) from <a href="https://cricketdata.org" target="_blank" style="color: var(--accent);">cricketdata.org</a>. The IPL series is auto-detected — no series ID needed.
+                    </p>
+                    <div>
+                        <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">CricAPI Key</label>
+                        <input type="password" id="fantasy-api-key" placeholder="Paste your CricAPI key" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
+                    </div>
+                    <p style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 0.4rem;">Free tier: 100 calls/day — more than enough with 5-minute caching.</p>
                 </div>
 
                 <!-- IPL Fantasy Official cookie fields (hidden by default) -->
@@ -1695,21 +1707,6 @@
                         <div>
                             <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">my11c-authToken</label>
                             <input type="password" id="ipl-fantasy-token" placeholder="Paste my11c-authToken cookie value" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- CricAPI fields (hidden by default) -->
-                <div id="cricapi-fields" style="display:none">
-                    <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">Get a free API key from <a href="https://cricketdata.org" target="_blank" style="color: var(--accent);">cricketdata.org</a> and find the IPL series ID.</p>
-                    <div class="fantasy-config-grid">
-                        <div>
-                            <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">CricAPI Key</label>
-                            <input type="password" id="fantasy-api-key" placeholder="Enter CricAPI key" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                        </div>
-                        <div>
-                            <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">IPL Series ID</label>
-                            <input type="text" id="fantasy-series-id" placeholder="e.g., d5a498c8-7596-..." style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
                         </div>
                     </div>
                 </div>
@@ -2905,13 +2902,13 @@
                 }
                 body = { iplFantasyUid: uid, iplFantasyToken: token };
             } else {
+                // CricAPI — only API key needed, series ID auto-detected
                 const apiKey = document.getElementById('fantasy-api-key').value.trim();
-                const seriesId = document.getElementById('fantasy-series-id').value.trim();
-                if (!apiKey || !seriesId) {
-                    showAuctionPopup('Missing Fields', 'Both API Key and Series ID are required.', true);
+                if (!apiKey) {
+                    showAuctionPopup('Missing Field', 'Please enter your CricAPI key. Get a free one at cricketdata.org.', true);
                     return;
                 }
-                body = { apiKey, seriesId };
+                body = { apiKey };  // seriesId intentionally omitted — server auto-discovers it
             }
 
             const saveBtn = document.querySelector('#fantasy-admin-config .btn-primary');
