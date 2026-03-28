@@ -2661,11 +2661,13 @@
             if (lastUpdated) {
                 if (fantasyData.lastUpdated) {
                     const ago = Math.round((Date.now() - fantasyData.lastUpdated) / 60000);
-                    lastUpdated.textContent = ago < 1 ? 'Updated just now' :
-                        ago < 60 ? 'Updated ' + ago + 'm ago' :
-                        'Updated ' + Math.round(ago / 60) + 'h ago';
+                    const agoText = ago < 1 ? 'just now' : ago < 60 ? ago + 'm ago' : Math.round(ago / 60) + 'h ago';
+                    lastUpdated.textContent = 'Updated ' + agoText +
+                        ' · ' + matchesPlayed + ' match' + (matchesPlayed !== 1 ? 'es' : '') + ' loaded';
+                } else if (fantasyData.configured) {
+                    lastUpdated.textContent = 'Configured — click Refresh Points to fetch match data';
                 } else {
-                    lastUpdated.textContent = matchesPlayed === 0 ? 'Awaiting IPL 2025 matches' : '';
+                    lastUpdated.textContent = 'Awaiting IPL 2026 match data';
                 }
             }
 

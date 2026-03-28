@@ -311,43 +311,87 @@ async function fetchFromIPLFantasy() {
 
 function parseIPLFixtures(json) {
     const fixtures = [];
-    const stages = json?.data?.Stages || json?.data?.stages || json?.Stages || json?.stages || [];
-    for (const stage of stages) {
-        const stageFixtures = stage?.Fixtures || stage?.fixtures || [];
-        for (const f of stageFixtures) {
-            const statusId = f?.StatusId ?? f?.statusId ?? f?.MatchStatus ?? 0;
-            const isLive = statusId === 2 || !!(f?.IsLive || f?.isLive);
-            const isCompleted = statusId === 3 || !!(f?.IsCompleted || f?.isCompleted || f?.MatchEnded || f?.matchEnded);
-            if (!isLive && !isCompleted) continue;
 
-            const gamedayId = f?.GamedayId || f?.gamedayId || f?.GameDayId || f?.gameDayId;
-            if (!gamedayId) continue;
+    // Support multiple possible root structures
+    const stages =
+        json?.data?.Stages || json?.data?.stages ||
+        json?.data?.Stage || json?.data?.stage ||
+        json?.Stages || json?.stages || [];
 
-            const home = f?.HomeTeam?.ShortName || f?.HomeTeam?.Name || f?.HomeTeam || f?.Team1 || '';
-            const away = f?.AwayTeam?.ShortName || f?.AwayTeam?.Name || f?.AwayTeam || f?.Team2 || '';
-            const matchName = f?.MatchName || f?.matchName || (home && away ? `${home} vs ${away}` : `Match ${gamedayId}`);
+    // Also support flat fixture list (some API versions return fixtures directly)
+    const flatFixtures =
+        json?.data?.Fixtures || json?.data?.fixtures ||
+        json?.Fixtures || json?.fixtures || [];
 
-            fixtures.push({
-                matchId: String(f?.FixtureId || f?.fixtureId || f?.MatchId || f?.matchId || gamedayId),
-                matchName,
-                matchDate: f?.StartDate || f?.startDate || f?.MatchDate || f?.matchDate || '',
-                status: isCompleted ? 'completed' : 'live',
-                gamedayId: String(gamedayId),
-                phaseId: String(f?.PhaseId || f?.phaseId || 1)
-            });
-        }
+    const allFixtureSources = [
+        ...flatFixtures,
+        ...stages.flatMap(s => s?.Fixtures || s?.fixtures || s?.Match || s?.match || [])
+    ];
+
+    for (const f of allFixtureSources) {
+        // Status can be a number (2=live,3=completed) OR a string ("live","completed","result")
+        const rawStatus = f?.StatusId ?? f?.statusId ?? f?.MatchStatus ?? f?.matchStatus ?? f?.Status ?? f?.status ?? 0;
+        const statusStr = String(rawStatus).toLowerCase();
+        const statusNum = parseInt(rawStatus, 10);
+
+        const isLive =
+            statusNum === 2 ||
+            statusStr === 'live' || statusStr === 'inprogress' || statusStr === 'in progress' ||
+            !!(f?.IsLive || f?.isLive);
+
+        const isCompleted =
+            statusNum === 3 || statusNum === 4 ||
+            statusStr === 'completed' || statusStr === 'complete' ||
+            statusStr === 'result' || statusStr === 'finished' ||
+            !!(f?.IsCompleted || f?.isCompleted || f?.MatchEnded || f?.matchEnded || f?.Result || f?.result);
+
+        if (!isLive && !isCompleted) continue;
+
+        // gamedayId is used in the player-points API call
+        const gamedayId =
+            f?.GamedayId || f?.gamedayId || f?.GameDayId || f?.gameDayId ||
+            f?.MatchId    || f?.matchId   || f?.FixtureId || f?.fixtureId || f?.Id || f?.id;
+        if (!gamedayId) continue;
+
+        const home = f?.HomeTeam?.ShortName || f?.HomeTeam?.Name || f?.HomeTeam || f?.Team1 || f?.team1 || '';
+        const away = f?.AwayTeam?.ShortName || f?.AwayTeam?.Name || f?.AwayTeam || f?.Team2 || f?.team2 || '';
+        const matchName =
+            f?.MatchName || f?.matchName || f?.title || f?.Title ||
+            (home && away ? `${home} vs ${away}` : `Match ${gamedayId}`);
+
+        fixtures.push({
+            matchId: String(f?.FixtureId || f?.fixtureId || f?.MatchId || f?.matchId || gamedayId),
+            matchName,
+            matchDate: f?.StartDate || f?.startDate || f?.MatchDate || f?.matchDate || f?.date || '',
+            status: isCompleted ? 'completed' : 'live',
+            gamedayId: String(gamedayId),
+            phaseId: String(f?.PhaseId || f?.phaseId || f?.Phase || f?.phase || 1)
+        });
     }
     return fixtures;
 }
 
 function parseIPLPlayerPoints(json) {
     const players = [];
-    const list = json?.data?.Players || json?.data?.players ||
-                 json?.data?.PlayerList || json?.data?.playerList ||
-                 json?.Players || json?.players || [];
-    for (const p of list) {
-        const name = p?.PlayerName || p?.playerName || p?.Name || p?.name || p?.DisplayName || p?.displayName;
-        const pts = parseFloat(p?.TotalPoints || p?.totalPoints || p?.Points || p?.points || 0);
+    const list =
+        json?.data?.Players     || json?.data?.players ||
+        json?.data?.PlayerList  || json?.data?.playerList ||
+        json?.data?.Data        || json?.data?.data ||
+        json?.Players           || json?.players ||
+        json?.Data              || json?.data || [];
+    // handle the case where json.data is directly the array
+    const arr = Array.isArray(list) ? list : [];
+    for (const p of arr) {
+        const name =
+            p?.PlayerName  || p?.playerName  ||
+            p?.Name        || p?.name        ||
+            p?.DisplayName || p?.displayName ||
+            p?.FullName    || p?.fullName;
+        const pts = parseFloat(
+            p?.TotalPoints  || p?.totalPoints  ||
+            p?.Points       || p?.points       ||
+            p?.FantasyPoints || p?.fantasyPoints || 0
+        );
         const id = String(p?.PlayerId || p?.playerId || p?.Id || p?.id || '');
         if (name) players.push({ playerId: id, playerName: name, points: pts });
     }
@@ -973,6 +1017,24 @@ app.get('/api/room/:code/fantasy-points', (req, res) => {
     const data = computeRoomFantasyPoints(room);
     data.configured = isFantasyConfigured();
     res.json(data);
+});
+
+// Diagnostic: show current fantasy cache state
+app.get('/api/room/:code/fantasy-status', (req, res) => {
+    const room = getRoom(req.params.code);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    const matches = fantasyCache?.matches || [];
+    const nameMapping = fantasyCache?.nameMapping || {};
+    res.json({
+        configured: isFantasyConfigured(),
+        source: process.env.IPL_FANTASY_UID ? 'ipl_fantasy' : (process.env.CRICAPI_KEY ? 'cricapi' : 'none'),
+        lastFetchedAt: fantasyCache?.lastFetchedAt || null,
+        totalMatches: matches.length,
+        completedMatches: matches.filter(m => m.status === 'completed').length,
+        liveMatches: matches.filter(m => m.status === 'live').length,
+        matchNames: matches.map(m => ({ matchId: m.matchId, name: m.matchName, status: m.status, players: m.playerPoints?.length || 0 })),
+        mappedPlayers: Object.keys(nameMapping).length
+    });
 });
 
 // Admin: Trigger manual fantasy points refresh
