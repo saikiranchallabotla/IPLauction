@@ -371,6 +371,7 @@ function computeRoomFantasyPoints(room) {
         return {
             teamId: team.id,
             teamName: team.name,
+            ownerName: team.ownerName || '',
             totalPoints: teamTotal,
             squadTotalPoints,
             playerBreakdowns: markedBreakdowns,
@@ -398,6 +399,15 @@ function broadcastFantasyUpdate() {
         data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
         io.to(code).emit('fantasyPointsUpdate', data);
     }
+}
+
+// Emit fantasy points update to a single room (called after team/player changes)
+function emitFantasyUpdate(roomCode) {
+    const room = getRoom(roomCode);
+    if (!room) return;
+    const data = computeRoomFantasyPoints(room);
+    data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
+    io.to(roomCode).emit('fantasyPointsUpdate', data);
 }
 
 // Generate random 6-character room code
@@ -702,6 +712,7 @@ app.post('/api/room/:code/teams', (req, res) => {
         saveRooms(room.code); // Save after team creation
         console.log(`Team "${team.name}" added to room ${room.code}. Total teams: ${room.teams.length}`);
         io.to(room.code).emit('teamsUpdated', room.teams);
+        emitFantasyUpdate(room.code);
         res.json(team);
     } catch (err) {
         console.error('Error creating team:', err);
@@ -752,6 +763,7 @@ app.delete('/api/room/:code/teams/:id', (req, res) => {
     room.teams = room.teams.filter(t => t.id !== id);
     saveRooms(room.code); // Save after team deletion
     io.to(room.code).emit('teamsUpdated', room.teams);
+    emitFantasyUpdate(room.code);
     res.json({ success: true });
 });
 
@@ -793,13 +805,7 @@ app.get('/api/room/:code/fantasy-points', (req, res) => {
     const room = getRoom(req.params.code);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
-    if (!fantasyCache) {
-        return res.json({
-            teams: [], matches: [], lastUpdated: null,
-            configured: !!(CRICAPI_KEY && CRICAPI_SERIES_ID)
-        });
-    }
-
+    // Always compute — returns all teams with 0 pts when no data yet
     const data = computeRoomFantasyPoints(room);
     data.configured = !!(process.env.CRICAPI_KEY || CRICAPI_KEY) && !!(process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID);
     res.json(data);
@@ -1061,6 +1067,7 @@ io.on('connection', (socket) => {
         });
 
         io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+        emitFantasyUpdate(room.code);
 
         // Reset after 3 seconds
         setTimeout(() => {
@@ -1211,6 +1218,7 @@ io.on('connection', (socket) => {
         saveRooms(room.code);
         console.log(`Trade: ${playerName} from ${fromTeam.name} to ${toTeam.name} for ${price} Cr`);
         io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+        emitFantasyUpdate(room.code);
     });
 
     // Admin: Release player from team (return to unsold pool)
@@ -1255,6 +1263,7 @@ io.on('connection', (socket) => {
         saveRooms(room.code);
         console.log(`Released: ${playerName} from ${team.name}, refunded ${refundAmount} Cr`);
         io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
+        emitFantasyUpdate(room.code);
     });
 
     // Admin: Add new player and assign to a team
