@@ -237,6 +237,12 @@ async function fetchFromIPLFantasy() {
     }
     const fixturesJson = await fixturesRes.json();
     const fixtures = parseIPLFixtures(fixturesJson);
+    if (fixtures.length === 0) {
+        // Log the top-level keys to help diagnose response format changes
+        const topKeys = Object.keys(fixturesJson || {});
+        const dataKeys = fixturesJson?.data ? Object.keys(fixturesJson.data) : [];
+        console.log(`No live/completed fixtures found. Response top-keys: [${topKeys}], data keys: [${dataKeys}]`);
+    }
     console.log(`Found ${fixtures.length} completed/live IPL fixtures`);
 
     const existingMatches = (fantasyCache?.matches || []);
@@ -311,20 +317,32 @@ async function fetchFromIPLFantasy() {
 
 function parseIPLFixtures(json) {
     const fixtures = [];
-    const stages = json?.data?.Stages || json?.data?.stages || json?.Stages || json?.stages || [];
-    for (const stage of stages) {
-        const stageFixtures = stage?.Fixtures || stage?.fixtures || [];
-        for (const f of stageFixtures) {
-            const statusId = f?.StatusId ?? f?.statusId ?? f?.MatchStatus ?? 0;
-            const isLive = statusId === 2 || !!(f?.IsLive || f?.isLive);
-            const isCompleted = statusId === 3 || !!(f?.IsCompleted || f?.isCompleted || f?.MatchEnded || f?.matchEnded);
+    const stages = json?.data?.Stages || json?.data?.stages || json?.Stages || json?.stages ||
+                   json?.data?.stage || json?.stage || json?.data?.fixtures || json?.fixtures || [];
+    const stageArray = Array.isArray(stages) ? stages : [stages];
+    for (const stage of stageArray) {
+        const stageFixtures = stage?.Fixtures || stage?.fixtures || stage?.matches || stage?.Match || stage?.match || [];
+        const fixtureArray = Array.isArray(stageFixtures) ? stageFixtures : [stageFixtures];
+        for (const f of fixtureArray) {
+            if (!f || typeof f !== 'object') continue;
+            const statusId = f?.StatusId ?? f?.statusId ?? f?.MatchStatus ?? f?.matchStatus ?? f?.status ?? 0;
+            const statusStr = String(statusId).toLowerCase();
+            // Status IDs: 2=live, 3=completed (classic API); also handle 1=completed in some versions
+            // and string statuses like "completed", "result", "finished"
+            const isLive = statusId === 2 || statusStr === '2' || !!(f?.IsLive || f?.isLive) ||
+                           statusStr === 'live' || statusStr === 'inprogress';
+            const isCompleted = statusId === 3 || statusStr === '3' ||
+                                !!(f?.IsCompleted || f?.isCompleted || f?.MatchEnded || f?.matchEnded) ||
+                                statusStr === 'completed' || statusStr === 'result' ||
+                                statusStr === 'finished' || statusStr === 'post';
             if (!isLive && !isCompleted) continue;
 
-            const gamedayId = f?.GamedayId || f?.gamedayId || f?.GameDayId || f?.gameDayId;
+            const gamedayId = f?.GamedayId || f?.gamedayId || f?.GameDayId || f?.gameDayId ||
+                              f?.MatchId || f?.matchId || f?.FixtureId || f?.fixtureId;
             if (!gamedayId) continue;
 
-            const home = f?.HomeTeam?.ShortName || f?.HomeTeam?.Name || f?.HomeTeam || f?.Team1 || '';
-            const away = f?.AwayTeam?.ShortName || f?.AwayTeam?.Name || f?.AwayTeam || f?.Team2 || '';
+            const home = f?.HomeTeam?.ShortName || f?.HomeTeam?.Name || f?.HomeTeam || f?.Team1 || f?.team1 || '';
+            const away = f?.AwayTeam?.ShortName || f?.AwayTeam?.Name || f?.AwayTeam || f?.Team2 || f?.team2 || '';
             const matchName = f?.MatchName || f?.matchName || (home && away ? `${home} vs ${away}` : `Match ${gamedayId}`);
 
             fixtures.push({
@@ -344,10 +362,16 @@ function parseIPLPlayerPoints(json) {
     const players = [];
     const list = json?.data?.Players || json?.data?.players ||
                  json?.data?.PlayerList || json?.data?.playerList ||
-                 json?.Players || json?.players || [];
+                 json?.data?.playerpoints || json?.data?.PlayerPoints ||
+                 json?.Players || json?.players ||
+                 json?.playerList || json?.PlayerList || [];
+    if (list.length === 0) {
+        const dataKeys = json?.data ? Object.keys(json.data) : [];
+        if (dataKeys.length > 0) console.log(`  Player points: no list found, data keys: [${dataKeys}]`);
+    }
     for (const p of list) {
-        const name = p?.PlayerName || p?.playerName || p?.Name || p?.name || p?.DisplayName || p?.displayName;
-        const pts = parseFloat(p?.TotalPoints || p?.totalPoints || p?.Points || p?.points || 0);
+        const name = p?.PlayerName || p?.playerName || p?.Name || p?.name || p?.DisplayName || p?.displayName || p?.fullName || p?.FullName;
+        const pts = parseFloat(p?.TotalPoints || p?.totalPoints || p?.Points || p?.points || p?.FantasyPoints || p?.fantasyPoints || 0);
         const id = String(p?.PlayerId || p?.playerId || p?.Id || p?.id || '');
         if (name) players.push({ playerId: id, playerName: name, points: pts });
     }
