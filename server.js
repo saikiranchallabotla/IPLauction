@@ -936,11 +936,15 @@ async function fetchFromIPLFantasyPublic() {
 
     // Step 2: If no fixtures found, probe tourgamedayId sequentially (IPL has up to 74 matches)
     // We'll use discovered fixtures for matchId/matchName/matchDate metadata;
-    // if none, we generate placeholder metadata and stop on consecutive empty responses.
+    // if none, we generate placeholder metadata and stop on consecutive no-points responses.
     const useProbing = fixtures.length === 0;
     const MAX_GAMEDAY_ID = 74;
 
-    const existingMatches = fantasyCache?.matches || [];
+    // Only carry forward matches previously fetched by THIS source to avoid inheriting
+    // stale data from Cricbuzz/ESPN/IPL-Stats (which may contain matches from prior seasons).
+    const existingMatches = (fantasyCache?.seriesId === 'ipl_fantasy_public')
+        ? (fantasyCache?.matches || [])
+        : [];
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const existingCompleted = new Set(
         existingMatches
@@ -949,7 +953,7 @@ async function fetchFromIPLFantasyPublic() {
     );
 
     const newMatches = [];
-    let consecutiveEmpty = 0;
+    let consecutiveNoPoints = 0; // counts gamedays that returned players but all with 0 pts
 
     const gamedayEntries = useProbing
         ? Array.from({ length: MAX_GAMEDAY_ID }, (_, i) => ({
@@ -977,9 +981,9 @@ async function fetchFromIPLFantasyPublic() {
             const res = await fetch(url, { headers });
 
             if (!res.ok) {
-                consecutiveEmpty++;
-                if (useProbing && consecutiveEmpty >= 3) {
-                    console.log(`IPL Fantasy Public: stopping probe after ${consecutiveEmpty} consecutive failures at tourgamedayId ${entry.tourgamedayId}`);
+                consecutiveNoPoints++;
+                if (useProbing && consecutiveNoPoints >= 3) {
+                    console.log(`IPL Fantasy Public: stopping probe after ${consecutiveNoPoints} consecutive failures at tourgamedayId ${entry.tourgamedayId}`);
                     break;
                 }
                 continue;
@@ -988,22 +992,33 @@ async function fetchFromIPLFantasyPublic() {
             const json = await res.json();
             const playerPoints = parseIPLPublicPlayerPoints(json);
 
+            // Skip entirely if no players returned at all
             if (playerPoints.length === 0) {
-                consecutiveEmpty++;
-                if (useProbing && consecutiveEmpty >= 3) {
-                    console.log(`IPL Fantasy Public: stopping probe after ${consecutiveEmpty} consecutive empty responses at tourgamedayId ${entry.tourgamedayId}`);
+                consecutiveNoPoints++;
+                if (useProbing && consecutiveNoPoints >= 3) {
+                    console.log(`IPL Fantasy Public: stopping probe after ${consecutiveNoPoints} consecutive empty responses at tourgamedayId ${entry.tourgamedayId}`);
                     break;
                 }
                 continue;
             }
 
-            consecutiveEmpty = 0;
-
-            // Determine status: if any player has non-zero GamedayPoints the match has data
+            // Check if the match has actually been played (at least one player with >0 GamedayPoints)
             const hasPoints = playerPoints.some(p => p.points > 0);
-            const matchStatus = entry.status !== 'live'
-                ? (hasPoints ? 'completed' : 'upcoming')
-                : 'live';
+
+            if (!hasPoints) {
+                // Match hasn't been played yet — don't add it, treat as signal to stop probing
+                consecutiveNoPoints++;
+                if (useProbing && consecutiveNoPoints >= 3) {
+                    console.log(`IPL Fantasy Public: stopping probe — ${consecutiveNoPoints} consecutive unplayed gamedays at tourgamedayId ${entry.tourgamedayId}`);
+                    break;
+                }
+                continue;
+            }
+
+            consecutiveNoPoints = 0;
+
+            // Determine live vs completed: live if flagged by fixtures OR points > 0 but still changing
+            const matchStatus = entry.status === 'live' ? 'live' : 'completed';
 
             newMatches.push({
                 matchId: entry.matchId,
@@ -1016,8 +1031,8 @@ async function fetchFromIPLFantasyPublic() {
             console.log(`  IPL Fantasy Public: ${playerPoints.length} players for ${entry.matchName} (tourgamedayId=${entry.tourgamedayId})`);
         } catch (err) {
             console.error(`IPL Fantasy Public: error fetching tourgamedayId ${entry.tourgamedayId}:`, err.message);
-            consecutiveEmpty++;
-            if (useProbing && consecutiveEmpty >= 3) break;
+            consecutiveNoPoints++;
+            if (useProbing && consecutiveNoPoints >= 3) break;
         }
     }
 
