@@ -2957,14 +2957,104 @@
                 return;
             }
 
-            const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+            const now = new Date();
+            const todayDateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
             const matches = fantasyData.matches || [];
 
-            // Pick live match first, then today's match, then most recent
+            // Find all of today's matches
+            const todaysMatches = matches.filter(function(m) {
+                return m.matchDate && (m.matchDate.includes(todayDateStr) || new Date(m.matchDate).toDateString() === now.toDateString());
+            });
+
+            // Determine if it's a double header day
+            const isDoubleHeader = todaysMatches.length >= 2;
+
+            // IST offset: UTC+5:30 = 330 minutes
+            var IST_OFFSET = 330;
+            var nowIST = new Date(now.getTime() + (IST_OFFSET + now.getTimezoneOffset()) * 60000);
+            var nowISTHours = nowIST.getHours();
+            var nowISTMinutes = nowIST.getMinutes();
+            var nowISTTotalMinutes = nowISTHours * 60 + nowISTMinutes;
+
+            // Squad announcement times (30 min before match start):
+            // Single match day: match at 7:30 PM IST → squads at 7:00 PM IST (19:00 = 1140 min)
+            // Double header day: 1st match at 3:30 PM IST → squads at 3:00 PM IST (15:00 = 900 min)
+            //                    2nd match at 7:30 PM IST → squads at 7:00 PM IST (19:00 = 1140 min)
+            var SINGLE_MATCH_SQUAD_TIME = 19 * 60; // 7:00 PM IST = 1140 min
+            var DOUBLE_HEADER_FIRST_SQUAD_TIME = 15 * 60; // 3:00 PM IST = 900 min
+            var DOUBLE_HEADER_SECOND_SQUAD_TIME = 19 * 60; // 7:00 PM IST = 1140 min
+
+            // For today's matches, determine which ones have squads announced
+            var squadAnnouncedMatches = [];
+            if (todaysMatches.length > 0) {
+                if (isDoubleHeader) {
+                    // Sort by match date to identify 1st and 2nd match
+                    todaysMatches.sort(function(a, b) { return new Date(a.matchDate) - new Date(b.matchDate); });
+                    if (nowISTTotalMinutes >= DOUBLE_HEADER_FIRST_SQUAD_TIME) {
+                        squadAnnouncedMatches.push(todaysMatches[0]);
+                    }
+                    if (nowISTTotalMinutes >= DOUBLE_HEADER_SECOND_SQUAD_TIME && todaysMatches.length > 1) {
+                        squadAnnouncedMatches.push(todaysMatches[1]);
+                    }
+                } else {
+                    // Single match day
+                    if (nowISTTotalMinutes >= SINGLE_MATCH_SQUAD_TIME) {
+                        squadAnnouncedMatches.push(todaysMatches[0]);
+                    }
+                }
+            }
+
+            // Pick live match first, then today's match with squad announced, then most recent completed
             const liveMatch = matches.find(m => m.status === 'live');
-            const todayMatch = liveMatch ||
-                matches.find(m => m.matchDate && (m.matchDate.includes(today) || new Date(m.matchDate).toDateString() === new Date().toDateString())) ||
-                matches[matches.length - 1];
+            var todayMatch;
+            if (liveMatch) {
+                todayMatch = liveMatch;
+            } else if (squadAnnouncedMatches.length > 0) {
+                // Show the latest squad-announced match for today
+                todayMatch = squadAnnouncedMatches[squadAnnouncedMatches.length - 1];
+            } else if (todaysMatches.length > 0) {
+                // Today has matches but squads not yet announced — show countdown
+                var nextAnnouncementTime;
+                var nextAnnouncementLabel;
+                if (isDoubleHeader) {
+                    if (nowISTTotalMinutes < DOUBLE_HEADER_FIRST_SQUAD_TIME) {
+                        nextAnnouncementTime = DOUBLE_HEADER_FIRST_SQUAD_TIME;
+                        nextAnnouncementLabel = '3:00 PM IST';
+                    } else {
+                        nextAnnouncementTime = DOUBLE_HEADER_SECOND_SQUAD_TIME;
+                        nextAnnouncementLabel = '7:00 PM IST';
+                    }
+                } else {
+                    nextAnnouncementTime = SINGLE_MATCH_SQUAD_TIME;
+                    nextAnnouncementLabel = '7:00 PM IST';
+                }
+                var minsRemaining = nextAnnouncementTime - nowISTTotalMinutes;
+                var hoursLeft = Math.floor(minsRemaining / 60);
+                var minsLeft = minsRemaining % 60;
+                var countdownStr = hoursLeft > 0 ? hoursLeft + 'h ' + minsLeft + 'm' : minsLeft + 'm';
+
+                var matchNames = todaysMatches.map(function(m) { return m.matchName; }).join(isDoubleHeader ? ' & ' : '');
+                if (banner) {
+                    banner.innerHTML = '<div style="background: var(--glass); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1rem;">' +
+                        '<div style="font-weight: 700; font-size: 0.95rem;">' + matchNames + (isDoubleHeader ? ' (Double Header)' : '') + '</div>' +
+                        '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">' + (todaysMatches[0].matchDate || '') + '</div>' +
+                    '</div>';
+                }
+                content.innerHTML = '<div style="text-align: center; padding: 2.5rem 1rem;">' +
+                    '<div style="font-size: 2.5rem; margin-bottom: 0.75rem;">&#9917;</div>' +
+                    '<div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 0.5rem;">Squads Not Yet Announced</div>' +
+                    '<div style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">Squads are announced 30 minutes before match time.</div>' +
+                    '<div style="background: var(--dark-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1.25rem; display: inline-block;">' +
+                        '<div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Next squad announcement at</div>' +
+                        '<div style="font-size: 1.3rem; font-weight: 700; color: var(--accent); margin-top: 0.25rem;">' + nextAnnouncementLabel + '</div>' +
+                        '<div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">' + countdownStr + ' remaining</div>' +
+                    '</div>' +
+                '</div>';
+                return;
+            } else {
+                // No today's matches — fall back to most recent
+                todayMatch = matches[matches.length - 1];
+            }
 
             if (!todayMatch) {
                 content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No match found for today.</p>';
@@ -2972,10 +3062,14 @@
             }
 
             const isLive = todayMatch.status === 'live';
+            var headerExtra = '';
+            if (todaysMatches.length > 0 && isDoubleHeader) {
+                headerExtra = ' (Double Header)';
+            }
             if (banner) {
                 banner.innerHTML = '<div style="background: ' + (isLive ? 'rgba(245,197,24,0.12)' : 'var(--glass)') + '; border: 1px solid ' + (isLive ? 'rgba(245,197,24,0.4)' : 'var(--border)') + '; border-radius: 10px; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center;">' +
                     '<div>' +
-                        '<div style="font-weight: 700; font-size: 0.95rem;">' + todayMatch.matchName + '</div>' +
+                        '<div style="font-weight: 700; font-size: 0.95rem;">' + todayMatch.matchName + headerExtra + '</div>' +
                         '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">' + (todayMatch.matchDate || '') + '</div>' +
                     '</div>' +
                     (isLive ? '<span style="background: rgba(245,197,24,0.2); color: var(--accent); font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; border: 1px solid rgba(245,197,24,0.4);">&#9679; LIVE</span>' :
@@ -3885,6 +3979,7 @@
         }
 
         let fantasyTabPollTimer = null;
+        let fantasyCountdownTimer = null;
 
         function showView(view) {
             if (view === 'admin' && !isAdmin) return;
@@ -3912,9 +4007,20 @@
                         }
                     }, 60 * 1000); // poll every 60s when tab is open
                 }
+                // Start countdown refresh timer — re-renders today tab every minute
+                // so the squad announcement countdown stays accurate
+                if (!fantasyCountdownTimer) {
+                    fantasyCountdownTimer = setInterval(function() {
+                        var todayTab = document.getElementById('fantasy-today-tab');
+                        if (todayTab && todayTab.style.display !== 'none') {
+                            renderTodaysPlayers();
+                        }
+                    }, 60 * 1000);
+                }
             } else {
                 // Stop polling when leaving fantasy tab
                 if (fantasyTabPollTimer) { clearInterval(fantasyTabPollTimer); fantasyTabPollTimer = null; }
+                if (fantasyCountdownTimer) { clearInterval(fantasyCountdownTimer); fantasyCountdownTimer = null; }
             }
         }
 
