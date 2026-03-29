@@ -1412,6 +1412,13 @@
 
         <!-- Admin View -->
         <div id="admin-view" class="view">
+            <!-- Pin Room banner — visible at the top of admin view -->
+            <div id="pin-room-banner" style="display:none; margin: 0.75rem 1rem 0; padding: 0.6rem 1rem; background: rgba(245,197,24,0.08); border: 1px solid rgba(245,197,24,0.25); border-radius: 10px; align-items: center; justify-content: space-between; gap: 0.75rem;">
+                <div style="font-size: 0.83rem; color: var(--text-secondary);">
+                    <span id="pin-banner-text">&#128204; <strong style="color:var(--text);">Pin this room</strong> — keep data for 6 months (pinned rooms appear at top of room list)</span>
+                </div>
+                <button id="pin-room-btn2" onclick="togglePinRoom()" style="white-space:nowrap; padding: 0.35rem 0.9rem; font-size: 0.82rem; background: rgba(245,197,24,0.18); border: 1px solid rgba(245,197,24,0.45); color: var(--accent); font-weight: 700; border-radius: 8px; cursor: pointer;">&#128204; Pin Room</button>
+            </div>
             <div class="admin-grid">
                 <div class="card">
                     <div class="tabs" style="margin-bottom: 1rem;">
@@ -1707,6 +1714,7 @@
                 <div class="tabs" style="margin-bottom: 1rem;">
                     <button class="tab active" onclick="showFantasyTab('leaderboard', this)">Points Table</button>
                     <button class="tab" onclick="showFantasyTab('match-view', this)">Match-by-Match</button>
+                    <button class="tab" onclick="showFantasyTab('today', this)">&#127815; Today's Players</button>
                 </div>
 
                 <div id="fantasy-leaderboard-tab">
@@ -1721,6 +1729,13 @@
                     <div class="fantasy-match-tabs" id="fantasy-match-tabs"></div>
                     <div id="fantasy-match-content">
                         <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Select a match above to see point breakdowns</p>
+                    </div>
+                </div>
+
+                <div id="fantasy-today-tab" style="display: none;">
+                    <div id="fantasy-today-match-banner" style="margin-bottom: 1rem;"></div>
+                    <div id="fantasy-today-content">
+                        <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading today's match data...</p>
                     </div>
                 </div>
             </div>
@@ -2869,6 +2884,8 @@
             btn.classList.add('active');
             document.getElementById('fantasy-leaderboard-tab').style.display = tab === 'leaderboard' ? 'block' : 'none';
             document.getElementById('fantasy-match-view-tab').style.display = tab === 'match-view' ? 'block' : 'none';
+            document.getElementById('fantasy-today-tab').style.display = tab === 'today' ? 'block' : 'none';
+            if (tab === 'today') renderTodaysPlayers();
         }
 
         function renderFantasyMatchTabs() {
@@ -2929,6 +2946,94 @@
                 ).join('');
         }
 
+        function renderTodaysPlayers() {
+            const banner = document.getElementById('fantasy-today-match-banner');
+            const content = document.getElementById('fantasy-today-content');
+            if (!content) return;
+
+            if (!fantasyData || !fantasyData.matches || fantasyData.matches.length === 0) {
+                if (banner) banner.innerHTML = '';
+                content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No match data available. Configure fantasy points source below.</p>';
+                return;
+            }
+
+            const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+            const matches = fantasyData.matches || [];
+
+            // Pick live match first, then today's match, then most recent
+            const liveMatch = matches.find(m => m.status === 'live');
+            const todayMatch = liveMatch ||
+                matches.find(m => m.matchDate && (m.matchDate.includes(today) || new Date(m.matchDate).toDateString() === new Date().toDateString())) ||
+                matches[matches.length - 1];
+
+            if (!todayMatch) {
+                content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No match found for today.</p>';
+                return;
+            }
+
+            const isLive = todayMatch.status === 'live';
+            if (banner) {
+                banner.innerHTML = '<div style="background: ' + (isLive ? 'rgba(245,197,24,0.12)' : 'var(--glass)') + '; border: 1px solid ' + (isLive ? 'rgba(245,197,24,0.4)' : 'var(--border)') + '; border-radius: 10px; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center;">' +
+                    '<div>' +
+                        '<div style="font-weight: 700; font-size: 0.95rem;">' + todayMatch.matchName + '</div>' +
+                        '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">' + (todayMatch.matchDate || '') + '</div>' +
+                    '</div>' +
+                    (isLive ? '<span style="background: rgba(245,197,24,0.2); color: var(--accent); font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; border: 1px solid rgba(245,197,24,0.4);">&#9679; LIVE</span>' :
+                        '<span style="background: var(--dark-elevated); color: var(--text-secondary); font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px;">' + todayMatch.status + '</span>') +
+                '</div>';
+            }
+
+            // Build flat list of all players across all teams for this match
+            const teams = fantasyData.teams || [];
+            const allPlayers = [];
+            teams.forEach(function(team) {
+                (team.playerBreakdowns || []).forEach(function(p) {
+                    const mp = (p.matchPoints || []).find(function(x) { return x.matchId === todayMatch.matchId; });
+                    allPlayers.push({
+                        playerName: p.playerName,
+                        role: p.role,
+                        country: p.country || '',
+                        teamName: team.teamName,
+                        points: mp ? mp.points : 0,
+                        hasPlayed: mp !== undefined,
+                        isInBest11: !!p.isInBest11
+                    });
+                });
+            });
+
+            // Sort by points descending, then by name
+            allPlayers.sort(function(a, b) { return b.points - a.points || a.playerName.localeCompare(b.playerName); });
+
+            if (allPlayers.length === 0) {
+                content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No player data yet for this match.</p>';
+                return;
+            }
+
+            content.innerHTML =
+                '<div style="display: grid; grid-template-columns: auto 1fr auto auto; gap: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;">' +
+                '<div style="display: contents; font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; background: var(--dark-elevated);">' +
+                    '<div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); background: var(--dark-elevated);">#</div>' +
+                    '<div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); background: var(--dark-elevated);">Player</div>' +
+                    '<div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); background: var(--dark-elevated); text-align: right;">Team</div>' +
+                    '<div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); background: var(--dark-elevated); text-align: right;">Pts</div>' +
+                '</div>' +
+                allPlayers.map(function(p, i) {
+                    var rowBg = i % 2 === 0 ? 'var(--glass)' : 'var(--dark-elevated)';
+                    var ptColor = p.points > 0 ? 'var(--accent)' : p.points < 0 ? 'var(--danger)' : 'var(--text-secondary)';
+                    return '<div style="display: contents; font-size: 0.83rem;">' +
+                        '<div style="padding: 0.45rem 0.75rem; background: ' + rowBg + '; color: var(--text-secondary); border-bottom: 1px solid var(--border);">' + (i + 1) + '</div>' +
+                        '<div style="padding: 0.45rem 0.75rem; background: ' + rowBg + '; border-bottom: 1px solid var(--border);">' +
+                            '<span style="font-weight: 600;">' + p.playerName + '</span>' +
+                            ' <span style="font-size: 0.7rem; padding: 0.06rem 0.3rem; border-radius: 999px; border: 1px solid ' + (p.isInBest11 ? 'rgba(0,200,83,0.35)' : 'var(--border)') + '; color: ' + (p.isInBest11 ? 'var(--success)' : 'var(--text-secondary)') + ';">' + (p.isInBest11 ? 'XI' : 'Bench') + '</span>' +
+                            '<div style="font-size: 0.72rem; color: var(--text-secondary);">' + p.role + (p.country ? ' · ' + p.country : '') + '</div>' +
+                        '</div>' +
+                        '<div style="padding: 0.45rem 0.75rem; background: ' + rowBg + '; border-bottom: 1px solid var(--border); text-align: right; font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap;">' + p.teamName + '</div>' +
+                        '<div style="padding: 0.45rem 0.75rem; background: ' + rowBg + '; border-bottom: 1px solid var(--border); text-align: right; font-weight: 700; color: ' + ptColor + ';">' + p.points.toFixed(1) + '</div>' +
+                    '</div>';
+                }).join('') +
+                '</div>';
+        }
+
         async function refreshFantasyPoints() {
             if (!roomCode) return;
             const btn = document.getElementById('fantasy-refresh-btn');
@@ -2959,19 +3064,37 @@
         // ============ ROOM PIN ============
         function updatePinButton() {
             const btn = document.getElementById('pin-room-btn');
-            if (!btn) return;
-            if (!isAdmin) { btn.style.display = 'none'; return; }
-            btn.style.display = '';
+            const banner = document.getElementById('pin-room-banner');
+            const btn2 = document.getElementById('pin-room-btn2');
+            const bannerText = document.getElementById('pin-banner-text');
+
+            if (btn) {
+                if (!isAdmin) { btn.style.display = 'none'; } else { btn.style.display = ''; }
+            }
+            if (banner) {
+                banner.style.display = isAdmin ? 'flex' : 'none';
+            }
+
             if (roomPinned) {
-                btn.innerHTML = '&#128204; Unpin Room';
-                btn.style.background = 'rgba(245,197,24,0.25)';
-                btn.style.borderColor = 'rgba(245,197,24,0.6)';
-                btn.title = 'Unpin this room (reverts to 7-day retention)';
+                if (btn) {
+                    btn.innerHTML = '&#128204; Unpin Room';
+                    btn.style.background = 'rgba(245,197,24,0.25)';
+                    btn.style.borderColor = 'rgba(245,197,24,0.6)';
+                    btn.title = 'Unpin this room (reverts to 7-day retention)';
+                }
+                if (btn2) { btn2.innerHTML = '&#128204; Unpin Room'; btn2.style.background = 'rgba(245,197,24,0.25)'; btn2.style.borderColor = 'rgba(245,197,24,0.6)'; }
+                if (bannerText) bannerText.innerHTML = '&#128204; <strong style="color:var(--accent);">Room is PINNED</strong> — data retained for 6 months. Click to unpin (reverts to 7-day retention).';
+                if (banner) { banner.style.background = 'rgba(245,197,24,0.14)'; banner.style.borderColor = 'rgba(245,197,24,0.5)'; }
             } else {
-                btn.innerHTML = '&#128204; Pin Room';
-                btn.style.background = 'rgba(245,197,24,0.08)';
-                btn.style.borderColor = 'rgba(245,197,24,0.25)';
-                btn.title = 'Pin this room to keep data for 6 months';
+                if (btn) {
+                    btn.innerHTML = '&#128204; Pin Room';
+                    btn.style.background = 'rgba(245,197,24,0.08)';
+                    btn.style.borderColor = 'rgba(245,197,24,0.25)';
+                    btn.title = 'Pin this room to keep data for 6 months';
+                }
+                if (btn2) { btn2.innerHTML = '&#128204; Pin Room'; btn2.style.background = 'rgba(245,197,24,0.08)'; btn2.style.borderColor = 'rgba(245,197,24,0.25)'; }
+                if (bannerText) bannerText.innerHTML = '&#128204; <strong style="color:var(--text);">Pin this room</strong> — keep data for 6 months (pinned rooms appear at top of room list)';
+                if (banner) { banner.style.background = 'rgba(245,197,24,0.06)'; banner.style.borderColor = 'rgba(245,197,24,0.22)'; }
             }
         }
 
@@ -3779,7 +3902,12 @@
                         if (hasLive && roomCode) {
                             fetch('/api/room/' + roomCode + '/fantasy-points')
                                 .then(r => r.json())
-                                .then(data => { fantasyData = data; renderPointsTable(); })
+                                .then(data => {
+                                    fantasyData = data;
+                                    renderPointsTable();
+                                    const todayTab = document.getElementById('fantasy-today-tab');
+                                    if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers();
+                                })
                                 .catch(() => {});
                         }
                     }, 60 * 1000); // poll every 60s when tab is open
