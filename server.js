@@ -438,7 +438,7 @@ async function fetchFromCricbuzz() {
 
         // Skip only clearly upcoming/scheduled matches that haven't started
         const isUpcoming = state === 'upcoming' || state === 'scheduled' || state === 'preview' ||
-                           state === 'dormant' || (state === 'toss' && !state.includes('won'));
+                           state === 'dormant';
         // Also skip by date: if match starts more than 1 hour in the future, skip
         const startMs = info.startDate ? parseInt(info.startDate) : 0;
         const isFuture = startMs > 0 && (startMs - now) > 60 * 60 * 1000;
@@ -446,7 +446,7 @@ async function fetchFromCricbuzz() {
 
         const isLive = state.includes('progress') || state === 'live' || state.includes('innings break') ||
                        state.includes('lunch') || state.includes('tea') || state.includes('rain') ||
-                       state.includes('stumps');
+                       state.includes('stumps') || state.includes('toss');
 
         try {
             await new Promise(r => setTimeout(r, 300));

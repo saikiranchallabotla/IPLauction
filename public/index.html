@@ -2152,7 +2152,7 @@
             socket.on('teamsUpdated', (teams) => { try { state.teams = teams; renderTeams(); } catch(e) { console.error('teamsUpdated render error:', e); } });
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
             socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); renderLiveCategories(); } catch(e) { console.error('playersUpdated render error:', e); } });
-            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
+            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); var todayTab = document.getElementById('fantasy-today-tab'); if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
             socket.on('roomPinned', (data) => { try { roomPinned = data.pinned; updatePinButton(); } catch(e) {} });
             socket.on('roomError', (msg) => {
                 showAuctionPopup('Room Error', msg, false);
@@ -3990,17 +3990,24 @@
                     .then(r => r.json())
                     .then(data => { fantasyData = data; renderPointsTable(); })
                     .catch(err => console.error('Failed to fetch fantasy points:', err));
-                // Start client-side poll when tab is open and there's a live match
+                // Start client-side poll when tab is open — polls for live match updates
+                // and also checks for newly started matches (so points appear as soon as a match goes live)
                 if (!fantasyTabPollTimer) {
                     fantasyTabPollTimer = setInterval(() => {
-                        const hasLive = (fantasyData.matches || []).some(m => m.status === 'live');
-                        if (hasLive && roomCode) {
+                        if (!roomCode) return;
+                        var hasLive = (fantasyData.matches || []).some(m => m.status === 'live');
+                        // Also poll if there are today's matches (to detect when they go live)
+                        var todayStr = new Date().toDateString();
+                        var hasTodayMatch = (fantasyData.matches || []).some(function(m) {
+                            return m.matchDate && new Date(m.matchDate).toDateString() === todayStr;
+                        });
+                        if (hasLive || hasTodayMatch) {
                             fetch('/api/room/' + roomCode + '/fantasy-points')
                                 .then(r => r.json())
                                 .then(data => {
                                     fantasyData = data;
                                     renderPointsTable();
-                                    const todayTab = document.getElementById('fantasy-today-tab');
+                                    var todayTab = document.getElementById('fantasy-today-tab');
                                     if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers();
                                 })
                                 .catch(() => {});
