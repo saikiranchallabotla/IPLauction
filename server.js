@@ -1159,8 +1159,33 @@ async function fetchFromIPLFantasyPublic() {
 
             consecutiveNoPoints = 0;
 
-            // Determine live vs completed: live if flagged by fixtures OR points > 0 but still changing
-            const matchStatus = entry.status === 'live' ? 'live' : 'completed';
+            // Determine live vs completed: live if flagged by fixtures, or by detecting
+            // changing points vs cached data (indicates an in-progress match)
+            let matchStatus = 'completed';
+            if (entry.status === 'live') {
+                matchStatus = 'live';
+            } else {
+                // Check if this match's points changed compared to previous cache — if so, it's live
+                const prevMatch = existingMatches.find(m => m.matchId === entry.matchId);
+                if (prevMatch && prevMatch.playerPoints) {
+                    const prevTotal = prevMatch.playerPoints.reduce((s, p) => s + (p.points || 0), 0);
+                    const currTotal = playerPoints.reduce((s, p) => s + (p.points || 0), 0);
+                    if (currTotal !== prevTotal) {
+                        matchStatus = 'live';
+                    } else if (prevMatch.status === 'live') {
+                        // Points same but was previously live — keep as live for a grace period
+                        // (will be flipped to completed once points stop changing)
+                        matchStatus = 'live';
+                    }
+                }
+                // If this is the last match with points (most recent), and it was just discovered
+                // (no previous cache entry), treat as potentially live
+                if (!prevMatch && useProbing) {
+                    // This is a newly discovered match in probing — could be live
+                    // Mark as live; will be corrected to completed on next refresh if points don't change
+                    matchStatus = 'live';
+                }
+            }
 
             newMatches.push({
                 matchId: entry.matchId,
