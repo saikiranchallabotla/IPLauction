@@ -1882,14 +1882,18 @@ function computeRoomFantasyPoints(room) {
     const teamPoints = (room.teams || []).map(team => {
         const playerBreakdowns = (team.players || []).map(player => {
             const apiNames = reverseMapping[player.name] || [];
-            const matchPoints = matches.map(match => {
+            const matchPoints = matches.reduce((acc, match) => {
                 let pts = 0;
+                let inMatch = false;
                 for (const apiName of apiNames) {
                     const found = match.playerPoints.find(pp => pp.cricApiName === apiName);
-                    if (found) { pts = found.points; break; }
+                    if (found) { pts = found.points; inMatch = true; break; }
                 }
-                return { matchId: match.matchId, matchName: match.matchName, points: pts };
-            });
+                if (inMatch) {
+                    acc.push({ matchId: match.matchId, matchName: match.matchName, points: pts });
+                }
+                return acc;
+            }, []);
             const totalPoints = matchPoints.reduce((sum, mp) => sum + mp.points, 0);
             return {
                 playerName: player.name,
