@@ -290,8 +290,8 @@ function startLiveMatchTimer() {
         fetchAllFantasyPoints().catch(err =>
             console.error('Live match refresh failed:', err.message)
         );
-    }, 60 * 1000); // every 1 minute during live matches for near real-time updates
-    console.log('Live match detected: accelerated refresh every 1 minute');
+    }, 30 * 1000); // every 30 seconds during live matches for near real-time updates
+    console.log('Live match detected: accelerated refresh every 30 seconds');
 }
 
 function stopLiveMatchTimer() {

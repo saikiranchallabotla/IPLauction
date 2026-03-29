@@ -4012,7 +4012,7 @@
                                 })
                                 .catch(() => {});
                         }
-                    }, 60 * 1000); // poll every 60s when tab is open
+                    }, 30 * 1000); // poll every 30s when tab is open for faster live updates
                 }
                 // Start countdown refresh timer — re-renders today tab every minute
                 // so the squad announcement countdown stays accurate
@@ -4022,7 +4022,7 @@
                         if (todayTab && todayTab.style.display !== 'none') {
                             renderTodaysPlayers();
                         }
-                    }, 60 * 1000);
+                    }, 30 * 1000);
                 }
             } else {
                 // Stop polling when leaving fantasy tab
