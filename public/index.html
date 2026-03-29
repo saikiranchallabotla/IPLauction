@@ -1008,6 +1008,58 @@
             box-shadow: 0 0 12px var(--accent-glow);
             transform: scale(1.05);
         }
+        .room-list-item.pinned-room {
+            border-color: rgba(245, 197, 24, 0.35);
+            background: rgba(245, 197, 24, 0.05);
+        }
+        .pin-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.2rem;
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--accent);
+            background: rgba(245, 197, 24, 0.15);
+            border: 1px solid rgba(245, 197, 24, 0.3);
+            border-radius: 4px;
+            padding: 0.05rem 0.35rem;
+            margin-left: 0.4rem;
+            vertical-align: middle;
+            letter-spacing: 0.03em;
+        }
+        .live-match-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--success);
+            background: rgba(0, 200, 83, 0.12);
+            border: 1px solid rgba(0, 200, 83, 0.3);
+            border-radius: 4px;
+            padding: 0.1rem 0.45rem;
+            letter-spacing: 0.05em;
+            animation: livePulse 1.5s ease-in-out infinite;
+        }
+        @keyframes livePulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .fantasy-live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.78rem;
+            color: var(--success);
+            font-weight: 600;
+        }
+        .fantasy-live-dot {
+            width: 8px; height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--success-glow);
+            animation: livePulse 1s ease-in-out infinite;
+        }
 
         /* ============ FANTASY POINTS TABLE ============ */
         .fantasy-container { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
@@ -1506,6 +1558,9 @@
 
                     <!-- Sold Players (toggle) + Auction Controls -->
                     <div class="card" style="margin-bottom: 0;">
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.4rem;">
+                            <button class="btn" id="pin-room-btn" onclick="togglePinRoom()" style="padding: 0.4rem 0.8rem; font-size: 0.82rem; background: rgba(245,197,24,0.12); border: 1px solid rgba(245,197,24,0.3); color: var(--accent); font-weight: 600; border-radius: 8px; cursor: pointer; flex: 1;" title="Pin this room to keep it for 6 months">&#128204; Pin Room</button>
+                        </div>
                         <div style="display: flex; gap: 0.5rem;">
                             <button class="btn btn-success" style="flex: 1; padding: 0.4rem; font-size: 0.85rem;" onclick="toggleSoldPanel()">
                                 Sold Players <span id="admin-sold-count" style="background:rgba(0,0,0,0.2);padding:0.1rem 0.45rem;border-radius:10px;font-size:0.78rem;">0</span>
@@ -1616,9 +1671,15 @@
             <div class="fantasy-header">
                 <div>
                     <h2>IPL Fantasy Points Table</h2>
-                    <div class="fantasy-last-updated" id="fantasy-last-updated">Awaiting IPL 2025 matches</div>
+                    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                        <div class="fantasy-last-updated" id="fantasy-last-updated">Awaiting IPL matches</div>
+                        <div class="fantasy-live-indicator" id="fantasy-live-indicator" style="display:none;">
+                            <span class="fantasy-live-dot"></span>LIVE MATCH
+                        </div>
+                    </div>
                 </div>
-                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <button class="btn btn-success" onclick="exportPointsTable()" id="fantasy-export-btn" style="display:none;">Export Excel</button>
                     <button class="btn btn-secondary" onclick="refreshFantasyPoints()" id="fantasy-refresh-btn">Refresh Points</button>
                 </div>
             </div>
@@ -1819,6 +1880,7 @@
         let roomCode = null;
         let roomName = null;
         let isAdmin = false;
+        let roomPinned = false;
         let pendingAdminPassword = null;
         let auctionTimerInterval = null;
         let fantasyData = { teams: [], matches: [], lastUpdated: null, configured: false };
@@ -1944,6 +2006,7 @@
                     var data = await res.json();
                     roomCode = data.code;
                     roomName = data.roomName || 'Auction Room';
+                    roomPinned = !!data.pinned;
                     pendingAdminPassword = password || null;
                     document.getElementById('enter-room-popup').classList.remove('active');
                     enterAuction();
@@ -1991,14 +2054,15 @@
                     var age = getTimeAgo(r.createdAt);
                     var safeName = (r.roomName || 'Auction Room').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     var safeCode = (r.code || '').replace(/'/g, "\\'");
-                    return '<div class="room-list-item" onclick="showEnterRoomPopup(\'' + safeName + '\', \'' + safeCode + '\')">' +
+                    return '<div class="room-list-item' + (r.pinned ? ' pinned-room' : '') + '" onclick="showEnterRoomPopup(\'' + safeName + '\', \'' + safeCode + '\')">' +
                         '<div>' +
                             '<div class="room-info">' +
                                 '<span class="room-status-dot ' + (isLive ? 'live' : 'idle') + '"></span>' +
                                 '<strong>' + (r.roomName || 'Auction Room') + '</strong>' +
+                                (r.pinned ? '<span class="pin-badge">&#128204; PINNED</span>' : '') +
                                 (r.code ? '<span style="font-size:0.78em;color:var(--text-secondary);margin-left:0.5rem;">(' + r.code + ')</span>' : '') +
                             '</div>' +
-                            '<div class="room-meta">' + r.teamCount + ' teams | ' + r.playersSold + ' sold | ' + age + '</div>' +
+                            '<div class="room-meta">' + r.teamCount + ' teams | ' + r.playersSold + ' sold | ' + age + (r.pinned ? ' | 6-month retention' : '') + '</div>' +
                         '</div>' +
                         '<button class="room-join-btn" onclick="event.stopPropagation(); showEnterRoomPopup(\'' + safeName + '\', \'' + safeCode + '\')">Enter</button>' +
                     '</div>';
@@ -2064,6 +2128,7 @@
                         showView('auction');
                     }
                 }
+                updatePinButton();
                 renderHistory();
             });
 
@@ -2073,6 +2138,7 @@
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
             socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); renderLiveCategories(); } catch(e) { console.error('playersUpdated render error:', e); } });
             socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
+            socket.on('roomPinned', (data) => { try { roomPinned = data.pinned; updatePinButton(); } catch(e) {} });
             socket.on('roomError', (msg) => {
                 showAuctionPopup('Room Error', msg, false);
                 setTimeout(() => forceLeaveRoom(), 2000);
@@ -2657,10 +2723,15 @@
         // ============ FANTASY POINTS TABLE ============
         function renderPointsTable() {
             const matchesPlayed = (fantasyData.matches || []).filter(m => m.status === 'completed').length;
+            const hasLiveMatch = (fantasyData.matches || []).some(m => m.status === 'live');
             const el = id => document.getElementById(id);
 
             const statMatches = el('fantasy-stat-matches');
             if (statMatches) statMatches.textContent = matchesPlayed;
+
+            // Show/hide live match indicator
+            const liveIndicator = el('fantasy-live-indicator');
+            if (liveIndicator) liveIndicator.style.display = hasLiveMatch ? 'flex' : 'none';
 
             const lastUpdated = el('fantasy-last-updated');
             if (lastUpdated) {
@@ -2670,9 +2741,13 @@
                         ago < 60 ? 'Updated ' + ago + 'm ago' :
                         'Updated ' + Math.round(ago / 60) + 'h ago';
                 } else {
-                    lastUpdated.textContent = matchesPlayed === 0 ? 'Awaiting IPL 2025 matches' : '';
+                    lastUpdated.textContent = matchesPlayed === 0 ? 'Awaiting IPL matches' : '';
                 }
             }
+
+            // Show export button once there's data
+            const exportBtn = el('fantasy-export-btn');
+            if (exportBtn) exportBtn.style.display = (fantasyData.teams || []).length > 0 ? '' : 'none';
 
             const teams = fantasyData.teams || [];
 
@@ -2806,7 +2881,8 @@
             }
             container.innerHTML = matches.map(m => {
                 const shortName = m.matchName.length > 30 ? m.matchName.substring(0, 30) + '...' : m.matchName;
-                return '<button class="fantasy-match-tab ' + (selectedFantasyMatch === m.matchId ? 'active' : '') + '" onclick="selectFantasyMatch(\'' + m.matchId + '\')">' + shortName + '</button>';
+                const liveBadge = m.status === 'live' ? ' <span class="live-match-badge">&#9679; LIVE</span>' : '';
+                return '<button class="fantasy-match-tab ' + (selectedFantasyMatch === m.matchId ? 'active' : '') + '" onclick="selectFantasyMatch(\'' + m.matchId + '\')">' + shortName + liveBadge + '</button>';
             }).join('');
         }
 
@@ -2878,6 +2954,167 @@
             } finally {
                 if (btn) { btn.textContent = 'Refresh Points'; btn.disabled = false; }
             }
+        }
+
+        // ============ ROOM PIN ============
+        function updatePinButton() {
+            const btn = document.getElementById('pin-room-btn');
+            if (!btn) return;
+            if (!isAdmin) { btn.style.display = 'none'; return; }
+            btn.style.display = '';
+            if (roomPinned) {
+                btn.innerHTML = '&#128204; Unpin Room';
+                btn.style.background = 'rgba(245,197,24,0.25)';
+                btn.style.borderColor = 'rgba(245,197,24,0.6)';
+                btn.title = 'Unpin this room (reverts to 7-day retention)';
+            } else {
+                btn.innerHTML = '&#128204; Pin Room';
+                btn.style.background = 'rgba(245,197,24,0.08)';
+                btn.style.borderColor = 'rgba(245,197,24,0.25)';
+                btn.title = 'Pin this room to keep data for 6 months';
+            }
+        }
+
+        async function togglePinRoom() {
+            if (!roomCode || !isAdmin) return;
+            const adminPass = localStorage.getItem('adminPass_' + roomCode);
+            if (!adminPass) { showAuctionPopup('Admin Required', 'Admin password not found. Please re-enter the room with your admin password.', false); return; }
+            const newPin = !roomPinned;
+            try {
+                const res = await fetch('/api/room/' + roomCode + '/pin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ adminPassword: adminPass, pin: newPin })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Pin failed');
+                roomPinned = data.pinned;
+                updatePinButton();
+                const msg = roomPinned
+                    ? 'Room pinned! Data will be retained for 6 months.'
+                    : 'Room unpinned. Standard 7-day retention applies.';
+                showAuctionPopup(roomPinned ? 'Room Pinned' : 'Room Unpinned', msg, false);
+                setTimeout(() => closeAuctionPopup(), 2500);
+            } catch (err) {
+                showAuctionPopup('Error', err.message, true);
+            }
+        }
+
+        // ============ EXPORT POINTS TABLE ============
+        function exportPointsTable() {
+            if (!fantasyData || !fantasyData.teams || fantasyData.teams.length === 0) {
+                showAuctionPopup('No Data', 'No points data available to export.', false);
+                return;
+            }
+            var wb = XLSX.utils.book_new();
+            var matches = fantasyData.matches || [];
+
+            // ---- Sheet 1: Rankings Summary ----
+            var summaryData = [['Rank', 'Team', 'Owner', 'Best XI Pts', 'Squad Pts', 'Players']];
+            fantasyData.teams.forEach(function(team, i) {
+                summaryData.push([
+                    i + 1,
+                    team.teamName,
+                    team.ownerName || '',
+                    parseFloat(team.totalPoints.toFixed(1)),
+                    parseFloat(team.squadTotalPoints.toFixed(1)),
+                    (team.playerBreakdowns || []).length
+                ]);
+            });
+            var summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+            summaryWs['!cols'] = [{wch:6},{wch:22},{wch:18},{wch:12},{wch:12},{wch:10}];
+            // Style header
+            ['A1','B1','C1','D1','E1','F1'].forEach(function(cell) {
+                if (summaryWs[cell]) {
+                    summaryWs[cell].s = { font: { bold: true, color: { rgb: '000000' } }, fill: { fgColor: { rgb: 'F5C518' } }, alignment: { horizontal: 'center' } };
+                }
+            });
+            XLSX.utils.book_append_sheet(wb, summaryWs, 'Points Table');
+
+            // ---- Sheet 2: Per-Team Player Breakdown ----
+            var breakdownData = [['Team', 'Player', 'Role', 'Country', 'Paid (Cr)', 'Best XI', 'Total Pts']];
+            // Add match columns
+            matches.forEach(function(m) {
+                var label = m.matchName.length > 20 ? m.matchName.substring(0, 20) : m.matchName;
+                if (m.status === 'live') label += ' [LIVE]';
+                breakdownData[0].push(label);
+            });
+            fantasyData.teams.forEach(function(team) {
+                var players = (team.playerBreakdowns || []).slice().sort(function(a,b) { return b.totalPoints - a.totalPoints; });
+                players.forEach(function(p) {
+                    var row = [
+                        team.teamName,
+                        p.playerName,
+                        p.role || '',
+                        p.country || '',
+                        p.soldPrice ? parseFloat(p.soldPrice.toFixed(2)) : 0,
+                        p.isInBest11 ? 'Yes' : 'No',
+                        parseFloat(p.totalPoints.toFixed(1))
+                    ];
+                    matches.forEach(function(m) {
+                        var mp = (p.matchPoints || []).find(function(x) { return x.matchId === m.matchId; });
+                        row.push(mp ? parseFloat(mp.points.toFixed(1)) : 0);
+                    });
+                    breakdownData.push(row);
+                });
+            });
+            var breakdownWs = XLSX.utils.aoa_to_sheet(breakdownData);
+            breakdownWs['!cols'] = [{wch:20},{wch:22},{wch:14},{wch:10},{wch:10},{wch:8},{wch:10}];
+            matches.forEach(function() { breakdownWs['!cols'].push({wch:18}); });
+            // Style header row
+            var hdrRange = XLSX.utils.decode_range(breakdownWs['!ref'] || 'A1');
+            for (var c = hdrRange.s.c; c <= hdrRange.e.c; c++) {
+                var cell = XLSX.utils.encode_cell({ r: 0, c: c });
+                if (breakdownWs[cell]) {
+                    breakdownWs[cell].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1A237E' } }, alignment: { horizontal: 'center' } };
+                }
+            }
+            XLSX.utils.book_append_sheet(wb, breakdownWs, 'Player Breakdown');
+
+            // ---- Sheet 3: Match-by-Match Overview ----
+            if (matches.length > 0) {
+                var matchHdr = ['Team'];
+                matches.forEach(function(m) {
+                    var label = m.matchName.length > 20 ? m.matchName.substring(0, 20) : m.matchName;
+                    if (m.status === 'live') label += ' [LIVE]';
+                    matchHdr.push(label);
+                });
+                matchHdr.push('Total');
+                var matchData = [matchHdr];
+                fantasyData.teams.forEach(function(team) {
+                    var row = [team.teamName];
+                    var total = 0;
+                    matches.forEach(function(m) {
+                        // Sum best-11 players for this match
+                        var matchPts = 0;
+                        var playerPts = (team.playerBreakdowns || []).map(function(p) {
+                            var mp = (p.matchPoints || []).find(function(x) { return x.matchId === m.matchId; });
+                            return { pts: mp ? mp.points : 0, isInBest11: p.isInBest11 };
+                        });
+                        // Use overall best11 designation for now
+                        playerPts.filter(function(p) { return p.isInBest11; }).forEach(function(p) { matchPts += p.pts; });
+                        row.push(parseFloat(matchPts.toFixed(1)));
+                        total += matchPts;
+                    });
+                    row.push(parseFloat(total.toFixed(1)));
+                    matchData.push(row);
+                });
+                var matchWs = XLSX.utils.aoa_to_sheet(matchData);
+                matchWs['!cols'] = [{wch:22}];
+                matches.forEach(function() { matchWs['!cols'].push({wch:18}); });
+                matchWs['!cols'].push({wch:10});
+                var mRange = XLSX.utils.decode_range(matchWs['!ref'] || 'A1');
+                for (var c2 = mRange.s.c; c2 <= mRange.e.c; c2++) {
+                    var cell2 = XLSX.utils.encode_cell({ r: 0, c: c2 });
+                    if (matchWs[cell2]) {
+                        matchWs[cell2].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1B5E20' } }, alignment: { horizontal: 'center' } };
+                    }
+                }
+                XLSX.utils.book_append_sheet(wb, matchWs, 'Match-by-Match');
+            }
+
+            var dateStr = new Date().toISOString().slice(0,10);
+            XLSX.writeFile(wb, 'IPL_Fantasy_Points_' + (roomCode || 'export') + '_' + dateStr + '.xlsx');
         }
 
         function toggleFantasySource(val) {
@@ -3524,6 +3761,8 @@
             showAuctionPopup('Player Added', name + ' has been added to the player pool. Set the price using the dropdown.', false);
         }
 
+        let fantasyTabPollTimer = null;
+
         function showView(view) {
             if (view === 'admin' && !isAdmin) return;
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -3533,6 +3772,21 @@
                     .then(r => r.json())
                     .then(data => { fantasyData = data; renderPointsTable(); })
                     .catch(err => console.error('Failed to fetch fantasy points:', err));
+                // Start client-side poll when tab is open and there's a live match
+                if (!fantasyTabPollTimer) {
+                    fantasyTabPollTimer = setInterval(() => {
+                        const hasLive = (fantasyData.matches || []).some(m => m.status === 'live');
+                        if (hasLive && roomCode) {
+                            fetch('/api/room/' + roomCode + '/fantasy-points')
+                                .then(r => r.json())
+                                .then(data => { fantasyData = data; renderPointsTable(); })
+                                .catch(() => {});
+                        }
+                    }, 60 * 1000); // poll every 60s when tab is open
+                }
+            } else {
+                // Stop polling when leaving fantasy tab
+                if (fantasyTabPollTimer) { clearInterval(fantasyTabPollTimer); fantasyTabPollTimer = null; }
             }
         }
 

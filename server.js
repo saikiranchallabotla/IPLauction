@@ -66,11 +66,13 @@ async function initPersistence() {
             }));
             console.log(`Loaded ${rooms.size} rooms from MongoDB`);
 
-            // Clean up rooms older than 7 days
+            // Clean up rooms: pinned rooms last 6 months, unpinned rooms last 7 days
             const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            const sixMonthsAgo = Date.now() - (180 * 24 * 60 * 60 * 1000);
             let cleaned = 0;
             for (const [code, room] of rooms) {
-                if (room.createdAt < weekAgo) {
+                const cutoff = room.pinned ? sixMonthsAgo : weekAgo;
+                if (room.createdAt < cutoff) {
                     rooms.delete(code);
                     await db.collection('rooms').deleteOne({ code });
                     cleaned++;
@@ -151,11 +153,13 @@ function loadRoomsFromFile() {
         rooms = new Map(roomsArray);
         console.log(`Loaded ${rooms.size} rooms from file`);
 
-        // Clean up old rooms
+        // Clean up old rooms: pinned rooms last 6 months, unpinned last 7 days
         const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        const sixMonthsAgo = Date.now() - (180 * 24 * 60 * 60 * 1000);
         let cleaned = 0;
         for (const [code, room] of rooms) {
-            if (room.createdAt < weekAgo) {
+            const cutoff = room.pinned ? sixMonthsAgo : weekAgo;
+            if (room.createdAt < cutoff) {
                 rooms.delete(code);
                 cleaned++;
             }
@@ -286,8 +290,8 @@ function startLiveMatchTimer() {
         fetchAllFantasyPoints().catch(err =>
             console.error('Live match refresh failed:', err.message)
         );
-    }, 2 * 60 * 1000); // every 2 minutes during live matches
-    console.log('Live match detected: accelerated refresh every 2 minutes');
+    }, 60 * 1000); // every 1 minute during live matches for near real-time updates
+    console.log('Live match detected: accelerated refresh every 1 minute');
 }
 
 function stopLiveMatchTimer() {
@@ -1917,6 +1921,7 @@ function createRoom(code, adminPassword, roomName) {
         code,
         roomName: roomName || 'Auction Room',
         createdAt: Date.now(),
+        pinned: false,
         adminPassword: adminPassword || '',
         teams: [],
         players,
@@ -1954,10 +1959,15 @@ app.get('/api/rooms', (req, res) => {
             teamCount: room.teams.length,
             playersSold: room.auctionState.soldPlayers.length,
             status: room.auctionState.status,
-            createdAt: room.createdAt
+            createdAt: room.createdAt,
+            pinned: !!room.pinned
         });
     }
-    roomList.sort((a, b) => b.createdAt - a.createdAt);
+    // Pinned rooms first, then by newest
+    roomList.sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        return b.createdAt - a.createdAt;
+    });
     res.json(roomList);
 });
 
@@ -2145,7 +2155,7 @@ app.post('/api/room/join', (req, res) => {
     const { code } = req.body;
     const room = getRoom(code);
     if (room) {
-        res.json({ success: true, code: room.code, roomName: room.roomName || 'Auction Room' });
+        res.json({ success: true, code: room.code, roomName: room.roomName || 'Auction Room', pinned: !!room.pinned });
     } else {
         res.status(404).json({ error: 'Room not found. Check the code and try again.' });
     }
@@ -2281,6 +2291,21 @@ app.post('/api/room/:code/reset', (req, res) => {
     saveRooms(room.code); // Save after reset
     io.to(room.code).emit('fullUpdate', { teams: room.teams, players: room.players, auctionState: room.auctionState, config: { initialBudget: INITIAL_BUDGET } });
     res.json({ success: true });
+});
+
+// Pin or unpin a room (admin only). Pinned rooms are retained for 6 months.
+app.post('/api/room/:code/pin', (req, res) => {
+    const room = getRoom(req.params.code);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    const { adminPassword, pin } = req.body || {};
+    if (!adminPassword || adminPassword !== room.adminPassword) {
+        return res.status(403).json({ error: 'Invalid admin password' });
+    }
+    room.pinned = !!pin;
+    saveRooms(room.code);
+    console.log(`Room ${room.code} ${room.pinned ? 'pinned' : 'unpinned'}`);
+    io.to(room.code).emit('roomPinned', { pinned: room.pinned });
+    res.json({ success: true, pinned: room.pinned });
 });
 
 // ============ FANTASY POINTS API ============
