@@ -2961,12 +2961,24 @@
             const todayDateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
             const matches = fantasyData.matches || [];
 
-            // Find all of today's matches
-            const todaysMatches = matches.filter(function(m) {
+            // Find all of today's matches — deduplicate by matchId and matchName
+            const todaysMatchesRaw = matches.filter(function(m) {
                 return m.matchDate && (m.matchDate.includes(todayDateStr) || new Date(m.matchDate).toDateString() === now.toDateString());
             });
+            // Deduplicate: same matchId or same matchName means same match
+            const seenMatchIds = new Set();
+            const seenMatchNames = new Set();
+            const todaysMatches = todaysMatchesRaw.filter(function(m) {
+                const idKey = m.matchId || '';
+                const nameKey = (m.matchName || '').toLowerCase().trim();
+                if (idKey && seenMatchIds.has(idKey)) return false;
+                if (nameKey && seenMatchNames.has(nameKey)) return false;
+                if (idKey) seenMatchIds.add(idKey);
+                if (nameKey) seenMatchNames.add(nameKey);
+                return true;
+            });
 
-            // Determine if it's a double header day
+            // Double header = exactly 2+ distinct matches scheduled for today
             const isDoubleHeader = todaysMatches.length >= 2;
 
             // IST offset: UTC+5:30 = 330 minutes
@@ -4012,7 +4024,7 @@
                                 })
                                 .catch(() => {});
                         }
-                    }, 60 * 1000); // poll every 60s when tab is open
+                    }, 30 * 1000); // poll every 30s when tab is open for faster live updates
                 }
                 // Start countdown refresh timer — re-renders today tab every minute
                 // so the squad announcement countdown stays accurate
@@ -4022,7 +4034,7 @@
                         if (todayTab && todayTab.style.display !== 'none') {
                             renderTodaysPlayers();
                         }
-                    }, 60 * 1000);
+                    }, 30 * 1000);
                 }
             } else {
                 // Stop polling when leaving fantasy tab

@@ -290,8 +290,8 @@ function startLiveMatchTimer() {
         fetchAllFantasyPoints().catch(err =>
             console.error('Live match refresh failed:', err.message)
         );
-    }, 60 * 1000); // every 1 minute during live matches for near real-time updates
-    console.log('Live match detected: accelerated refresh every 1 minute');
+    }, 30 * 1000); // every 30 seconds during live matches for near real-time updates
+    console.log('Live match detected: accelerated refresh every 30 seconds');
 }
 
 function stopLiveMatchTimer() {
@@ -429,6 +429,10 @@ async function fetchFromCricbuzz() {
             .map(m => m.matchId)
     );
 
+    // Fast-path: if we already have live matches in cache, only re-fetch those + non-completed
+    const cachedLiveIds = new Set(existingMatches.filter(m => m.status === 'live').map(m => m.matchId));
+    const isCricbuzzLiveRefresh = cachedLiveIds.size > 0;
+
     const newMatches = [];
     for (const [matchId, m] of matchMap) {
         if (existingCompleted.has(matchId)) continue;
@@ -448,8 +452,11 @@ async function fetchFromCricbuzz() {
                        state.includes('lunch') || state.includes('tea') || state.includes('rain') ||
                        state.includes('stumps') || state.includes('toss');
 
+        // During live refresh, skip completed matches we already have (only re-fetch live ones)
+        if (isCricbuzzLiveRefresh && !isLive && !cachedLiveIds.has(matchId)) continue;
+
         try {
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, isCricbuzzLiveRefresh ? 50 : 300));
             const scRes = await fetch(`https://www.cricbuzz.com/api/cricket-scorecard/${matchId}`, { headers });
             if (!scRes.ok) {
                 console.warn(`Cricbuzz scorecard HTTP ${scRes.status} for match ${matchId}`);
@@ -925,11 +932,17 @@ async function fetchFromIPLFantasy() {
         }).map(m => m.matchId)
     );
 
+    // Fast-path: during live matches, only re-fetch live fixtures for real-time updates
+    const cookieLiveIds = new Set(existingMatches.filter(m => m.status === 'live').map(m => m.matchId));
+    const isCookieLiveRefresh = cookieLiveIds.size > 0;
+
     const newMatches = [];
     for (const fixture of fixtures) {
         if (existingCompleted.has(fixture.matchId)) continue;
+        // During live refresh, skip non-live fixtures we already have
+        if (isCookieLiveRefresh && fixture.status !== 'live' && !cookieLiveIds.has(fixture.matchId)) continue;
         try {
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, isCookieLiveRefresh ? 50 : 300));
             const url = `https://fantasy.iplt20.com/classic/api/feed/gamedayplayers?optType=1&gamedayId=${fixture.gamedayId}&phaseId=${fixture.phaseId}&pageNo=0&topNo=500&pageChunk=500&minCount=0`;
             const playersRes = await fetch(url, { headers });
             if (playersRes.status === 401 || playersRes.status === 403) {
@@ -1094,9 +1107,26 @@ async function fetchFromIPLFantasyPublic() {
               status: f.status,
           }));
 
+    // Fast-path: if we already have live matches in cache, only re-fetch those
+    // for near real-time updates instead of re-probing all gameday IDs
+    const liveMatchIds = new Set(existingMatches.filter(m => m.status === 'live').map(m => m.matchId));
+    const isLiveRefresh = liveMatchIds.size > 0;
+    // Also include the match right after the last known match (to detect newly started matches)
+    let nextGamedayId = null;
+    if (isLiveRefresh && existingMatches.length > 0) {
+        const lastMatch = existingMatches[existingMatches.length - 1];
+        const lastId = parseInt(lastMatch.matchId, 10);
+        if (!isNaN(lastId)) nextGamedayId = lastId + 1;
+    }
+
     for (const entry of gamedayEntries) {
         if (!entry.tourgamedayId) continue;
         if (existingCompleted.has(entry.matchId)) continue;
+
+        // Fast-path: during live refresh, only fetch live matches + next upcoming match
+        if (isLiveRefresh && !liveMatchIds.has(entry.matchId) && entry.tourgamedayId !== nextGamedayId) {
+            continue;
+        }
 
         // Stop probing if we've already found more matches than possible this season
         if (useProbing && newMatches.length >= maxPossibleMatches) {
@@ -1114,7 +1144,7 @@ async function fetchFromIPLFantasyPublic() {
         }
 
         try {
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, isLiveRefresh ? 50 : 300));
             const url = `https://fantasy.iplt20.com/classic/api/feed/gamedayplayers?lang=en&tourgamedayId=${entry.tourgamedayId}&teamgamedayId=1`;
             const res = await fetch(url, { headers });
 
