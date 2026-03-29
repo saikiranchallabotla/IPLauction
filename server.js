@@ -458,7 +458,7 @@ async function fetchFromCricbuzz() {
             newMatches.push({
                 matchId,
                 matchName: info.matchDesc || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchId}`),
-                matchDate: startMs ? new Date(startMs).toISOString() : new Date().toISOString(),
+                matchDate: startMs ? new Date(startMs).toISOString() : '',
                 status: isLive ? 'live' : 'completed',
                 playerPoints
             });
@@ -471,11 +471,13 @@ async function fetchFromCricbuzz() {
         const idx = allCached.findIndex(x => x.matchId === nm.matchId);
         if (idx >= 0) allCached[idx] = nm; else allCached.push(nm);
     }
-    // Filter to only current season matches
+    // Filter to only current season matches — exclude matches with missing dates
+    // (they could be from a prior IPL season fetched via a shared series endpoint)
     const seasonStart = new Date(IPL_SEASON_START_DATE);
     const seasonFiltered = allCached.filter(m => {
+        if (!m.matchDate) return false; // no date → can't verify season, exclude
         const d = new Date(m.matchDate);
-        return isNaN(d.getTime()) || d >= seasonStart;
+        return !isNaN(d.getTime()) && d >= seasonStart;
     });
     seasonFiltered.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
@@ -753,11 +755,12 @@ async function fetchFromESPN() {
         const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
         if (idx >= 0) allMatches[idx] = nm; else allMatches.push(nm);
     }
-    // Filter to current season only
+    // Filter to current season only — exclude matches without valid dates
     const seasonStart = new Date(IPL_SEASON_START_DATE);
     const seasonMatches = allMatches.filter(m => {
+        if (!m.matchDate) return false;
         const d = new Date(m.matchDate);
-        return isNaN(d.getTime()) || d >= seasonStart;
+        return !isNaN(d.getTime()) && d >= seasonStart;
     });
     seasonMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
@@ -878,12 +881,12 @@ async function fetchFromIPLFantasy() {
     }
     const fixturesJson = await fixturesRes.json();
     const allFixtures = parseIPLFixtures(fixturesJson);
-    // Filter fixtures to only current season
+    // Filter fixtures to only current season — exclude fixtures without valid dates
     const seasonStart = new Date(IPL_SEASON_START_DATE);
     const fixtures = allFixtures.filter(f => {
-        if (!f.matchDate) return true;
+        if (!f.matchDate) return false;
         const d = new Date(f.matchDate);
-        return isNaN(d.getTime()) || d >= seasonStart;
+        return !isNaN(d.getTime()) && d >= seasonStart;
     });
     if (allFixtures.length > fixtures.length) {
         console.log(`IPL Fantasy: filtered ${allFixtures.length - fixtures.length} fixtures from before IPL ${IPL_SEASON_YEAR}`);
@@ -1034,6 +1037,7 @@ async function fetchFromIPLFantasyPublic() {
 
     const newMatches = [];
     let consecutiveNoPoints = 0; // counts gamedays that returned players but all with 0 pts
+    let hitUnplayedBoundary = false; // true once we see a gameday with players but 0 points (match not yet played)
 
     // Calculate max possible matches based on days since season start.
     // IPL has at most 2 matches per day. This prevents accepting stale data from a prior season.
@@ -1081,6 +1085,15 @@ async function fetchFromIPLFantasyPublic() {
             break;
         }
 
+        // If we already hit an unplayed match boundary, skip all remaining gameday IDs.
+        // The same tourgamedayId can return stale data from a prior IPL season (e.g. IPL 2025)
+        // because the API reuses gameday IDs across seasons. Once an unplayed match is found,
+        // all subsequent IDs with points belong to the previous season, not the current one.
+        if (useProbing && hitUnplayedBoundary) {
+            console.log(`IPL Fantasy Public: skipping tourgamedayId ${entry.tourgamedayId} — already past unplayed match boundary`);
+            break;
+        }
+
         try {
             await new Promise(resolve => setTimeout(resolve, 300));
             const url = `https://fantasy.iplt20.com/classic/api/feed/gamedayplayers?lang=en&tourgamedayId=${entry.tourgamedayId}&teamgamedayId=1`;
@@ -1112,12 +1125,16 @@ async function fetchFromIPLFantasyPublic() {
             const hasPoints = playerPoints.some(p => p.points > 0);
 
             if (!hasPoints) {
-                // Match hasn't been played yet — don't add it, treat as signal to stop probing
-                consecutiveNoPoints++;
-                if (useProbing && consecutiveNoPoints >= 3) {
-                    console.log(`IPL Fantasy Public: stopping probe — ${consecutiveNoPoints} consecutive unplayed gamedays at tourgamedayId ${entry.tourgamedayId}`);
+                // Match has players but no points — it hasn't been played in the CURRENT season.
+                // Stop probing immediately: IPL matches are sequential, so if match N is unplayed,
+                // match N+1 can't have been played either. Any data returned for subsequent gameday
+                // IDs would be stale from a prior IPL season (same IDs are reused across seasons).
+                if (useProbing) {
+                    hitUnplayedBoundary = true;
+                    console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} has players but 0 points (unplayed in IPL ${IPL_SEASON_YEAR}) — stopping probe to avoid prior season data`);
                     break;
                 }
+                consecutiveNoPoints++;
                 continue;
             }
 
@@ -1154,11 +1171,13 @@ async function fetchFromIPLFantasyPublic() {
         else allMatches.push(nm);
     }
 
-    // Filter out matches from before the current season start date
+    // Filter out matches from before the current season start date.
+    // Also exclude matches without valid dates — they can't be verified as current season
+    // and may be stale data from a prior IPL season with reused gameday IDs.
     const validMatches = allMatches.filter(m => {
+        if (!m.matchDate) return false;
         const d = new Date(m.matchDate);
-        if (isNaN(d.getTime())) return true; // keep matches without valid dates
-        return d >= seasonStart;
+        return !isNaN(d.getTime()) && d >= seasonStart;
     });
     if (validMatches.length < allMatches.length) {
         console.log(`IPL Fantasy Public: removed ${allMatches.length - validMatches.length} matches from before IPL ${IPL_SEASON_YEAR} season start`);
@@ -1430,11 +1449,12 @@ async function fetchFromCricAPI() {
         if (idx >= 0) allMatches[idx] = nm;
         else allMatches.push(nm);
     }
-    // Filter to current season only
+    // Filter to current season only — exclude matches without valid dates
     const seasonStart = new Date(IPL_SEASON_START_DATE);
     const seasonMatches = allMatches.filter(m => {
+        if (!m.matchDate) return false;
         const d = new Date(m.matchDate);
-        return isNaN(d.getTime()) || d >= seasonStart;
+        return !isNaN(d.getTime()) && d >= seasonStart;
     });
     seasonMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
@@ -1707,11 +1727,12 @@ async function fetchFromIPLStats() {
         const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
         if (idx >= 0) allMatches[idx] = nm; else allMatches.push(nm);
     }
-    // Filter to current season only
+    // Filter to current season only — exclude matches without valid dates
     const seasonStart = new Date(IPL_SEASON_START_DATE);
     const seasonMatches = allMatches.filter(m => {
+        if (!m.matchDate) return false;
         const d = new Date(m.matchDate);
-        return isNaN(d.getTime()) || d >= seasonStart;
+        return !isNaN(d.getTime()) && d >= seasonStart;
     });
     seasonMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
