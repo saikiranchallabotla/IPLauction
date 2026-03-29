@@ -1968,7 +1968,7 @@ app.get('/api/rooms', (req, res) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
         return b.createdAt - a.createdAt;
     });
-    res.json(roomList);
+    res.json(roomList.slice(0, 50));
 });
 
 // Create a new auction room
