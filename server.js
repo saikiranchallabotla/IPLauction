@@ -181,16 +181,17 @@ function getFantasySource() {
     if (iplUid && iplToken) return 'ipl_cookie';
     const cricKey = process.env.CRICAPI_KEY || CRICAPI_KEY;
     if (cricKey) return 'cricapi'; // series ID auto-discovered if not provided
-    return 'auto'; // try ESPN → IPL Stats in order (no credentials)
+    return 'ipl_public'; // Official public IPL Fantasy API — no credentials needed
 }
 
 async function initFantasyPoints() {
     if (db) {
         // Load best available cached data on startup
-        // Priority: IPL Fantasy cookies > ESPN > IPL public stats > CricAPI
+        // Priority: IPL Fantasy cookies > IPL public > ESPN > IPL public stats > CricAPI
         const year = new Date().getFullYear();
         const preferred = [
             'ipl_fantasy_official',
+            'ipl_fantasy_public',
             'cricbuzz_ipl',
             `espn_ipl_${year}`,
             `espn_ipl_${year - 1}`,
@@ -251,7 +252,14 @@ async function fetchAllFantasyPoints() {
         const source = getFantasySource();
         if (source === 'ipl_cookie') return await fetchFromIPLFantasy();
         if (source === 'cricapi')    return await fetchFromCricAPI();
-        // 'auto': Cricbuzz → ESPN → IPL Stats (each is direct, no API key)
+        if (source === 'ipl_public') {
+            try {
+                return await fetchFromIPLFantasyPublic();
+            } catch (err) {
+                console.warn(`IPL Fantasy Public failed: ${err.message} — trying fallback sources...`);
+            }
+        }
+        // 'auto' or fallback after ipl_public: Cricbuzz → ESPN → IPL Stats
         const sources = [
             { name: 'Cricbuzz', fn: fetchFromCricbuzz },
             { name: 'ESPN Cricinfo', fn: fetchFromESPN },
@@ -895,6 +903,202 @@ async function fetchFromIPLFantasy() {
     if (allMatches.some(m => m.status === 'live')) startLiveMatchTimer();
     else stopLiveMatchTimer();
     return { totalMatches: allMatches.length, newMatches: newMatches.length };
+}
+
+// ============================================================
+// IPL FANTASY PUBLIC API — no credentials required
+// Fetches from https://fantasy.iplt20.com/classic/api/feed/gamedayplayers
+// with lang=en&tourgamedayId=<N>&teamgamedayId=1
+// Points are updated daily/real-time by the official IPL Fantasy platform.
+// ============================================================
+
+async function fetchFromIPLFantasyPublic() {
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://fantasy.iplt20.com/',
+        'Origin': 'https://fantasy.iplt20.com',
+    };
+
+    // Step 1: Try to discover fixtures from the public tour-fixtures endpoint
+    let fixtures = [];
+    try {
+        const fixturesRes = await fetch('https://fantasy.iplt20.com/classic/api/feed/tour-fixtures?lang=en', { headers });
+        if (fixturesRes.ok) {
+            const fixturesJson = await fixturesRes.json();
+            fixtures = parseIPLFixtures(fixturesJson);
+            console.log(`IPL Fantasy Public: discovered ${fixtures.length} fixtures from tour-fixtures`);
+        }
+    } catch (e) {
+        console.log('IPL Fantasy Public: tour-fixtures endpoint unavailable, will probe gameday IDs');
+    }
+
+    // Step 2: If no fixtures found, probe tourgamedayId sequentially (IPL has up to 74 matches)
+    // We'll use discovered fixtures for matchId/matchName/matchDate metadata;
+    // if none, we generate placeholder metadata and stop on consecutive empty responses.
+    const useProbing = fixtures.length === 0;
+    const MAX_GAMEDAY_ID = 74;
+
+    const existingMatches = fantasyCache?.matches || [];
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const existingCompleted = new Set(
+        existingMatches
+            .filter(m => m.status === 'completed' && !isNaN(new Date(m.matchDate).getTime()) && new Date(m.matchDate).getTime() < oneDayAgo)
+            .map(m => m.matchId)
+    );
+
+    const newMatches = [];
+    let consecutiveEmpty = 0;
+
+    const gamedayEntries = useProbing
+        ? Array.from({ length: MAX_GAMEDAY_ID }, (_, i) => ({
+              tourgamedayId: i + 1,
+              matchId: String(i + 1),
+              matchName: `Match ${i + 1}`,
+              matchDate: '',
+              status: 'completed',
+          }))
+        : fixtures.map(f => ({
+              tourgamedayId: parseInt(f.gamedayId, 10) || parseInt(f.matchId, 10),
+              matchId: f.matchId,
+              matchName: f.matchName,
+              matchDate: f.matchDate,
+              status: f.status,
+          }));
+
+    for (const entry of gamedayEntries) {
+        if (!entry.tourgamedayId) continue;
+        if (existingCompleted.has(entry.matchId)) continue;
+
+        try {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            const url = `https://fantasy.iplt20.com/classic/api/feed/gamedayplayers?lang=en&tourgamedayId=${entry.tourgamedayId}&teamgamedayId=1`;
+            const res = await fetch(url, { headers });
+
+            if (!res.ok) {
+                consecutiveEmpty++;
+                if (useProbing && consecutiveEmpty >= 3) {
+                    console.log(`IPL Fantasy Public: stopping probe after ${consecutiveEmpty} consecutive failures at tourgamedayId ${entry.tourgamedayId}`);
+                    break;
+                }
+                continue;
+            }
+
+            const json = await res.json();
+            const playerPoints = parseIPLPublicPlayerPoints(json);
+
+            if (playerPoints.length === 0) {
+                consecutiveEmpty++;
+                if (useProbing && consecutiveEmpty >= 3) {
+                    console.log(`IPL Fantasy Public: stopping probe after ${consecutiveEmpty} consecutive empty responses at tourgamedayId ${entry.tourgamedayId}`);
+                    break;
+                }
+                continue;
+            }
+
+            consecutiveEmpty = 0;
+
+            // Determine status: if any player has non-zero GamedayPoints the match has data
+            const hasPoints = playerPoints.some(p => p.points > 0);
+            const matchStatus = entry.status !== 'live'
+                ? (hasPoints ? 'completed' : 'upcoming')
+                : 'live';
+
+            newMatches.push({
+                matchId: entry.matchId,
+                matchName: entry.matchName,
+                matchDate: entry.matchDate || new Date().toISOString(),
+                status: matchStatus,
+                playerPoints,
+            });
+
+            console.log(`  IPL Fantasy Public: ${playerPoints.length} players for ${entry.matchName} (tourgamedayId=${entry.tourgamedayId})`);
+        } catch (err) {
+            console.error(`IPL Fantasy Public: error fetching tourgamedayId ${entry.tourgamedayId}:`, err.message);
+            consecutiveEmpty++;
+            if (useProbing && consecutiveEmpty >= 3) break;
+        }
+    }
+
+    if (newMatches.length === 0 && existingMatches.length === 0) {
+        throw new Error('IPL Fantasy Public: no player data found for any gameday');
+    }
+
+    const allMatches = [...existingMatches];
+    for (const nm of newMatches) {
+        const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
+        if (idx >= 0) allMatches[idx] = nm;
+        else allMatches.push(nm);
+    }
+    allMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+
+    const nameMapping = buildNameMapping(allMatches);
+    fantasyCache = {
+        seriesId: 'ipl_fantasy_public',
+        lastFetchedAt: Date.now(),
+        matches: allMatches,
+        nameMapping,
+    };
+
+    if (db) {
+        await db.collection('fantasy_points').updateOne(
+            { seriesId: 'ipl_fantasy_public' },
+            { $set: fantasyCache },
+            { upsert: true }
+        );
+    }
+
+    console.log(`IPL Fantasy Public: ${allMatches.length} total matches, ${newMatches.length} updated`);
+    broadcastFantasyUpdate();
+    if (allMatches.some(m => m.status === 'live')) startLiveMatchTimer();
+    else stopLiveMatchTimer();
+    return { totalMatches: allMatches.length, newMatches: newMatches.length };
+}
+
+// Parse the public gamedayplayers response.
+// Response shape (from official IPL Fantasy API):
+//   { Data: { Value: { Players: [ { Id, Name, ShortName, TeamName, TeamShortName,
+//       SkillName, OverallPoints, GamedayPoints, IsActive, Value, ... } ] } } }
+// We use GamedayPoints for per-match fantasy points.
+function parseIPLPublicPlayerPoints(json) {
+    // Try multiple possible paths — API may capitalise keys differently
+    const list =
+        json?.Data?.Value?.Players ||
+        json?.data?.Value?.Players ||
+        json?.Data?.value?.Players ||
+        json?.data?.value?.Players ||
+        json?.Data?.Players ||
+        json?.data?.Players ||
+        json?.Players ||
+        json?.players ||
+        [];
+
+    if (list.length === 0) {
+        const topKeys = Object.keys(json || {});
+        const dataKeys = json?.Data ? Object.keys(json.Data) : (json?.data ? Object.keys(json.data) : []);
+        if (topKeys.length > 0) {
+            console.log(`  IPL Fantasy Public: no player list found. Top-keys: [${topKeys}], Data keys: [${dataKeys}]`);
+        }
+    }
+
+    const players = [];
+    for (const p of list) {
+        const name = p?.Name || p?.name || p?.PlayerName || p?.playerName || p?.DisplayName || p?.FullName || '';
+        if (!name) continue;
+
+        // Prefer per-match GamedayPoints; fall back to OverallPoints then TotalPoints
+        const pts = parseFloat(
+            p?.GamedayPoints ?? p?.gamedayPoints ??
+            p?.OverallPoints ?? p?.overallPoints ??
+            p?.TotalPoints  ?? p?.totalPoints   ??
+            p?.Points       ?? p?.points        ?? 0
+        );
+        const id = String(p?.Id || p?.id || p?.PlayerId || p?.playerId || '');
+
+        players.push({ cricApiName: name, cricApiId: id, points: pts });
+    }
+    return players;
 }
 
 function parseIPLFixtures(json) {
