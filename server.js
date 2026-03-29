@@ -254,11 +254,18 @@ function isStaleSeasonCache(cache) {
         const matchesWithDates = cache.matches.filter(m => !isNaN(new Date(m.matchDate).getTime()));
         if (matchesWithDates.length > 0 && matchesBeforeSeason.length > matchesWithDates.length * 0.5) return true;
     }
-    // If no seasonYear and no datable matches, check match count vs expected
-    if (!cache.seasonYear && cache.matches?.length > 0) {
-        const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
-        const maxExpected = Math.max(2, daysSinceStart * 2);
-        if (cache.matches.length > maxExpected) return true;
+    // Check match count vs what's possible this season — even if seasonYear is set.
+    // The IPL Fantasy API reuses tourgamedayId across seasons, so a prior run may have
+    // probed IDs 1-74 and stored 70+ IPL 2025 matches incorrectly tagged as the current season.
+    // IPL has at most 2 matches per day, so match count should not exceed daysSinceStart * 2.
+    if (cache.matches?.length > 0) {
+        const seasonStart2 = new Date(IPL_SEASON_START_DATE);
+        const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart2.getTime()) / (24 * 60 * 60 * 1000)));
+        const maxExpected = Math.max(4, daysSinceStart * 2);
+        if (cache.matches.length > maxExpected) {
+            console.log(`Stale cache detected: ${cache.matches.length} matches exceeds max expected ${maxExpected} for ${daysSinceStart} days into IPL ${IPL_SEASON_YEAR}`);
+            return true;
+        }
     }
     return false;
 }
@@ -1019,13 +1026,27 @@ async function fetchFromIPLFantasyPublic() {
     const MAX_GAMEDAY_ID = 74;
     const startId = IPL_START_GAMEDAY_ID; // Configurable starting gameday ID for IPL season
 
+    // Calculate max possible matches based on days since season start.
+    // IPL has at most 2 matches per day. This prevents accepting stale data from a prior season.
+    const seasonStart = new Date(IPL_SEASON_START_DATE);
+    const daysSinceSeasonStart = Math.max(0, Math.floor((Date.now() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
+    const maxPossibleMatches = Math.min(MAX_GAMEDAY_ID, Math.max(2, daysSinceSeasonStart * 2));
+
     // Only carry forward matches previously fetched by THIS source to avoid inheriting
     // stale data from Cricbuzz/ESPN/IPL-Stats (which may contain matches from prior seasons).
-    // Also discard cache from a different season.
-    const existingMatches = (fantasyCache?.seriesId === 'ipl_fantasy_public' && fantasyCache?.seasonYear === IPL_SEASON_YEAR)
-        ? (fantasyCache?.matches || [])
-        : [];
-    if (fantasyCache?.seriesId === 'ipl_fantasy_public' && fantasyCache?.seasonYear !== IPL_SEASON_YEAR) {
+    // Also discard cache from a different season or if match count is unreasonable.
+    let existingMatches = [];
+    if (fantasyCache?.seriesId === 'ipl_fantasy_public' && fantasyCache?.seasonYear === IPL_SEASON_YEAR) {
+        const cached = fantasyCache?.matches || [];
+        // Validate: if cached match count exceeds what's possible this season, discard everything.
+        // The IPL Fantasy API reuses tourgamedayId across seasons, so stale IPL 2025 data
+        // may have been probed and stored with seasonYear set to the current year.
+        if (cached.length > maxPossibleMatches) {
+            console.log(`IPL Fantasy Public: discarding ${cached.length} cached matches (exceeds max possible ${maxPossibleMatches} for IPL ${IPL_SEASON_YEAR})`);
+        } else {
+            existingMatches = cached;
+        }
+    } else if (fantasyCache?.seriesId === 'ipl_fantasy_public') {
         console.log(`IPL Fantasy Public: discarding stale IPL ${fantasyCache.seasonYear || 'unknown'} cache for IPL ${IPL_SEASON_YEAR}`);
     }
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
@@ -1038,12 +1059,6 @@ async function fetchFromIPLFantasyPublic() {
     const newMatches = [];
     let consecutiveNoPoints = 0; // counts gamedays that returned players but all with 0 pts
     let hitUnplayedBoundary = false; // true once we see a gameday with players but 0 points (match not yet played)
-
-    // Calculate max possible matches based on days since season start.
-    // IPL has at most 2 matches per day. This prevents accepting stale data from a prior season.
-    const seasonStart = new Date(IPL_SEASON_START_DATE);
-    const daysSinceSeasonStart = Math.max(0, Math.floor((Date.now() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
-    const maxPossibleMatches = Math.min(MAX_GAMEDAY_ID, Math.max(2, daysSinceSeasonStart * 2));
 
     if (useProbing) {
         console.log(`IPL ${IPL_SEASON_YEAR} Fantasy Public: probing tourgamedayId ${startId} to ${startId + MAX_GAMEDAY_ID - 1} (max ${maxPossibleMatches} matches expected)`);
@@ -1163,21 +1178,29 @@ async function fetchFromIPLFantasyPublic() {
         throw new Error('IPL Fantasy Public: no player data found for any gameday');
     }
 
-    // Sanity check: if total matches exceed what's possible this season, we likely have stale data
-    const allMatches = [...existingMatches];
+    // Merge new matches with existing cached matches
+    let allMatches = [...existingMatches];
     for (const nm of newMatches) {
         const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
         if (idx >= 0) allMatches[idx] = nm;
         else allMatches.push(nm);
     }
 
+    // Final sanity check: if total matches exceed what's possible this season,
+    // discard ALL existing matches and keep only newly fetched ones.
+    // This catches stale IPL 2025 data that was cached with the wrong seasonYear.
+    if (allMatches.length > maxPossibleMatches) {
+        console.log(`IPL Fantasy Public: total ${allMatches.length} matches exceeds max possible ${maxPossibleMatches} — discarding stale cache, keeping only ${newMatches.length} new matches`);
+        allMatches = [...newMatches];
+    }
+
     // Filter out matches from before the current season start date.
-    // Also exclude matches without valid dates — they can't be verified as current season
-    // and may be stale data from a prior IPL season with reused gameday IDs.
+    // Keep matches without valid dates (probed matches have no date) — season boundary
+    // is enforced by hitUnplayedBoundary + maxPossibleMatches checks during probing.
     const validMatches = allMatches.filter(m => {
-        if (!m.matchDate) return false;
+        if (!m.matchDate) return true; // probed matches have no date, keep them
         const d = new Date(m.matchDate);
-        return !isNaN(d.getTime()) && d >= seasonStart;
+        return isNaN(d.getTime()) || d >= seasonStart;
     });
     if (validMatches.length < allMatches.length) {
         console.log(`IPL Fantasy Public: removed ${allMatches.length - validMatches.length} matches from before IPL ${IPL_SEASON_YEAR} season start`);
