@@ -3089,19 +3089,19 @@
                 '</div>';
             }
 
-            // Build flat list of all players across all teams for this match
+            // Build flat list of players who are in today's match across all teams
             const teams = fantasyData.teams || [];
             const allPlayers = [];
             teams.forEach(function(team) {
                 (team.playerBreakdowns || []).forEach(function(p) {
                     const mp = (p.matchPoints || []).find(function(x) { return x.matchId === todayMatch.matchId; });
+                    if (!mp) return; // skip players not in today's match
                     allPlayers.push({
                         playerName: p.playerName,
                         role: p.role,
                         country: p.country || '',
                         teamName: team.teamName,
-                        points: mp ? mp.points : 0,
-                        hasPlayed: mp !== undefined,
+                        points: mp.points,
                         isInBest11: !!p.isInBest11
                     });
                 });
