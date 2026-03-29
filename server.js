@@ -22,6 +22,11 @@ const IPL_FANTASY_UID = process.env.IPL_FANTASY_UID || '';
 const IPL_FANTASY_AUTH_TOKEN = process.env.IPL_FANTASY_AUTH_TOKEN || '';
 const FANTASY_REFRESH_INTERVAL = parseInt(process.env.FANTASY_REFRESH_INTERVAL) || 5; // minutes
 
+// IPL Season configuration — determines which season's data to fetch
+const IPL_SEASON_YEAR = parseInt(process.env.IPL_SEASON_YEAR) || new Date().getFullYear();
+// Starting tourgamedayId for the current season (override if API uses cumulative IDs across seasons)
+const IPL_START_GAMEDAY_ID = parseInt(process.env.IPL_START_GAMEDAY_ID) || 1;
+
 // Store multiple auction rooms (in-memory cache)
 let rooms = new Map();
 
@@ -207,11 +212,43 @@ async function initFantasyPoints() {
             }
         }
     }
+
+    // Clear stale cache from a previous IPL season
+    if (fantasyCache && isStaleSeasonCache(fantasyCache)) {
+        console.log(`Clearing stale IPL ${fantasyCache.seasonYear || 'unknown'} cache — current season is IPL ${IPL_SEASON_YEAR}`);
+        if (db) {
+            await db.collection('fantasy_points').deleteMany({
+                $or: [
+                    { seasonYear: { $lt: IPL_SEASON_YEAR } },
+                    { seasonYear: { $exists: false } }
+                ]
+            });
+        }
+        fantasyCache = null;
+    }
+
     // Always start — public IPL stats requires no credentials
     startFantasyRefreshTimer();
     fetchAllFantasyPoints().catch(err =>
         console.error('Initial fantasy fetch failed:', err.message)
     );
+}
+
+// Detect if cached fantasy data belongs to a previous IPL season
+function isStaleSeasonCache(cache) {
+    if (!cache) return false;
+    // If cache has explicit seasonYear, compare directly
+    if (cache.seasonYear && cache.seasonYear < IPL_SEASON_YEAR) return true;
+    // If no seasonYear stored, check match dates — if all matches are from before
+    // the current season year, the cache is stale
+    if (!cache.seasonYear && cache.matches?.length > 0) {
+        const latestMatchDate = cache.matches.reduce((latest, m) => {
+            const d = new Date(m.matchDate);
+            return (!isNaN(d.getTime()) && d > latest) ? d : latest;
+        }, new Date(0));
+        if (latestMatchDate.getFullYear() < IPL_SEASON_YEAR) return true;
+    }
+    return false;
 }
 
 function startFantasyRefreshTimer() {
@@ -425,7 +462,7 @@ async function fetchFromCricbuzz() {
     allCached.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
     const nameMapping = buildNameMapping(allCached);
-    fantasyCache = { seriesId: 'cricbuzz_ipl', lastFetchedAt: now, matches: allCached, nameMapping };
+    fantasyCache = { seriesId: 'cricbuzz_ipl', seasonYear: IPL_SEASON_YEAR, lastFetchedAt: now, matches: allCached, nameMapping };
     if (db) {
         await db.collection('fantasy_points').updateOne(
             { seriesId: 'cricbuzz_ipl' }, { $set: fantasyCache }, { upsert: true }
@@ -701,7 +738,7 @@ async function fetchFromESPN() {
     allMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
     const nameMapping = buildNameMapping(allMatches);
-    fantasyCache = { seriesId: `espn_ipl_${year}`, lastFetchedAt: Date.now(), matches: allMatches, nameMapping };
+    fantasyCache = { seriesId: `espn_ipl_${year}`, seasonYear: IPL_SEASON_YEAR, lastFetchedAt: Date.now(), matches: allMatches, nameMapping };
 
     if (db) {
         await db.collection('fantasy_points').updateOne(
@@ -823,9 +860,12 @@ async function fetchFromIPLFantasy() {
         const dataKeys = fixturesJson?.data ? Object.keys(fixturesJson.data) : [];
         console.log(`No live/completed fixtures found. Response top-keys: [${topKeys}], data keys: [${dataKeys}]`);
     }
-    console.log(`Found ${fixtures.length} completed/live IPL fixtures`);
+    console.log(`Found ${fixtures.length} completed/live IPL ${IPL_SEASON_YEAR} fixtures`);
 
-    const existingMatches = (fantasyCache?.matches || []);
+    // Discard cache from a different season
+    const existingMatches = (fantasyCache?.seasonYear === IPL_SEASON_YEAR)
+        ? (fantasyCache?.matches || [])
+        : [];
     // Only skip completed matches that are older than 24 hours — recent ones
     // may still have points being updated on the IPL Fantasy server.
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
@@ -884,6 +924,7 @@ async function fetchFromIPLFantasy() {
     const nameMapping = buildNameMapping(allMatches);
     fantasyCache = {
         seriesId: 'ipl_fantasy_official',
+        seasonYear: IPL_SEASON_YEAR,
         lastFetchedAt: Date.now(),
         matches: allMatches,
         nameMapping
@@ -897,7 +938,7 @@ async function fetchFromIPLFantasy() {
         );
     }
 
-    console.log(`IPL Fantasy updated: ${allMatches.length} total matches, ${newMatches.length} new/updated`);
+    console.log(`IPL ${IPL_SEASON_YEAR} Fantasy updated: ${allMatches.length} total matches, ${newMatches.length} new/updated`);
     broadcastFantasyUpdate();
     // Accelerate polling if any live match is ongoing
     if (allMatches.some(m => m.status === 'live')) startLiveMatchTimer();
@@ -939,12 +980,17 @@ async function fetchFromIPLFantasyPublic() {
     // if none, we generate placeholder metadata and stop on consecutive no-points responses.
     const useProbing = fixtures.length === 0;
     const MAX_GAMEDAY_ID = 74;
+    const startId = IPL_START_GAMEDAY_ID; // Configurable starting gameday ID for IPL season
 
     // Only carry forward matches previously fetched by THIS source to avoid inheriting
     // stale data from Cricbuzz/ESPN/IPL-Stats (which may contain matches from prior seasons).
-    const existingMatches = (fantasyCache?.seriesId === 'ipl_fantasy_public')
+    // Also discard cache from a different season.
+    const existingMatches = (fantasyCache?.seriesId === 'ipl_fantasy_public' && fantasyCache?.seasonYear === IPL_SEASON_YEAR)
         ? (fantasyCache?.matches || [])
         : [];
+    if (fantasyCache?.seriesId === 'ipl_fantasy_public' && fantasyCache?.seasonYear !== IPL_SEASON_YEAR) {
+        console.log(`IPL Fantasy Public: discarding stale IPL ${fantasyCache.seasonYear || 'unknown'} cache for IPL ${IPL_SEASON_YEAR}`);
+    }
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const existingCompleted = new Set(
         existingMatches
@@ -955,10 +1001,14 @@ async function fetchFromIPLFantasyPublic() {
     const newMatches = [];
     let consecutiveNoPoints = 0; // counts gamedays that returned players but all with 0 pts
 
+    if (useProbing) {
+        console.log(`IPL ${IPL_SEASON_YEAR} Fantasy Public: probing tourgamedayId ${startId} to ${startId + MAX_GAMEDAY_ID - 1}`);
+    }
+
     const gamedayEntries = useProbing
         ? Array.from({ length: MAX_GAMEDAY_ID }, (_, i) => ({
-              tourgamedayId: i + 1,
-              matchId: String(i + 1),
+              tourgamedayId: startId + i,
+              matchId: String(startId + i),
               matchName: `Match ${i + 1}`,
               matchDate: '',
               status: 'completed',
@@ -1051,6 +1101,7 @@ async function fetchFromIPLFantasyPublic() {
     const nameMapping = buildNameMapping(allMatches);
     fantasyCache = {
         seriesId: 'ipl_fantasy_public',
+        seasonYear: IPL_SEASON_YEAR,
         lastFetchedAt: Date.now(),
         matches: allMatches,
         nameMapping,
@@ -1064,7 +1115,7 @@ async function fetchFromIPLFantasyPublic() {
         );
     }
 
-    console.log(`IPL Fantasy Public: ${allMatches.length} total matches, ${newMatches.length} updated`);
+    console.log(`IPL ${IPL_SEASON_YEAR} Fantasy Public: ${allMatches.length} total matches, ${newMatches.length} updated`);
     broadcastFantasyUpdate();
     if (allMatches.some(m => m.status === 'live')) startLiveMatchTimer();
     else stopLiveMatchTimer();
@@ -1317,6 +1368,7 @@ async function fetchFromCricAPI() {
 
     fantasyCache = {
         seriesId: seriesId,
+        seasonYear: IPL_SEASON_YEAR,
         lastFetchedAt: Date.now(),
         matches: allMatches,
         nameMapping
@@ -1584,7 +1636,7 @@ async function fetchFromIPLStats() {
     allMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
     const nameMapping = buildNameMapping(allMatches);
-    fantasyCache = { seriesId: 'ipl_public_stats', lastFetchedAt: Date.now(), matches: allMatches, nameMapping };
+    fantasyCache = { seriesId: 'ipl_public_stats', seasonYear: IPL_SEASON_YEAR, lastFetchedAt: Date.now(), matches: allMatches, nameMapping };
 
     if (db) {
         await db.collection('fantasy_points').updateOne(
@@ -2117,6 +2169,7 @@ app.get('/api/room/:code/fantasy-points', (req, res) => {
     // Always compute — returns all teams with 0 pts when no data yet
     const data = computeRoomFantasyPoints(room);
     data.configured = isFantasyConfigured();
+    data.seasonYear = IPL_SEASON_YEAR;
     res.json(data);
 });
 
@@ -2635,7 +2688,7 @@ initPersistence().then(async () => {
     httpServer.listen(PORT, () => {
         console.log(`
     ╔═══════════════════════════════════════╗
-    ║     IPL 2026 Fantasy Auction          ║
+    ║     IPL ${IPL_SEASON_YEAR} Fantasy Auction          ║
     ║     Server running on port ${PORT}        ║
     ╠═══════════════════════════════════════╣
     ║  Storage: ${db ? 'MongoDB (persistent)' : 'File (local only)'}        ║
