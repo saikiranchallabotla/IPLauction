@@ -1253,7 +1253,7 @@ async function fetchFromIPLFantasyPublic() {
             newMatches.push({
                 matchId: entry.matchId,
                 matchName: entry.matchName,
-                matchDate: entry.matchDate || new Date().toISOString(),
+                matchDate: entry.matchDate || '',
                 status: matchStatus,
                 playerPoints,
             });
