@@ -1981,6 +1981,87 @@
         let fantasyData = { teams: [], matches: [], lastUpdated: null, configured: false };
         let selectedFantasyMatch = null;
 
+        // IPL team name variants → team code mapping (for matching match names to squads)
+        const IPL_TEAM_NAME_TO_CODE = {
+            'csk': 'CSK', 'chennai super kings': 'CSK', 'chennai': 'CSK',
+            'mi': 'MI', 'mumbai indians': 'MI', 'mumbai': 'MI',
+            'rcb': 'RCB', 'royal challengers bengaluru': 'RCB', 'royal challengers bangalore': 'RCB', 'bengaluru': 'RCB', 'bangalore': 'RCB',
+            'kkr': 'KKR', 'kolkata knight riders': 'KKR', 'kolkata': 'KKR',
+            'dc': 'DC', 'delhi capitals': 'DC', 'delhi': 'DC',
+            'srh': 'SRH', 'sunrisers hyderabad': 'SRH', 'hyderabad': 'SRH', 'sunrisers': 'SRH',
+            'rr': 'RR', 'rajasthan royals': 'RR', 'rajasthan': 'RR',
+            'lsg': 'LSG', 'lucknow super giants': 'LSG', 'lucknow': 'LSG',
+            'gt': 'GT', 'gujarat titans': 'GT', 'gujarat': 'GT',
+            'pbks': 'PBKS', 'punjab kings': 'PBKS', 'punjab': 'PBKS'
+        };
+
+        // Extract IPL team codes from a match name like "CSK vs MI" or "Chennai Super Kings vs Mumbai Indians"
+        function extractTeamCodesFromMatchName(matchName) {
+            if (!matchName) return [];
+            var parts = matchName.split(/\s+vs?\s+/i);
+            var codes = [];
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i].trim().toLowerCase();
+                // Remove match number suffixes like ", 1st Match" or " - Match 5"
+                part = part.replace(/[,\-]\s*(match|\d+(st|nd|rd|th)).*$/i, '').trim();
+                if (IPL_TEAM_NAME_TO_CODE[part]) {
+                    codes.push(IPL_TEAM_NAME_TO_CODE[part]);
+                } else {
+                    // Try partial match — check if any key is contained in the part
+                    for (var key in IPL_TEAM_NAME_TO_CODE) {
+                        if (part.includes(key) && key.length > 2) {
+                            codes.push(IPL_TEAM_NAME_TO_CODE[key]);
+                            break;
+                        }
+                    }
+                }
+            }
+            // Deduplicate
+            return codes.filter(function(c, idx, arr) { return arr.indexOf(c) === idx; });
+        }
+
+        // Get today's date in IST (day starts at 12:00 AM IST)
+        function getTodayISTDateString() {
+            var now = new Date();
+            var IST_OFFSET = 330; // IST = UTC+5:30 = 330 minutes
+            var nowIST = new Date(now.getTime() + (IST_OFFSET + now.getTimezoneOffset()) * 60000);
+            return nowIST.toDateString();
+        }
+
+        // Find today's matches using IST date
+        function findTodaysMatches(matches) {
+            var todayIST = getTodayISTDateString();
+            var todaysMatchesRaw = (matches || []).filter(function(m) {
+                if (!m.matchDate) return false;
+                return new Date(m.matchDate).toDateString() === todayIST;
+            });
+            // Deduplicate by matchId and matchName
+            var seenMatchIds = {};
+            var seenMatchNames = {};
+            return todaysMatchesRaw.filter(function(m) {
+                var idKey = m.matchId || '';
+                var nameKey = (m.matchName || '').toLowerCase().trim();
+                if (idKey && seenMatchIds[idKey]) return false;
+                if (nameKey && seenMatchNames[nameKey]) return false;
+                if (idKey) seenMatchIds[idKey] = true;
+                if (nameKey) seenMatchNames[nameKey] = true;
+                return true;
+            });
+        }
+
+        // Get all IPL team codes playing today from match names
+        function getTodaysTeamCodes(matches) {
+            var todaysMatches = findTodaysMatches(matches);
+            var codes = [];
+            for (var i = 0; i < todaysMatches.length; i++) {
+                var matchCodes = extractTeamCodesFromMatchName(todaysMatches[i].matchName);
+                for (var j = 0; j < matchCodes.length; j++) {
+                    if (codes.indexOf(matchCodes[j]) < 0) codes.push(matchCodes[j]);
+                }
+            }
+            return codes;
+        }
+
         const PRICE_CATEGORIES = [
             { key: '2cr-home', label: '2 Cr HOME', price: 2, country: 'India' },
             { key: '2cr-overseas', label: '2 Cr OVERSEAS', price: 2, country: 'overseas' },
@@ -2896,16 +2977,22 @@
             const statMvp = el('fantasy-stat-mvp');
             if (statMvp) statMvp.textContent = mvpName;
 
-            // Find today's top scorer
-            const todayStr = new Date().toDateString();
-            const todayMatches = (fantasyData.matches || []).filter(function(m) {
-                return m.matchDate && new Date(m.matchDate).toDateString() === todayStr;
-            });
+            // Find today's top scorer — only from today's playing teams
+            const todayMatchesList = findTodaysMatches(fantasyData.matches || []);
+            const todayTeamCodes = getTodaysTeamCodes(fantasyData.matches || []);
+            // Build set of player names from today's IPL teams
+            const todayTeamPlayerNames = new Set();
+            if (todayTeamCodes.length > 0) {
+                ((state && state.players) || []).forEach(function(p) {
+                    if (todayTeamCodes.indexOf(p.previousTeam) >= 0) todayTeamPlayerNames.add(p.name);
+                });
+            }
             let todayTopName = '-', todayTopPts = 0;
-            if (todayMatches.length > 0) {
-                const todayMatchIds = todayMatches.map(function(m) { return m.matchId; });
+            if (todayMatchesList.length > 0 && todayTeamPlayerNames.size > 0) {
+                const todayMatchIds = todayMatchesList.map(function(m) { return m.matchId; });
                 for (const team of teams) {
                     for (const player of (team.playerBreakdowns || [])) {
+                        if (!todayTeamPlayerNames.has(player.playerName)) continue;
                         let playerTodayPts = 0;
                         (player.matchPoints || []).forEach(function(mp) {
                             if (todayMatchIds.indexOf(mp.matchId) >= 0) playerTodayPts += mp.points;
@@ -2918,7 +3005,13 @@
                 }
             }
             const statTodayScorer = el('fantasy-stat-today-scorer');
-            if (statTodayScorer) statTodayScorer.textContent = todayTopName;
+            if (statTodayScorer) {
+                if (todayMatchesList.length === 0) {
+                    statTodayScorer.textContent = 'No match today';
+                } else {
+                    statTodayScorer.textContent = todayTopName;
+                }
+            }
 
             const leaderboard = el('fantasy-leaderboard');
             const emptyMsg = el('fantasy-empty');
@@ -3092,183 +3185,169 @@
                 return;
             }
 
-            const now = new Date();
-            const todayDateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
             const matches = fantasyData.matches || [];
 
-            // Find all of today's matches — deduplicate by matchId and matchName
-            const todaysMatchesRaw = matches.filter(function(m) {
-                return m.matchDate && (m.matchDate.includes(todayDateStr) || new Date(m.matchDate).toDateString() === now.toDateString());
-            });
-            // Deduplicate: same matchId or same matchName means same match
-            const seenMatchIds = new Set();
-            const seenMatchNames = new Set();
-            const todaysMatches = todaysMatchesRaw.filter(function(m) {
-                const idKey = m.matchId || '';
-                const nameKey = (m.matchName || '').toLowerCase().trim();
-                if (idKey && seenMatchIds.has(idKey)) return false;
-                if (nameKey && seenMatchNames.has(nameKey)) return false;
-                if (idKey) seenMatchIds.add(idKey);
-                if (nameKey) seenMatchNames.add(nameKey);
-                return true;
-            });
+            // Use IST-based date (day starts at 12:00 AM IST)
+            var todaysMatches = findTodaysMatches(matches);
 
-            // Double header = exactly 2+ distinct matches scheduled for today
-            const isDoubleHeader = todaysMatches.length >= 2;
-
-            // IST offset: UTC+5:30 = 330 minutes
-            var IST_OFFSET = 330;
-            var nowIST = new Date(now.getTime() + (IST_OFFSET + now.getTimezoneOffset()) * 60000);
-            var nowISTHours = nowIST.getHours();
-            var nowISTMinutes = nowIST.getMinutes();
-            var nowISTTotalMinutes = nowISTHours * 60 + nowISTMinutes;
-
-            // Squad announcement times (30 min before match start):
-            // Single match day: match at 7:30 PM IST → squads at 7:00 PM IST (19:00 = 1140 min)
-            // Double header day: 1st match at 3:30 PM IST → squads at 3:00 PM IST (15:00 = 900 min)
-            //                    2nd match at 7:30 PM IST → squads at 7:00 PM IST (19:00 = 1140 min)
-            var SINGLE_MATCH_SQUAD_TIME = 19 * 60; // 7:00 PM IST = 1140 min
-            var DOUBLE_HEADER_FIRST_SQUAD_TIME = 15 * 60; // 3:00 PM IST = 900 min
-            var DOUBLE_HEADER_SECOND_SQUAD_TIME = 19 * 60; // 7:00 PM IST = 1140 min
-
-            // For today's matches, determine which ones have squads announced
-            var squadAnnouncedMatches = [];
-            if (todaysMatches.length > 0) {
-                if (isDoubleHeader) {
-                    // Sort by match date to identify 1st and 2nd match
-                    todaysMatches.sort(function(a, b) { return new Date(a.matchDate) - new Date(b.matchDate); });
-                    if (nowISTTotalMinutes >= DOUBLE_HEADER_FIRST_SQUAD_TIME) {
-                        squadAnnouncedMatches.push(todaysMatches[0]);
-                    }
-                    if (nowISTTotalMinutes >= DOUBLE_HEADER_SECOND_SQUAD_TIME && todaysMatches.length > 1) {
-                        squadAnnouncedMatches.push(todaysMatches[1]);
-                    }
-                } else {
-                    // Single match day
-                    if (nowISTTotalMinutes >= SINGLE_MATCH_SQUAD_TIME) {
-                        squadAnnouncedMatches.push(todaysMatches[0]);
-                    }
-                }
-            }
-
-            // Pick live match first, then today's match with squad announced, then most recent completed
-            const liveMatch = matches.find(m => m.status === 'live');
-            var todayMatch;
-            if (liveMatch) {
-                todayMatch = liveMatch;
-            } else if (squadAnnouncedMatches.length > 0) {
-                // Show the latest squad-announced match for today
-                todayMatch = squadAnnouncedMatches[squadAnnouncedMatches.length - 1];
-            } else if (todaysMatches.length > 0) {
-                // Today has matches but squads not yet announced — show countdown
-                var nextAnnouncementTime;
-                var nextAnnouncementLabel;
-                if (isDoubleHeader) {
-                    if (nowISTTotalMinutes < DOUBLE_HEADER_FIRST_SQUAD_TIME) {
-                        nextAnnouncementTime = DOUBLE_HEADER_FIRST_SQUAD_TIME;
-                        nextAnnouncementLabel = '3:00 PM IST';
-                    } else {
-                        nextAnnouncementTime = DOUBLE_HEADER_SECOND_SQUAD_TIME;
-                        nextAnnouncementLabel = '7:00 PM IST';
-                    }
-                } else {
-                    nextAnnouncementTime = SINGLE_MATCH_SQUAD_TIME;
-                    nextAnnouncementLabel = '7:00 PM IST';
-                }
-                var minsRemaining = nextAnnouncementTime - nowISTTotalMinutes;
-                var hoursLeft = Math.floor(minsRemaining / 60);
-                var minsLeft = minsRemaining % 60;
-                var countdownStr = hoursLeft > 0 ? hoursLeft + 'h ' + minsLeft + 'm' : minsLeft + 'm';
-
-                var matchNames = todaysMatches.map(function(m) { return m.matchName; }).join(isDoubleHeader ? ' & ' : '');
-                if (banner) {
-                    banner.innerHTML = '<div style="background: var(--glass); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1rem;">' +
-                        '<div style="font-weight: 700; font-size: 0.95rem;">' + matchNames + '</div>' +
-                        '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">' + (todaysMatches[0].matchDate || '') + '</div>' +
-                    '</div>';
-                }
+            // No matches today
+            if (todaysMatches.length === 0) {
+                if (banner) banner.innerHTML = '';
                 content.innerHTML = '<div style="text-align: center; padding: 2.5rem 1rem;">' +
                     '<div style="font-size: 2.5rem; margin-bottom: 0.75rem;">&#127951;</div>' +
-                    '<div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 0.5rem;">Squads Not Yet Announced</div>' +
-                    '<div style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">Squads are announced 30 minutes before match time.</div>' +
-                    '<div style="background: var(--dark-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1.25rem; display: inline-block;">' +
-                        '<div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Next squad announcement at</div>' +
-                        '<div style="font-size: 1.3rem; font-weight: 700; color: var(--accent); margin-top: 0.25rem;">' + nextAnnouncementLabel + '</div>' +
-                        '<div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">' + countdownStr + ' remaining</div>' +
-                    '</div>' +
+                    '<h3 style="color: var(--text); margin-bottom: 0.5rem;">No Matches Today</h3>' +
+                    '<p style="color: var(--text-secondary);">There are no IPL matches scheduled for today. Check back on a match day!</p>' +
                 '</div>';
                 return;
-            } else {
-                // No today's matches — fall back to most recent
-                todayMatch = matches[matches.length - 1];
             }
 
-            if (!todayMatch) {
-                content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No match found for today.</p>';
-                return;
+            // Extract team codes from all today's match names
+            var allTeamCodes = [];
+            for (var i = 0; i < todaysMatches.length; i++) {
+                var matchCodes = extractTeamCodesFromMatchName(todaysMatches[i].matchName);
+                for (var j = 0; j < matchCodes.length; j++) {
+                    if (allTeamCodes.indexOf(matchCodes[j]) < 0) allTeamCodes.push(matchCodes[j]);
+                }
             }
 
-            const isLive = todayMatch.status === 'live';
+            // Banner: show today's matches
             if (banner) {
-                banner.innerHTML = '<div style="background: ' + (isLive ? 'rgba(245,197,24,0.12)' : 'var(--glass)') + '; border: 1px solid ' + (isLive ? 'rgba(245,197,24,0.4)' : 'var(--border)') + '; border-radius: 10px; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center;">' +
-                    '<div>' +
-                        '<div style="font-weight: 700; font-size: 0.95rem;">' + todayMatch.matchName + '</div>' +
-                        '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">' + (todayMatch.matchDate || '') + '</div>' +
-                    '</div>' +
-                    (isLive ? '<span style="background: rgba(245,197,24,0.2); color: var(--accent); font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; border: 1px solid rgba(245,197,24,0.4);">&#9679; LIVE</span>' :
-                        '<span style="background: var(--dark-elevated); color: var(--text-secondary); font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px;">' + todayMatch.status + '</span>') +
-                '</div>';
+                var hasLive = todaysMatches.some(function(m) { return m.status === 'live'; });
+                banner.innerHTML = todaysMatches.map(function(m) {
+                    var isLive = m.status === 'live';
+                    return '<div style="background: ' + (isLive ? 'rgba(245,197,24,0.12)' : 'var(--glass)') + '; border: 1px solid ' + (isLive ? 'rgba(245,197,24,0.4)' : 'var(--border)') + '; border-radius: 10px; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">' +
+                        '<div>' +
+                            '<div style="font-weight: 700; font-size: 0.95rem;">' + m.matchName + '</div>' +
+                            '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">' + (m.matchDate || '') + '</div>' +
+                        '</div>' +
+                        (isLive ? '<span style="background: rgba(245,197,24,0.2); color: var(--accent); font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; border: 1px solid rgba(245,197,24,0.4);">&#9679; LIVE</span>' :
+                            '<span style="background: var(--dark-elevated); color: var(--text-secondary); font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px;">' + (m.status || 'scheduled') + '</span>') +
+                    '</div>';
+                }).join('');
             }
 
-            // Build flat list of players who are in today's match across all teams
-            const teams = fantasyData.teams || [];
-            const allPlayers = [];
+            // Get all players from today's playing IPL teams using room's player list
+            var roomPlayers = (state && state.players) || [];
+            var todaySquadPlayers = roomPlayers.filter(function(p) {
+                return allTeamCodes.indexOf(p.previousTeam) >= 0;
+            });
+
+            if (todaySquadPlayers.length === 0 && allTeamCodes.length === 0) {
+                content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Could not identify teams from today\'s match names.</p>';
+                return;
+            }
+
+            // Build a lookup: player name → match points for today's matches
+            var todayMatchIds = todaysMatches.map(function(m) { return m.matchId; });
+            var playerPointsMap = {};
+            var teams = fantasyData.teams || [];
             teams.forEach(function(team) {
                 (team.playerBreakdowns || []).forEach(function(p) {
-                    const mp = (p.matchPoints || []).find(function(x) { return x.matchId === todayMatch.matchId; });
-                    if (!mp) return; // skip players not in today's match
-                    allPlayers.push({
-                        playerName: p.playerName,
-                        role: p.role,
-                        country: p.country || '',
-                        teamName: team.teamName,
-                        points: mp.points,
-                        isInBest11: !!p.isInBest11
+                    var todayPts = 0;
+                    var hasData = false;
+                    (p.matchPoints || []).forEach(function(mp) {
+                        if (todayMatchIds.indexOf(mp.matchId) >= 0) {
+                            todayPts += mp.points;
+                            hasData = true;
+                        }
                     });
+                    if (hasData) {
+                        playerPointsMap[p.playerName] = todayPts;
+                    }
                 });
             });
 
-            // Sort by points descending, then by name
-            allPlayers.sort(function(a, b) { return b.points - a.points || a.playerName.localeCompare(b.playerName); });
+            // Group players by IPL team
+            var playersByTeam = {};
+            for (var k = 0; k < allTeamCodes.length; k++) {
+                playersByTeam[allTeamCodes[k]] = [];
+            }
+            todaySquadPlayers.forEach(function(p) {
+                if (playersByTeam[p.previousTeam]) {
+                    playersByTeam[p.previousTeam].push(p);
+                }
+            });
 
-            if (allPlayers.length === 0) {
-                content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No player data yet for this match.</p>';
-                return;
+            // Build the HTML
+            var html = '';
+            var totalPlayerCount = todaySquadPlayers.length;
+            html += '<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">' +
+                '&#127951; ' + totalPlayerCount + ' players from ' + allTeamCodes.length + ' teams playing today' +
+            '</div>';
+
+            var IPL_FULL_NAMES = {
+                'CSK': 'Chennai Super Kings', 'MI': 'Mumbai Indians', 'RCB': 'Royal Challengers Bengaluru',
+                'KKR': 'Kolkata Knight Riders', 'DC': 'Delhi Capitals', 'SRH': 'Sunrisers Hyderabad',
+                'RR': 'Rajasthan Royals', 'LSG': 'Lucknow Super Giants', 'GT': 'Gujarat Titans', 'PBKS': 'Punjab Kings'
+            };
+
+            var IPL_COLORS = {
+                'CSK': '#f5c518', 'MI': '#004ba0', 'RCB': '#d4213d', 'KKR': '#3a225d',
+                'DC': '#004c93', 'SRH': '#ff822a', 'RR': '#ea1a85', 'LSG': '#a4d4f0',
+                'GT': '#1c1c2b', 'PBKS': '#dd1f2d'
+            };
+
+            var roles = ['Batsman', 'Wicketkeeper', 'All-rounder', 'Bowler'];
+            var roleIcons = { 'Batsman': '&#127951;', 'Wicketkeeper': '&#129351;', 'All-rounder': '&#11088;', 'Bowler': '&#9898;' };
+
+            for (var t = 0; t < allTeamCodes.length; t++) {
+                var teamCode = allTeamCodes[t];
+                var teamPlayers = playersByTeam[teamCode] || [];
+                if (teamPlayers.length === 0) continue;
+
+                var teamColor = IPL_COLORS[teamCode] || 'var(--accent)';
+                var teamFullName = IPL_FULL_NAMES[teamCode] || teamCode;
+
+                html += '<div style="margin-bottom: 1.5rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;">';
+                // Team header
+                html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.65rem 0.85rem; background: var(--glass); border-bottom: 1px solid var(--border); border-left: 3px solid ' + teamColor + ';">' +
+                    '<span style="background: ' + teamColor + '; color: #fff; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">' + teamCode + '</span>' +
+                    '<strong style="font-size: 0.95rem;">' + teamFullName + '</strong>' +
+                    '<span style="font-size: 0.78rem; color: var(--text-secondary); margin-left: auto;">' + teamPlayers.length + ' players</span>' +
+                '</div>';
+
+                // Players grouped by role
+                for (var r = 0; r < roles.length; r++) {
+                    var role = roles[r];
+                    var rolePlayers = teamPlayers.filter(function(p) { return p.role === role; });
+                    if (rolePlayers.length === 0) continue;
+
+                    // Sort by points if available, then by name
+                    rolePlayers.sort(function(a, b) {
+                        var ptsA = playerPointsMap[a.name] || 0;
+                        var ptsB = playerPointsMap[b.name] || 0;
+                        return ptsB - ptsA || a.name.localeCompare(b.name);
+                    });
+
+                    html += '<div style="padding: 0.25rem 0;">' +
+                        '<div style="font-size: 0.72rem; color: var(--text-secondary); padding: 0.3rem 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;">' + (roleIcons[role] || '') + ' ' + role + 's (' + rolePlayers.length + ')</div>';
+
+                    for (var rp = 0; rp < rolePlayers.length; rp++) {
+                        var p = rolePlayers[rp];
+                        var pts = playerPointsMap[p.name];
+                        var hasPts = pts !== undefined;
+                        var rowBg = rp % 2 === 0 ? 'transparent' : 'var(--glass)';
+                        var isOverseas = p.country !== 'India';
+
+                        html += '<div style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.85rem; background: ' + rowBg + '; border-bottom: 1px solid var(--border);">' +
+                            '<div>' +
+                                '<span style="font-size: 0.88rem; font-weight: 500;">' + p.name + '</span>' +
+                                (isOverseas ? ' <span style="font-size: 0.65rem; padding: 0.05rem 0.25rem; border-radius: 3px; background: rgba(63,81,181,0.15); color: #7986cb;">OS</span>' : '') +
+                            '</div>' +
+                            '<div style="text-align: right;">' +
+                                (hasPts ?
+                                    '<span style="font-weight: 700; font-size: 0.85rem; color: ' + (pts > 0 ? 'var(--accent)' : pts < 0 ? 'var(--danger)' : 'var(--text-secondary)') + ';">' + pts.toFixed(1) + ' pts</span>' :
+                                    '<span style="font-size: 0.75rem; color: var(--text-secondary);">' + p.country + '</span>') +
+                            '</div>' +
+                        '</div>';
+                    }
+                    html += '</div>';
+                }
+
+                html += '</div>';
             }
 
-            content.innerHTML =
-                '<div style="display: grid; grid-template-columns: auto 1fr auto auto; gap: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;">' +
-                '<div style="display: contents; font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; background: var(--dark-elevated);">' +
-                    '<div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); background: var(--dark-elevated);">#</div>' +
-                    '<div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); background: var(--dark-elevated);">Player</div>' +
-                    '<div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); background: var(--dark-elevated); text-align: right;">Team</div>' +
-                    '<div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); background: var(--dark-elevated); text-align: right;">Pts</div>' +
-                '</div>' +
-                allPlayers.map(function(p, i) {
-                    var rowBg = i % 2 === 0 ? 'var(--glass)' : 'var(--dark-elevated)';
-                    var ptColor = p.points > 0 ? 'var(--accent)' : p.points < 0 ? 'var(--danger)' : 'var(--text-secondary)';
-                    return '<div style="display: contents; font-size: 0.83rem;">' +
-                        '<div style="padding: 0.45rem 0.75rem; background: ' + rowBg + '; color: var(--text-secondary); border-bottom: 1px solid var(--border);">' + (i + 1) + '</div>' +
-                        '<div style="padding: 0.45rem 0.75rem; background: ' + rowBg + '; border-bottom: 1px solid var(--border);">' +
-                            '<span style="font-weight: 600;">' + p.playerName + '</span>' +
-                            ' <span style="font-size: 0.7rem; padding: 0.06rem 0.3rem; border-radius: 999px; border: 1px solid ' + (p.isInBest11 ? 'rgba(0,200,83,0.35)' : 'var(--border)') + '; color: ' + (p.isInBest11 ? 'var(--success)' : 'var(--text-secondary)') + ';">' + (p.isInBest11 ? 'XI' : 'Bench') + '</span>' +
-                            '<div style="font-size: 0.72rem; color: var(--text-secondary);">' + p.role + (p.country ? ' · ' + p.country : '') + '</div>' +
-                        '</div>' +
-                        '<div style="padding: 0.45rem 0.75rem; background: ' + rowBg + '; border-bottom: 1px solid var(--border); text-align: right; font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap;">' + p.teamName + '</div>' +
-                        '<div style="padding: 0.45rem 0.75rem; background: ' + rowBg + '; border-bottom: 1px solid var(--border); text-align: right; font-weight: 700; color: ' + ptColor + ';">' + p.points.toFixed(1) + '</div>' +
-                    '</div>';
-                }).join('') +
-                '</div>';
+            content.innerHTML = html;
         }
 
         async function refreshFantasyPoints() {
