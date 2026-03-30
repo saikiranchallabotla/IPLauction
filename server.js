@@ -1112,6 +1112,7 @@ async function fetchFromIPLFantasyPublic() {
     const newMatches = [];
     let consecutiveNoPoints = 0; // counts gamedays that returned players but all with 0 pts
     let hitUnplayedBoundary = false; // true once we see a gameday with players but 0 points (match not yet played)
+    const probedUpcoming = []; // today's/future matches with 0 pts discovered during probing
 
     if (useProbing) {
         console.log(`IPL ${IPL_SEASON_YEAR} Fantasy Public: probing tourgamedayId ${startId} to ${startId + MAX_GAMEDAY_ID - 1} (max ${maxPossibleMatches} matches expected)`);
@@ -1194,7 +1195,8 @@ async function fetchFromIPLFantasyPublic() {
             }
 
             const json = await res.json();
-            const playerPoints = parseIPLPublicPlayerPoints(json);
+            const { players: playerPoints, matchDate: apiMatchDate, matchName: apiMatchName,
+                    homeTeam: apiHomeTeam, awayTeam: apiAwayTeam } = parseIPLPublicPlayerPoints(json);
 
             // Skip entirely if no players returned at all
             if (playerPoints.length === 0) {
@@ -1206,14 +1208,46 @@ async function fetchFromIPLFantasyPublic() {
                 continue;
             }
 
+            // Resolve match date: prefer API-returned date, then entry date, leave blank if neither
+            const resolvedMatchDate = entry.matchDate || apiMatchDate || '';
+
+            // Resolve match name: prefer API-returned name over placeholder "Match N"
+            const resolvedMatchName = (apiMatchName && apiMatchName.trim())
+                ? apiMatchName.trim()
+                : entry.matchName;
+
             // Check if the match has actually been played (at least one player with >0 GamedayPoints)
             const hasPoints = playerPoints.some(p => p.points > 0);
 
             if (!hasPoints) {
-                // Match has players but no points — it hasn't been played in the CURRENT season.
-                // Stop probing immediately: IPL matches are sequential, so if match N is unplayed,
-                // match N+1 can't have been played either. Any data returned for subsequent gameday
-                // IDs would be stale from a prior IPL season (same IDs are reused across seasons).
+                // Match has players but no points — either today's upcoming match or a prior-season match.
+                // Distinguish using the API-returned match date vs today's IST date.
+                const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+                const todayIST = new Date(Date.now() + IST_OFFSET).toISOString().slice(0, 10);
+                const matchDateIST = apiMatchDate
+                    ? new Date(new Date(apiMatchDate).getTime() + IST_OFFSET).toISOString().slice(0, 10)
+                    : '';
+
+                if (apiMatchDate && matchDateIST >= todayIST) {
+                    // This is today's or a future match — add to upcoming schedule and continue probing.
+                    // Do NOT treat as prior-season boundary; today's match is perfectly expected.
+                    const upcomingName = resolvedMatchName || (apiHomeTeam && apiAwayTeam ? `${apiHomeTeam} vs ${apiAwayTeam}` : `Match ${entry.tourgamedayId}`);
+                    probedUpcoming.push({
+                        matchId: entry.matchId,
+                        matchName: upcomingName,
+                        matchDate: apiMatchDate,
+                        team1: apiHomeTeam,
+                        team2: apiAwayTeam,
+                        status: 'upcoming',
+                    });
+                    console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} (${upcomingName}) is today's/upcoming match with 0 pts — added to schedule`);
+                    consecutiveNoPoints++;
+                    // After seeing today's match with 0 pts, any further gameday returning data
+                    // belongs to the future — continue adding to upcoming until we hit empties.
+                    continue;
+                }
+
+                // No date or match date is in the past → treat as unplayed boundary (prior-season guard).
                 if (useProbing) {
                     hitUnplayedBoundary = true;
                     console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} has players but 0 points (unplayed in IPL ${IPL_SEASON_YEAR}) — stopping probe to avoid prior season data`);
@@ -1252,13 +1286,13 @@ async function fetchFromIPLFantasyPublic() {
 
             newMatches.push({
                 matchId: entry.matchId,
-                matchName: entry.matchName,
-                matchDate: entry.matchDate || new Date().toISOString(),
+                matchName: resolvedMatchName,
+                matchDate: resolvedMatchDate,
                 status: matchStatus,
                 playerPoints,
             });
 
-            console.log(`  IPL Fantasy Public: ${playerPoints.length} players for ${entry.matchName} (tourgamedayId=${entry.tourgamedayId})`);
+            console.log(`  IPL Fantasy Public: ${playerPoints.length} players for ${resolvedMatchName} (tourgamedayId=${entry.tourgamedayId}, date=${resolvedMatchDate || 'unknown'})`);
         } catch (err) {
             console.error(`IPL Fantasy Public: error fetching tourgamedayId ${entry.tourgamedayId}:`, err.message);
             consecutiveNoPoints++;
@@ -1317,6 +1351,24 @@ async function fetchFromIPLFantasyPublic() {
             });
         }
     }
+    // Merge today's/future matches discovered during probing (0-pts but valid match date)
+    // These are not in `allFixturesForSchedule` since tour-fixtures wasn't available or didn't list them.
+    if (useProbing && probedUpcoming.length > 0) {
+        for (const u of probedUpcoming) {
+            // Only add if not already in the schedule
+            if (!fullSchedule.some(s => s.matchId === u.matchId)) {
+                fullSchedule.push({
+                    matchId: u.matchId,
+                    matchName: u.matchName,
+                    team1: u.team1,
+                    team2: u.team2,
+                    matchDate: u.matchDate,
+                    state: 'upcoming'
+                });
+                console.log(`IPL Fantasy Public: added upcoming match to schedule: ${u.matchName} (${u.matchDate})`);
+            }
+        }
+    }
     fullSchedule.sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
 
     fantasyCache = {
@@ -1348,13 +1400,24 @@ async function fetchFromIPLFantasyPublic() {
 //   { Data: { Value: { Players: [ { Id, Name, ShortName, TeamName, TeamShortName,
 //       SkillName, OverallPoints, GamedayPoints, IsActive, Value, ... } ] } } }
 // We use GamedayPoints for per-match fantasy points.
+// Returns { players, matchDate, matchName, homeTeam, awayTeam }
 function parseIPLPublicPlayerPoints(json) {
-    // Try multiple possible paths — API may capitalise keys differently
+    // Extract match-level metadata (date, name, teams) from the API response
+    const meta = json?.Data?.Value || json?.data?.Value || json?.Data?.value || json?.data?.value || {};
+    const apiMatchDate = meta?.StartDate || meta?.startDate || meta?.MatchDate || meta?.matchDate ||
+                         meta?.Date || meta?.date || meta?.GameDate || meta?.gameDate || '';
+    const apiMatchName = meta?.MatchName || meta?.matchName || meta?.Title || meta?.title ||
+                         meta?.Name || meta?.name || '';
+    const apiHomeTeam = meta?.HomeTeam?.ShortName || meta?.HomeTeam?.Name || meta?.HomeTeam ||
+                        meta?.Team1?.ShortName || meta?.Team1?.Name || meta?.Team1 ||
+                        meta?.HomeTeamShortName || meta?.homeTeamShortName || '';
+    const apiAwayTeam = meta?.AwayTeam?.ShortName || meta?.AwayTeam?.Name || meta?.AwayTeam ||
+                        meta?.Team2?.ShortName || meta?.Team2?.Name || meta?.Team2 ||
+                        meta?.AwayTeamShortName || meta?.awayTeamShortName || '';
+
+    // Try multiple possible paths for the players array — API may capitalise keys differently
     const list =
-        json?.Data?.Value?.Players ||
-        json?.data?.Value?.Players ||
-        json?.Data?.value?.Players ||
-        json?.data?.value?.Players ||
+        meta?.Players || meta?.players ||
         json?.Data?.Players ||
         json?.data?.Players ||
         json?.Players ||
@@ -1385,7 +1448,7 @@ function parseIPLPublicPlayerPoints(json) {
 
         players.push({ cricApiName: name, cricApiId: id, points: pts });
     }
-    return players;
+    return { players, matchDate: apiMatchDate, matchName: apiMatchName, homeTeam: apiHomeTeam, awayTeam: apiAwayTeam };
 }
 
 function parseIPLFixtures(json) {
