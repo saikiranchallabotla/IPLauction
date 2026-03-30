@@ -419,6 +419,26 @@ async function fetchFromCricbuzz() {
     console.log(`Cricbuzz: found ${matchMap.size} IPL matches (live+recent+schedule)`);
     if (matchMap.size === 0) throw new Error('Cricbuzz: no IPL matches found in any feed');
 
+    // Extract full schedule (including upcoming matches) for client-side use
+    const fullSchedule = [];
+    for (const [mId, m] of matchMap) {
+        const info = m.matchInfo || m;
+        const startMs = info.startDate ? parseInt(info.startDate) : 0;
+        const t1 = info.team1?.teamSName || info.team1?.teamName || '';
+        const t2 = info.team2?.teamSName || info.team2?.teamName || '';
+        const st = String(info.state || info.matchState || info.status || '').toLowerCase();
+        if (t1 && t2) {
+            fullSchedule.push({
+                matchId: mId,
+                matchName: info.matchDesc || `${t1} vs ${t2}`,
+                team1: t1, team2: t2,
+                matchDate: startMs ? new Date(startMs).toISOString() : '',
+                state: st
+            });
+        }
+    }
+    fullSchedule.sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
+
     const now = Date.now();
     const existingMatches = fantasyCache?.matches || [];
     // Skip matches we already have that are completed and > 24h old
@@ -500,7 +520,7 @@ async function fetchFromCricbuzz() {
     seasonFiltered.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
     const nameMapping = buildNameMapping(seasonFiltered);
-    fantasyCache = { seriesId: 'cricbuzz_ipl', seasonYear: IPL_SEASON_YEAR, lastFetchedAt: now, matches: seasonFiltered, nameMapping };
+    fantasyCache = { seriesId: 'cricbuzz_ipl', seasonYear: IPL_SEASON_YEAR, lastFetchedAt: now, matches: seasonFiltered, nameMapping, schedule: fullSchedule };
     if (db) {
         await db.collection('fantasy_points').updateOne(
             { seriesId: 'cricbuzz_ipl' }, { $set: fantasyCache }, { upsert: true }
@@ -714,6 +734,19 @@ async function fetchFromESPN() {
                       schedData?.content?.matchGroups?.flatMap(g => g.matches || []) ||
                       schedData?.matches || schedData?.fixtures || schedData?.data?.matches || [];
 
+    // Extract full schedule (including upcoming) for client-side use
+    const fullSchedule = matchList.map(m => {
+        const team1 = m?.teams?.[0]?.team?.shortName || m?.team1 || '';
+        const team2 = m?.teams?.[1]?.team?.shortName || m?.team2 || '';
+        return {
+            matchId: String(m?.objectId || m?.id || m?.matchId || ''),
+            matchName: m?.title || (team1 && team2 ? `${team1} vs ${team2}` : ''),
+            team1, team2,
+            matchDate: m?.startDate || m?.date || '',
+            state: String(m?.stage || m?.status || m?.state || '').toLowerCase()
+        };
+    }).filter(s => s.team1 && s.team2).sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
+
     const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
     const toFetch = matchList.filter(m => {
         const stage = String(m?.stage || m?.status || m?.matchStatus || m?.state || '').toLowerCase();
@@ -783,7 +816,7 @@ async function fetchFromESPN() {
     seasonMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
     const nameMapping = buildNameMapping(seasonMatches);
-    fantasyCache = { seriesId: `espn_ipl_${year}`, seasonYear: IPL_SEASON_YEAR, lastFetchedAt: Date.now(), matches: seasonMatches, nameMapping };
+    fantasyCache = { seriesId: `espn_ipl_${year}`, seasonYear: IPL_SEASON_YEAR, lastFetchedAt: Date.now(), matches: seasonMatches, nameMapping, schedule: fullSchedule };
 
     if (db) {
         await db.collection('fantasy_points').updateOne(
@@ -1268,12 +1301,35 @@ async function fetchFromIPLFantasyPublic() {
     validMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
     const nameMapping = buildNameMapping(validMatches);
+
+    // Build schedule from fixtures if available (includes upcoming matches with team names)
+    // Re-parse ALL fixtures (including upcoming) from the raw data for the schedule
+    let fullSchedule = [];
+    if (fixtures.length > 0 || allFixtureObjects.length > 0) {
+        // Use allFixtureObjects which was collected in parseIPLFixtures scope — re-parse here
+        // since parseIPLFixtures only keeps live/completed. We'll parse team names from matchName.
+        for (const f of fixtures) {
+            const parts = (f.matchName || '').split(/\s+vs?\s+/i);
+            const t1 = (parts[0] || '').replace(/[,\-]\s*(match|\d+).*$/i, '').trim();
+            const t2 = (parts[1] || '').replace(/[,\-]\s*(match|\d+).*$/i, '').trim();
+            if (t1 && t2) {
+                fullSchedule.push({
+                    matchId: f.matchId || '', matchName: f.matchName || '',
+                    team1: t1, team2: t2, matchDate: f.matchDate || '',
+                    state: (f.status || '').toLowerCase()
+                });
+            }
+        }
+        fullSchedule.sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
+    }
+
     fantasyCache = {
         seriesId: 'ipl_fantasy_public',
         seasonYear: IPL_SEASON_YEAR,
         lastFetchedAt: Date.now(),
         matches: validMatches,
         nameMapping,
+        schedule: fullSchedule,
     };
 
     if (db) {
@@ -1780,6 +1836,25 @@ async function fetchFromIPLStats() {
     const fixtures = parseIPLStatsSchedule(scheduleData);
     console.log(`Found ${fixtures.length} completed/live fixtures from public IPL stats`);
 
+    // Extract full schedule (including upcoming) for client-side use
+    const rawMatchList = scheduleData?.Matchsummary || scheduleData?.matchsummary ||
+                         scheduleData?.MatchSchedule || scheduleData?.matches ||
+                         scheduleData?.data?.matches || scheduleData?.data || [];
+    const fullSchedule = (Array.isArray(rawMatchList) ? rawMatchList : []).map(m => {
+        if (!m) return null;
+        const team1 = m?.Team1ShortName || m?.TeamAShortName || m?.team1 || '';
+        const team2 = m?.Team2ShortName || m?.TeamBShortName || m?.team2 || '';
+        if (!team1 || !team2) return null;
+        const matchCode = m?.MatchCode || m?.matchCode || m?.MatchID || m?.id || '';
+        return {
+            matchId: String(matchCode),
+            matchName: m?.MatchName || m?.matchName || `${team1} vs ${team2}`,
+            team1, team2,
+            matchDate: m?.MatchDate || m?.matchDate || m?.date || '',
+            state: String(m?.MatchStatus || m?.matchStatus || m?.status || '').toLowerCase()
+        };
+    }).filter(Boolean).sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
+
     const existingMatches = fantasyCache?.matches || [];
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const existingCompleted = new Set(
@@ -1819,7 +1894,7 @@ async function fetchFromIPLStats() {
     seasonMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
 
     const nameMapping = buildNameMapping(seasonMatches);
-    fantasyCache = { seriesId: 'ipl_public_stats', seasonYear: IPL_SEASON_YEAR, lastFetchedAt: Date.now(), matches: seasonMatches, nameMapping };
+    fantasyCache = { seriesId: 'ipl_public_stats', seasonYear: IPL_SEASON_YEAR, lastFetchedAt: Date.now(), matches: seasonMatches, nameMapping, schedule: fullSchedule };
 
     if (db) {
         await db.collection('fantasy_points').updateOne(
@@ -1937,6 +2012,7 @@ function computeRoomFantasyPoints(room) {
             matchDate: m.matchDate,
             status: m.status
         })),
+        schedule: fantasyCache?.schedule || [],
         lastUpdated: fantasyCache?.lastFetchedAt || null
     };
 }

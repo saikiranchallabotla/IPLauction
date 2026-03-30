@@ -2043,35 +2043,63 @@
                 String(dIST.getDate()).padStart(2, '0');
         }
 
-        // Find today's matches using IST date — both "today" and match dates converted to IST
-        function findTodaysMatches(matches) {
+        // Find today's matches from the SCHEDULE (has real dates & team names)
+        // Falls back to fantasyData.matches if no schedule available
+        function findTodaysScheduleMatches() {
             var todayIST = getTodayISTDateString();
-            var todaysMatchesRaw = (matches || []).filter(function(m) {
-                if (!m.matchDate) return false;
-                return toISTDateString(m.matchDate) === todayIST;
+            var schedule = fantasyData.schedule || [];
+
+            if (schedule.length > 0) {
+                // Use schedule — has real dates and team names for ALL matches including upcoming
+                var todaySchedule = schedule.filter(function(s) {
+                    return s.matchDate && toISTDateString(s.matchDate) === todayIST;
+                });
+                // Deduplicate
+                var seen = {};
+                return todaySchedule.filter(function(s) {
+                    var key = (s.matchName || '').toLowerCase().trim();
+                    if (seen[key]) return false;
+                    seen[key] = true;
+                    return true;
+                });
+            }
+
+            // Fallback: use fantasyData.matches (may have generic names/wrong dates)
+            var matches = fantasyData.matches || [];
+            var todaysRaw = matches.filter(function(m) {
+                return m.matchDate && toISTDateString(m.matchDate) === todayIST;
             });
-            // Deduplicate by matchId and matchName
-            var seenMatchIds = {};
-            var seenMatchNames = {};
-            return todaysMatchesRaw.filter(function(m) {
-                var idKey = m.matchId || '';
-                var nameKey = (m.matchName || '').toLowerCase().trim();
-                if (idKey && seenMatchIds[idKey]) return false;
-                if (nameKey && seenMatchNames[nameKey]) return false;
-                if (idKey) seenMatchIds[idKey] = true;
-                if (nameKey) seenMatchNames[nameKey] = true;
+            var seenIds = {};
+            return todaysRaw.filter(function(m) {
+                var key = m.matchId || (m.matchName || '').toLowerCase().trim();
+                if (seenIds[key]) return false;
+                seenIds[key] = true;
                 return true;
             });
         }
 
-        // Get all IPL team codes playing today from match names
-        function getTodaysTeamCodes(matches) {
-            var todaysMatches = findTodaysMatches(matches);
+        // Get all IPL team codes playing today — uses schedule (team1/team2 fields)
+        // Falls back to extracting from matchName
+        function getTodaysTeamCodes() {
+            var todaysMatches = findTodaysScheduleMatches();
             var codes = [];
             for (var i = 0; i < todaysMatches.length; i++) {
-                var matchCodes = extractTeamCodesFromMatchName(todaysMatches[i].matchName);
-                for (var j = 0; j < matchCodes.length; j++) {
-                    if (codes.indexOf(matchCodes[j]) < 0) codes.push(matchCodes[j]);
+                var m = todaysMatches[i];
+                // Schedule entries have team1/team2 directly
+                if (m.team1) {
+                    var c1 = IPL_TEAM_NAME_TO_CODE[(m.team1 || '').toLowerCase()] || m.team1;
+                    if (codes.indexOf(c1) < 0) codes.push(c1);
+                }
+                if (m.team2) {
+                    var c2 = IPL_TEAM_NAME_TO_CODE[(m.team2 || '').toLowerCase()] || m.team2;
+                    if (codes.indexOf(c2) < 0) codes.push(c2);
+                }
+                // Also try extracting from matchName as fallback
+                if (!m.team1 && !m.team2) {
+                    var matchCodes = extractTeamCodesFromMatchName(m.matchName);
+                    for (var j = 0; j < matchCodes.length; j++) {
+                        if (codes.indexOf(matchCodes[j]) < 0) codes.push(matchCodes[j]);
+                    }
                 }
             }
             return codes;
@@ -2950,8 +2978,15 @@
         function renderPointsTable() {
             const matchesPlayed = (fantasyData.matches || []).filter(m => m.status === 'completed').length;
             const todayISTStr = getTodayISTDateString();
+            // Only show LIVE if there's a live match that's actually scheduled for today (per schedule)
+            const todaySchedule = findTodaysScheduleMatches();
+            const todayScheduleIds = new Set(todaySchedule.map(function(s) { return s.matchId; }));
             const hasLiveMatch = (fantasyData.matches || []).some(function(m) {
-                return m.status === 'live' && toISTDateString(m.matchDate) === todayISTStr;
+                if (m.status !== 'live') return false;
+                // If schedule is available, verify the live match is in today's schedule
+                if (todaySchedule.length > 0) return todayScheduleIds.has(m.matchId);
+                // Fallback: check IST date
+                return toISTDateString(m.matchDate) === todayISTStr;
             });
             const el = id => document.getElementById(id);
 
@@ -2996,8 +3031,8 @@
             if (statMvp) statMvp.textContent = mvpName;
 
             // Find today's top scorer — only from today's playing teams
-            const todayMatchesList = findTodaysMatches(fantasyData.matches || []);
-            const todayTeamCodes = getTodaysTeamCodes(fantasyData.matches || []);
+            const todayMatchesList = findTodaysScheduleMatches();
+            const todayTeamCodes = getTodaysTeamCodes();
             // Build set of player names from today's IPL teams
             const todayTeamPlayerNames = new Set();
             if (todayTeamCodes.length > 0) {
@@ -3205,10 +3240,8 @@
                 return;
             }
 
-            const matches = fantasyData.matches || [];
-
-            // Use IST-based date (day starts at 12:00 AM IST)
-            var todaysMatches = findTodaysMatches(matches);
+            // Use schedule for today's matches (has real dates and team names)
+            var todaysMatches = findTodaysScheduleMatches();
 
             // No matches today
             if (todaysMatches.length === 0) {
@@ -3221,27 +3254,38 @@
                 return;
             }
 
-            // Extract team codes from all today's match names
+            // Extract team codes — schedule entries have team1/team2, fallback to matchName parsing
             var allTeamCodes = [];
             for (var i = 0; i < todaysMatches.length; i++) {
-                var matchCodes = extractTeamCodesFromMatchName(todaysMatches[i].matchName);
-                for (var j = 0; j < matchCodes.length; j++) {
-                    if (allTeamCodes.indexOf(matchCodes[j]) < 0) allTeamCodes.push(matchCodes[j]);
+                var m = todaysMatches[i];
+                if (m.team1) {
+                    var c1 = IPL_TEAM_NAME_TO_CODE[(m.team1 || '').toLowerCase()] || m.team1;
+                    if (allTeamCodes.indexOf(c1) < 0) allTeamCodes.push(c1);
+                }
+                if (m.team2) {
+                    var c2 = IPL_TEAM_NAME_TO_CODE[(m.team2 || '').toLowerCase()] || m.team2;
+                    if (allTeamCodes.indexOf(c2) < 0) allTeamCodes.push(c2);
+                }
+                if (!m.team1 && !m.team2) {
+                    var matchCodes = extractTeamCodesFromMatchName(m.matchName);
+                    for (var j = 0; j < matchCodes.length; j++) {
+                        if (allTeamCodes.indexOf(matchCodes[j]) < 0) allTeamCodes.push(matchCodes[j]);
+                    }
                 }
             }
 
             // Banner: show today's matches
             if (banner) {
-                var hasLive = todaysMatches.some(function(m) { return m.status === 'live'; });
                 banner.innerHTML = todaysMatches.map(function(m) {
-                    var isLive = m.status === 'live';
+                    var matchState = m.status || m.state || 'scheduled';
+                    var isLive = matchState === 'live' || matchState.includes('progress');
                     return '<div style="background: ' + (isLive ? 'rgba(245,197,24,0.12)' : 'var(--glass)') + '; border: 1px solid ' + (isLive ? 'rgba(245,197,24,0.4)' : 'var(--border)') + '; border-radius: 10px; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">' +
                         '<div>' +
                             '<div style="font-weight: 700; font-size: 0.95rem;">' + m.matchName + '</div>' +
                             '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">' + (m.matchDate || '') + '</div>' +
                         '</div>' +
                         (isLive ? '<span style="background: rgba(245,197,24,0.2); color: var(--accent); font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; border: 1px solid rgba(245,197,24,0.4);">&#9679; LIVE</span>' :
-                            '<span style="background: var(--dark-elevated); color: var(--text-secondary); font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px;">' + (m.status || 'scheduled') + '</span>') +
+                            '<span style="background: var(--dark-elevated); color: var(--text-secondary); font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px;">' + matchState + '</span>') +
                     '</div>';
                 }).join('');
             }
