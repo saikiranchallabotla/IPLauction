@@ -2021,19 +2021,34 @@
         }
 
         // Get today's date in IST (day starts at 12:00 AM IST)
+        // Returns "YYYY-MM-DD" in IST timezone
         function getTodayISTDateString() {
             var now = new Date();
             var IST_OFFSET = 330; // IST = UTC+5:30 = 330 minutes
             var nowIST = new Date(now.getTime() + (IST_OFFSET + now.getTimezoneOffset()) * 60000);
-            return nowIST.toDateString();
+            return nowIST.getFullYear() + '-' +
+                String(nowIST.getMonth() + 1).padStart(2, '0') + '-' +
+                String(nowIST.getDate()).padStart(2, '0');
         }
 
-        // Find today's matches using IST date
+        // Convert any date to IST "YYYY-MM-DD" string for consistent comparison
+        function toISTDateString(dateStr) {
+            if (!dateStr) return '';
+            var d = new Date(dateStr);
+            if (isNaN(d.getTime())) return '';
+            var IST_OFFSET = 330;
+            var dIST = new Date(d.getTime() + (IST_OFFSET + d.getTimezoneOffset()) * 60000);
+            return dIST.getFullYear() + '-' +
+                String(dIST.getMonth() + 1).padStart(2, '0') + '-' +
+                String(dIST.getDate()).padStart(2, '0');
+        }
+
+        // Find today's matches using IST date — both "today" and match dates converted to IST
         function findTodaysMatches(matches) {
             var todayIST = getTodayISTDateString();
             var todaysMatchesRaw = (matches || []).filter(function(m) {
                 if (!m.matchDate) return false;
-                return new Date(m.matchDate).toDateString() === todayIST;
+                return toISTDateString(m.matchDate) === todayIST;
             });
             // Deduplicate by matchId and matchName
             var seenMatchIds = {};
@@ -2934,7 +2949,10 @@
         // ============ FANTASY POINTS TABLE ============
         function renderPointsTable() {
             const matchesPlayed = (fantasyData.matches || []).filter(m => m.status === 'completed').length;
-            const hasLiveMatch = (fantasyData.matches || []).some(m => m.status === 'live');
+            const todayISTStr = getTodayISTDateString();
+            const hasLiveMatch = (fantasyData.matches || []).some(function(m) {
+                return m.status === 'live' && toISTDateString(m.matchDate) === todayISTStr;
+            });
             const el = id => document.getElementById(id);
 
             const statMatches = el('fantasy-stat-matches');
@@ -3124,9 +3142,11 @@
                 container.innerHTML = '<p style="color: var(--text-secondary);">No matches available</p>';
                 return;
             }
+            var todayISTForTabs = getTodayISTDateString();
             container.innerHTML = matches.map(m => {
                 const shortName = m.matchName.length > 30 ? m.matchName.substring(0, 30) + '...' : m.matchName;
-                const liveBadge = m.status === 'live' ? ' <span class="live-match-badge">&#9679; LIVE</span>' : '';
+                const isActuallyLive = m.status === 'live' && toISTDateString(m.matchDate) === todayISTForTabs;
+                const liveBadge = isActuallyLive ? ' <span class="live-match-badge">&#9679; LIVE</span>' : '';
                 return '<button class="fantasy-match-tab ' + (selectedFantasyMatch === m.matchId ? 'active' : '') + '" onclick="selectFantasyMatch(\'' + m.matchId + '\')">' + shortName + liveBadge + '</button>';
             }).join('');
         }
