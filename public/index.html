@@ -1785,7 +1785,7 @@
                     <div class="fantasy-stat-icon" style="background: rgba(255,152,0,0.12); color: #ffb74d;">&#127951;</div>
                     <div class="fantasy-stat-content">
                         <div class="fantasy-stat-number" id="fantasy-stat-today-scorer">-</div>
-                        <div class="fantasy-stat-title">Today's Top Scorer</div>
+                        <div class="fantasy-stat-title">Match Day Top Scorer</div>
                     </div>
                 </div>
             </div>
@@ -1794,7 +1794,7 @@
                 <div class="tabs" style="margin-bottom: 1rem;">
                     <button class="tab active" onclick="showFantasyTab('leaderboard', this)">Points Table</button>
                     <button class="tab" onclick="showFantasyTab('match-view', this)">Match-by-Match</button>
-                    <button class="tab" onclick="showFantasyTab('today', this)">&#127951; Today's Players</button>
+                    <button class="tab" onclick="showFantasyTab('today', this)">&#127951; Match Day Players</button>
                 </div>
 
                 <div id="fantasy-leaderboard-tab">
@@ -2076,6 +2076,76 @@
                 seenIds[key] = true;
                 return true;
             });
+        }
+
+        // Find the "current match day" matches — uses server-computed currentMatchDay
+        // which shows live matches, today's matches, or the most recently completed
+        // match(es) until the next match starts.
+        function findCurrentMatchDayMatches() {
+            var cmd = fantasyData.currentMatchDay;
+            if (cmd && cmd.matches && cmd.matches.length > 0) {
+                return cmd.matches;
+            }
+            // Fallback to today's schedule matches
+            return findTodaysScheduleMatches();
+        }
+
+        // Get current match day metadata (label, isLive, isToday, nextMatch)
+        function getCurrentMatchDayInfo() {
+            return fantasyData.currentMatchDay || { matches: [], label: 'No Matches Yet', isLive: false, isToday: false };
+        }
+
+        // Get team codes for the current match day (live/completed/scheduled matches)
+        function getCurrentMatchDayTeamCodes() {
+            var matches = findCurrentMatchDayMatches();
+            var codes = [];
+            for (var i = 0; i < matches.length; i++) {
+                var m = matches[i];
+                if (m.team1) {
+                    var c1 = IPL_TEAM_NAME_TO_CODE[(m.team1 || '').toLowerCase()] || m.team1;
+                    if (codes.indexOf(c1) < 0) codes.push(c1);
+                }
+                if (m.team2) {
+                    var c2 = IPL_TEAM_NAME_TO_CODE[(m.team2 || '').toLowerCase()] || m.team2;
+                    if (codes.indexOf(c2) < 0) codes.push(c2);
+                }
+                if (!m.team1 && !m.team2) {
+                    var matchCodes = extractTeamCodesFromMatchName(m.matchName);
+                    for (var j = 0; j < matchCodes.length; j++) {
+                        if (codes.indexOf(matchCodes[j]) < 0) codes.push(matchCodes[j]);
+                    }
+                }
+            }
+
+            // Last resort: detect teams from playerPoints
+            if (codes.length === 0 && matches.length > 0) {
+                var matchIds = matches.map(function(m) { return m.matchId; });
+                var teamCounts = {};
+                var playerTeamLookup = {};
+                ((state && state.players) || []).forEach(function(p) {
+                    if (p.previousTeam) playerTeamLookup[p.name] = p.previousTeam;
+                });
+                (fantasyData.teams || []).forEach(function(team) {
+                    (team.playerBreakdowns || []).forEach(function(p) {
+                        var hasMatchPts = (p.matchPoints || []).some(function(mp) {
+                            return matchIds.indexOf(mp.matchId) >= 0 && mp.points !== 0;
+                        });
+                        if (hasMatchPts) {
+                            var iplTeam = playerTeamLookup[p.playerName];
+                            if (iplTeam) teamCounts[iplTeam] = (teamCounts[iplTeam] || 0) + 1;
+                        }
+                    });
+                });
+                var sortedTeams = Object.keys(teamCounts).sort(function(a, b) {
+                    return teamCounts[b] - teamCounts[a];
+                });
+                var maxTeams = matches.length * 2;
+                for (var k = 0; k < Math.min(sortedTeams.length, maxTeams); k++) {
+                    if (codes.indexOf(sortedTeams[k]) < 0) codes.push(sortedTeams[k]);
+                }
+            }
+
+            return codes;
         }
 
         // Get all IPL team codes playing today — uses schedule (team1/team2 fields)
@@ -3008,17 +3078,9 @@
         // ============ FANTASY POINTS TABLE ============
         function renderPointsTable() {
             const matchesPlayed = (fantasyData.matches || []).filter(m => m.status === 'completed').length;
-            const todayISTStr = getTodayISTDateString();
-            // Only show LIVE if there's a live match that's actually scheduled for today (per schedule)
-            const todaySchedule = findTodaysScheduleMatches();
-            const todayScheduleIds = new Set(todaySchedule.map(function(s) { return s.matchId; }));
-            const hasLiveMatch = (fantasyData.matches || []).some(function(m) {
-                if (m.status !== 'live') return false;
-                // If schedule is available, verify the live match is in today's schedule
-                if (todaySchedule.length > 0) return todayScheduleIds.has(m.matchId);
-                // Fallback: check IST date
-                return toISTDateString(m.matchDate) === todayISTStr;
-            });
+            // Use currentMatchDay for live detection and match day stats
+            const matchDayInfo = getCurrentMatchDayInfo();
+            const hasLiveMatch = matchDayInfo.isLive;
             const el = id => document.getElementById(id);
 
             const statMatches = el('fantasy-stat-matches');
@@ -3061,28 +3123,28 @@
             const statMvp = el('fantasy-stat-mvp');
             if (statMvp) statMvp.textContent = mvpName;
 
-            // Find today's top scorer — only from today's playing teams
-            const todayMatchesList = findTodaysScheduleMatches();
-            const todayTeamCodes = getTodaysTeamCodes();
-            // Build set of player names from today's IPL teams
-            const todayTeamPlayerNames = new Set();
-            if (todayTeamCodes.length > 0) {
+            // Find current match day's top scorer — from current match day's playing teams
+            const currentMatchDayMatches = findCurrentMatchDayMatches();
+            const currentTeamCodes = getCurrentMatchDayTeamCodes();
+            // Build set of player names from current match day's IPL teams
+            const matchDayPlayerNames = new Set();
+            if (currentTeamCodes.length > 0) {
                 ((state && state.players) || []).forEach(function(p) {
-                    if (todayTeamCodes.indexOf(p.previousTeam) >= 0) todayTeamPlayerNames.add(p.name);
+                    if (currentTeamCodes.indexOf(p.previousTeam) >= 0) matchDayPlayerNames.add(p.name);
                 });
             }
             let todayTopName = '-', todayTopPts = 0;
-            if (todayMatchesList.length > 0 && todayTeamPlayerNames.size > 0) {
-                const todayMatchIds = todayMatchesList.map(function(m) { return m.matchId; });
+            if (currentMatchDayMatches.length > 0 && matchDayPlayerNames.size > 0) {
+                const matchDayIds = currentMatchDayMatches.map(function(m) { return m.matchId; });
                 for (const team of teams) {
                     for (const player of (team.playerBreakdowns || [])) {
-                        if (!todayTeamPlayerNames.has(player.playerName)) continue;
-                        let playerTodayPts = 0;
+                        if (!matchDayPlayerNames.has(player.playerName)) continue;
+                        let playerMatchDayPts = 0;
                         (player.matchPoints || []).forEach(function(mp) {
-                            if (todayMatchIds.indexOf(mp.matchId) >= 0) playerTodayPts += mp.points;
+                            if (matchDayIds.indexOf(mp.matchId) >= 0) playerMatchDayPts += mp.points;
                         });
-                        if (playerTodayPts > todayTopPts) {
-                            todayTopPts = playerTodayPts;
+                        if (playerMatchDayPts > todayTopPts) {
+                            todayTopPts = playerMatchDayPts;
                             todayTopName = player.playerName;
                         }
                     }
@@ -3090,8 +3152,8 @@
             }
             const statTodayScorer = el('fantasy-stat-today-scorer');
             if (statTodayScorer) {
-                if (todayMatchesList.length === 0) {
-                    statTodayScorer.textContent = 'No match today';
+                if (currentMatchDayMatches.length === 0) {
+                    statTodayScorer.textContent = 'No matches yet';
                 } else {
                     statTodayScorer.textContent = todayTopName;
                 }
@@ -3208,10 +3270,10 @@
                 container.innerHTML = '<p style="color: var(--text-secondary);">No matches available</p>';
                 return;
             }
-            var todayISTForTabs = getTodayISTDateString();
+            var cmdMatchIds = new Set((findCurrentMatchDayMatches() || []).map(function(cm) { return cm.matchId; }));
             container.innerHTML = matches.map(m => {
                 const shortName = m.matchName.length > 30 ? m.matchName.substring(0, 30) + '...' : m.matchName;
-                const isActuallyLive = m.status === 'live' && toISTDateString(m.matchDate) === todayISTForTabs;
+                const isActuallyLive = m.status === 'live' && cmdMatchIds.has(m.matchId);
                 const liveBadge = isActuallyLive ? ' <span class="live-match-badge">&#9679; LIVE</span>' : '';
                 return '<button class="fantasy-match-tab ' + (selectedFantasyMatch === m.matchId ? 'active' : '') + '" onclick="selectFantasyMatch(\'' + m.matchId + '\')">' + shortName + liveBadge + '</button>';
             }).join('');
@@ -3271,83 +3333,79 @@
                 return;
             }
 
-            // Use schedule for today's matches (has real dates and team names)
-            var todaysMatches = findTodaysScheduleMatches();
+            // Use currentMatchDay from server — shows live/completed match players until next match starts
+            var matchDayInfo = getCurrentMatchDayInfo();
+            var currentMatches = findCurrentMatchDayMatches();
 
-            // No matches today
-            if (todaysMatches.length === 0) {
+            // No matches at all
+            if (currentMatches.length === 0) {
                 if (banner) banner.innerHTML = '';
                 content.innerHTML = '<div style="text-align: center; padding: 2.5rem 1rem;">' +
                     '<div style="font-size: 2.5rem; margin-bottom: 0.75rem;">&#127951;</div>' +
-                    '<h3 style="color: var(--text); margin-bottom: 0.5rem;">No Matches Today</h3>' +
-                    '<p style="color: var(--text-secondary);">There are no IPL matches scheduled for today. Check back on a match day!</p>' +
+                    '<h3 style="color: var(--text); margin-bottom: 0.5rem;">No Matches Yet</h3>' +
+                    '<p style="color: var(--text-secondary);">IPL match data will appear here once matches begin.</p>' +
                 '</div>';
                 return;
             }
 
-            // Extract team codes — schedule entries have team1/team2, fallback to matchName parsing
-            var allTeamCodes = [];
-            for (var i = 0; i < todaysMatches.length; i++) {
-                var m = todaysMatches[i];
-                if (m.team1) {
-                    var c1 = IPL_TEAM_NAME_TO_CODE[(m.team1 || '').toLowerCase()] || m.team1;
-                    if (allTeamCodes.indexOf(c1) < 0) allTeamCodes.push(c1);
-                }
-                if (m.team2) {
-                    var c2 = IPL_TEAM_NAME_TO_CODE[(m.team2 || '').toLowerCase()] || m.team2;
-                    if (allTeamCodes.indexOf(c2) < 0) allTeamCodes.push(c2);
-                }
-                if (!m.team1 && !m.team2) {
-                    var matchCodes = extractTeamCodesFromMatchName(m.matchName);
-                    for (var j = 0; j < matchCodes.length; j++) {
-                        if (allTeamCodes.indexOf(matchCodes[j]) < 0) allTeamCodes.push(matchCodes[j]);
-                    }
-                }
-            }
+            // Extract team codes using the current match day helper
+            var allTeamCodes = getCurrentMatchDayTeamCodes();
 
-            // Banner: show today's matches
+            // Banner: show current match day info
             if (banner) {
-                banner.innerHTML = todaysMatches.map(function(m) {
+                var bannerHtml = '';
+                // Show label for non-today matches (e.g. "Last Completed Match")
+                if (!matchDayInfo.isToday && matchDayInfo.label) {
+                    bannerHtml += '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.5rem; font-weight: 600;">' +
+                        matchDayInfo.label;
+                    if (matchDayInfo.nextMatch) {
+                        var nextDate = matchDayInfo.nextMatch.matchDate ? new Date(matchDayInfo.nextMatch.matchDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '';
+                        bannerHtml += ' &mdash; Next: ' + (matchDayInfo.nextMatch.matchName || '') + (nextDate ? ' (' + nextDate + ')' : '');
+                    }
+                    bannerHtml += '</div>';
+                }
+                bannerHtml += currentMatches.map(function(m) {
                     var matchState = m.status || m.state || 'scheduled';
-                    var isLive = matchState === 'live' || matchState.includes('progress');
+                    var isLive = matchState === 'live' || (matchState.includes && matchState.includes('progress'));
                     return '<div style="background: ' + (isLive ? 'rgba(245,197,24,0.12)' : 'var(--glass)') + '; border: 1px solid ' + (isLive ? 'rgba(245,197,24,0.4)' : 'var(--border)') + '; border-radius: 10px; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">' +
                         '<div>' +
                             '<div style="font-weight: 700; font-size: 0.95rem;">' + m.matchName + '</div>' +
-                            '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">' + (m.matchDate || '') + '</div>' +
+                            '<div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">' + (m.matchDate ? new Date(m.matchDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '') + '</div>' +
                         '</div>' +
                         (isLive ? '<span style="background: rgba(245,197,24,0.2); color: var(--accent); font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; border: 1px solid rgba(245,197,24,0.4);">&#9679; LIVE</span>' :
                             '<span style="background: var(--dark-elevated); color: var(--text-secondary); font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px;">' + matchState + '</span>') +
                     '</div>';
                 }).join('');
+                banner.innerHTML = bannerHtml;
             }
 
-            // Get all players from today's playing IPL teams using room's player list
+            // Get all players from current match day's IPL teams using room's player list
             var roomPlayers = (state && state.players) || [];
-            var todaySquadPlayers = roomPlayers.filter(function(p) {
+            var matchDaySquadPlayers = roomPlayers.filter(function(p) {
                 return allTeamCodes.indexOf(p.previousTeam) >= 0;
             });
 
-            if (todaySquadPlayers.length === 0 && allTeamCodes.length === 0) {
-                content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Could not identify teams from today\'s match names.</p>';
+            if (matchDaySquadPlayers.length === 0 && allTeamCodes.length === 0) {
+                content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Could not identify teams from match data.</p>';
                 return;
             }
 
-            // Build a lookup: player name → match points for today's matches
-            var todayMatchIds = todaysMatches.map(function(m) { return m.matchId; });
+            // Build a lookup: player name -> match points for current match day matches
+            var currentMatchIds = currentMatches.map(function(m) { return m.matchId; });
             var playerPointsMap = {};
             var teams = fantasyData.teams || [];
             teams.forEach(function(team) {
                 (team.playerBreakdowns || []).forEach(function(p) {
-                    var todayPts = 0;
+                    var matchPts = 0;
                     var hasData = false;
                     (p.matchPoints || []).forEach(function(mp) {
-                        if (todayMatchIds.indexOf(mp.matchId) >= 0) {
-                            todayPts += mp.points;
+                        if (currentMatchIds.indexOf(mp.matchId) >= 0) {
+                            matchPts += mp.points;
                             hasData = true;
                         }
                     });
                     if (hasData) {
-                        playerPointsMap[p.playerName] = todayPts;
+                        playerPointsMap[p.playerName] = matchPts;
                     }
                 });
             });
@@ -3357,7 +3415,7 @@
             for (var k = 0; k < allTeamCodes.length; k++) {
                 playersByTeam[allTeamCodes[k]] = [];
             }
-            todaySquadPlayers.forEach(function(p) {
+            matchDaySquadPlayers.forEach(function(p) {
                 if (playersByTeam[p.previousTeam]) {
                     playersByTeam[p.previousTeam].push(p);
                 }
@@ -3365,9 +3423,10 @@
 
             // Build the HTML
             var html = '';
-            var totalPlayerCount = todaySquadPlayers.length;
+            var totalPlayerCount = matchDaySquadPlayers.length;
+            var matchDayLabel = matchDayInfo.isToday ? 'playing today' : 'from last match';
             html += '<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">' +
-                '&#127951; ' + totalPlayerCount + ' players from ' + allTeamCodes.length + ' teams playing today' +
+                '&#127951; ' + totalPlayerCount + ' players from ' + allTeamCodes.length + ' teams ' + matchDayLabel +
             '</div>';
 
             var IPL_FULL_NAMES = {
@@ -4314,13 +4373,10 @@
                 if (!fantasyTabPollTimer) {
                     fantasyTabPollTimer = setInterval(() => {
                         if (!roomCode) return;
-                        var hasLive = (fantasyData.matches || []).some(m => m.status === 'live');
-                        // Also poll if there are today's matches (to detect when they go live)
-                        var todayStr = new Date().toDateString();
-                        var hasTodayMatch = (fantasyData.matches || []).some(function(m) {
-                            return m.matchDate && new Date(m.matchDate).toDateString() === todayStr;
-                        });
-                        if (hasLive || hasTodayMatch) {
+                        var cmdInfo = getCurrentMatchDayInfo();
+                        var hasLive = cmdInfo.isLive;
+                        var hasCurrentMatch = cmdInfo.matches && cmdInfo.matches.length > 0;
+                        if (hasLive || hasCurrentMatch) {
                             fetch('/api/room/' + roomCode + '/fantasy-points')
                                 .then(r => r.json())
                                 .then(data => {

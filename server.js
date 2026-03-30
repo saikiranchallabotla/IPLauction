@@ -260,7 +260,7 @@ function isStaleSeasonCache(cache) {
     }
     // Check match count vs what's possible this season — even if seasonYear is set.
     // The IPL Fantasy API reuses tourgamedayId across seasons, so a prior run may have
-    // probed IDs 1-74 and stored 70+ IPL 2025 matches incorrectly tagged as the current season.
+    // probed IDs 1-74 and stored 70+ prior-season matches incorrectly tagged as the current season.
     // IPL has at most 2 matches per day, so match count should not exceed daysSinceStart * 2.
     if (cache.matches?.length > 0) {
         const seasonStart2 = new Date(IPL_SEASON_START_DATE);
@@ -1089,7 +1089,7 @@ async function fetchFromIPLFantasyPublic() {
     if (fantasyCache?.seriesId === 'ipl_fantasy_public' && fantasyCache?.seasonYear === IPL_SEASON_YEAR) {
         const cached = fantasyCache?.matches || [];
         // Validate: if cached match count exceeds what's possible this season, discard everything.
-        // The IPL Fantasy API reuses tourgamedayId across seasons, so stale IPL 2025 data
+        // The IPL Fantasy API reuses tourgamedayId across seasons, so stale prior-season data
         // may have been probed and stored with seasonYear set to the current year.
         if (cached.length > maxPossibleMatches) {
             console.log(`IPL Fantasy Public: discarding ${cached.length} cached matches (exceeds max possible ${maxPossibleMatches} for IPL ${IPL_SEASON_YEAR})`);
@@ -1168,7 +1168,7 @@ async function fetchFromIPLFantasyPublic() {
         }
 
         // If we already hit an unplayed match boundary, skip all remaining gameday IDs.
-        // The same tourgamedayId can return stale data from a prior IPL season (e.g. IPL 2025)
+        // The same tourgamedayId can return stale data from a prior IPL season (e.g. a prior IPL season)
         // because the API reuses gameday IDs across seasons. Once an unplayed match is found,
         // all subsequent IDs with points belong to the previous season, not the current one.
         if (useProbing && hitUnplayedBoundary) {
@@ -1280,7 +1280,7 @@ async function fetchFromIPLFantasyPublic() {
 
     // Final sanity check: if total matches exceed what's possible this season,
     // discard ALL existing matches and keep only newly fetched ones.
-    // This catches stale IPL 2025 data that was cached with the wrong seasonYear.
+    // This catches stale prior-season data that was cached with the wrong seasonYear.
     if (allMatches.length > maxPossibleMatches) {
         console.log(`IPL Fantasy Public: total ${allMatches.length} matches exceeds max possible ${maxPossibleMatches} — discarding stale cache, keeping only ${newMatches.length} new matches`);
         allMatches = [...newMatches];
@@ -1944,6 +1944,108 @@ function buildNameMapping(matches) {
     return mapping;
 }
 
+// Compute "current match day": returns the matches (live or most recently completed)
+// whose players should be displayed until the next match starts.
+// Uses IST (UTC+5:30) for date comparisons since IPL is played in India.
+function computeCurrentMatchDay(matches, schedule) {
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000; // IST offset in ms
+    const now = new Date();
+    const nowIST = new Date(now.getTime() + IST_OFFSET);
+    const todayIST = nowIST.toISOString().slice(0, 10); // YYYY-MM-DD in IST
+
+    function toISTDateStr(dateStr) {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '';
+        const dIST = new Date(d.getTime() + IST_OFFSET);
+        return dIST.toISOString().slice(0, 10);
+    }
+
+    // Helper: enrich match with team1/team2 from schedule if available
+    function enrichWithTeams(m) {
+        const sched = schedule.find(s => s.matchId === m.matchId);
+        return {
+            matchId: m.matchId, matchName: m.matchName,
+            matchDate: m.matchDate, status: m.status,
+            team1: sched?.team1 || '', team2: sched?.team2 || ''
+        };
+    }
+
+    // Step 1: Check for live matches — always show those
+    const liveMatches = matches.filter(m => m.status === 'live');
+    if (liveMatches.length > 0) {
+        return {
+            matches: liveMatches.map(enrichWithTeams),
+            label: 'Live Match',
+            isLive: true,
+            isToday: true
+        };
+    }
+
+    // Step 2: Check for today's matches (completed today)
+    const todayMatches = matches.filter(m => toISTDateStr(m.matchDate) === todayIST);
+    if (todayMatches.length > 0) {
+        return {
+            matches: todayMatches.map(enrichWithTeams),
+            label: "Today's Match",
+            isLive: false,
+            isToday: true
+        };
+    }
+
+    // Step 3: Also check schedule for today's matches (may be upcoming, not yet in matches array)
+    const todayScheduled = schedule.filter(s => toISTDateStr(s.matchDate) === todayIST);
+    if (todayScheduled.length > 0) {
+        // There are matches scheduled today but not yet started/completed
+        return {
+            matches: todayScheduled.map(s => ({
+                matchId: s.matchId || '', matchName: s.matchName || '',
+                matchDate: s.matchDate || '', status: 'scheduled',
+                team1: s.team1, team2: s.team2
+            })),
+            label: "Today's Match (Upcoming)",
+            isLive: false,
+            isToday: true
+        };
+    }
+
+    // Step 4: No matches today — find the most recently completed match(es)
+    // and show them until the next match starts
+    const completedMatches = matches
+        .filter(m => m.status === 'completed' && m.matchDate)
+        .sort((a, b) => new Date(b.matchDate) - new Date(a.matchDate));
+
+    if (completedMatches.length > 0) {
+        // Get the most recent match date
+        const lastMatchDate = toISTDateStr(completedMatches[0].matchDate);
+        // Get ALL matches from that same date (could be a double-header day)
+        const lastDayMatches = completedMatches.filter(m => toISTDateStr(m.matchDate) === lastMatchDate);
+
+        // Find the next upcoming match from schedule
+        let nextMatch = null;
+        const sortedSchedule = [...schedule]
+            .filter(s => s.matchDate && toISTDateStr(s.matchDate) > todayIST)
+            .sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+        if (sortedSchedule.length > 0) {
+            nextMatch = {
+                matchName: sortedSchedule[0].matchName,
+                matchDate: sortedSchedule[0].matchDate
+            };
+        }
+
+        return {
+            matches: lastDayMatches.map(enrichWithTeams),
+            label: 'Last Completed Match',
+            isLive: false,
+            isToday: false,
+            nextMatch
+        };
+    }
+
+    // No matches at all
+    return { matches: [], label: 'No Matches Yet', isLive: false, isToday: false };
+}
+
 function computeRoomFantasyPoints(room) {
     const matches = fantasyCache?.matches || [];
     const nameMapping = fantasyCache?.nameMapping || {};
@@ -2004,6 +2106,12 @@ function computeRoomFantasyPoints(room) {
 
     teamPoints.sort((a, b) => b.totalPoints - a.totalPoints || a.teamName.localeCompare(b.teamName));
 
+    // Compute "current match day" — the matches (live or most recently completed)
+    // that should be displayed until the next match starts.
+    // Logic: find today's matches first; if none, find the most recently completed
+    // match(es) and show them until the next scheduled match begins.
+    const currentMatchDay = computeCurrentMatchDay(matches, fantasyCache?.schedule || []);
+
     return {
         teams: teamPoints,
         matches: matches.map(m => ({
@@ -2013,6 +2121,7 @@ function computeRoomFantasyPoints(room) {
             status: m.status
         })),
         schedule: fantasyCache?.schedule || [],
+        currentMatchDay,
         lastUpdated: fantasyCache?.lastFetchedAt || null
     };
 }
