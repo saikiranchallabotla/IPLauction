@@ -931,7 +931,7 @@ async function fetchFromIPLFantasy() {
         throw new Error(`IPL Fantasy fixtures fetch failed: HTTP ${fixturesRes.status}`);
     }
     const fixturesJson = await fixturesRes.json();
-    const allFixtures = parseIPLFixtures(fixturesJson);
+    const { fixtures: allFixtures } = parseIPLFixtures(fixturesJson);
     // Filter fixtures to only current season — exclude fixtures without valid dates
     const seasonStart = new Date(IPL_SEASON_START_DATE);
     const fixtures = allFixtures.filter(f => {
@@ -1058,12 +1058,15 @@ async function fetchFromIPLFantasyPublic() {
 
     // Step 1: Try to discover fixtures from the public tour-fixtures endpoint
     let fixtures = [];
+    let allFixturesForSchedule = []; // includes upcoming matches, for schedule building
     try {
         const fixturesRes = await fetch('https://fantasy.iplt20.com/classic/api/feed/tour-fixtures?lang=en', { headers });
         if (fixturesRes.ok) {
             const fixturesJson = await fixturesRes.json();
-            fixtures = parseIPLFixtures(fixturesJson);
-            console.log(`IPL Fantasy Public: discovered ${fixtures.length} fixtures from tour-fixtures`);
+            const parsed = parseIPLFixtures(fixturesJson);
+            fixtures = parsed.fixtures;
+            allFixturesForSchedule = parsed.allFixtures;
+            console.log(`IPL Fantasy Public: discovered ${fixtures.length} fixtures from tour-fixtures (${allFixturesForSchedule.length} total incl. upcoming)`);
         }
     } catch (e) {
         console.log('IPL Fantasy Public: tour-fixtures endpoint unavailable, will probe gameday IDs');
@@ -1235,11 +1238,8 @@ async function fetchFromIPLFantasyPublic() {
                     const currTotal = playerPoints.reduce((s, p) => s + (p.points || 0), 0);
                     if (currTotal !== prevTotal) {
                         matchStatus = 'live';
-                    } else if (prevMatch.status === 'live') {
-                        // Points same but was previously live — keep as live for a grace period
-                        // (will be flipped to completed once points stop changing)
-                        matchStatus = 'live';
                     }
+                    // If fixture API says not live and points haven't changed, the match is completed.
                 }
                 // If this is the last match with points (most recent), and it was just discovered
                 // (no previous cache entry), treat as potentially live
@@ -1302,26 +1302,22 @@ async function fetchFromIPLFantasyPublic() {
 
     const nameMapping = buildNameMapping(validMatches);
 
-    // Build schedule from fixtures if available (includes upcoming matches with team names)
-    // Re-parse ALL fixtures (including upcoming) from the raw data for the schedule
+    // Build schedule from all fixtures including upcoming (so today's not-yet-started matches are shown)
     let fullSchedule = [];
-    if (fixtures.length > 0 || allFixtureObjects.length > 0) {
-        // Use allFixtureObjects which was collected in parseIPLFixtures scope — re-parse here
-        // since parseIPLFixtures only keeps live/completed. We'll parse team names from matchName.
-        for (const f of fixtures) {
-            const parts = (f.matchName || '').split(/\s+vs?\s+/i);
-            const t1 = (parts[0] || '').replace(/[,\-]\s*(match|\d+).*$/i, '').trim();
-            const t2 = (parts[1] || '').replace(/[,\-]\s*(match|\d+).*$/i, '').trim();
-            if (t1 && t2) {
-                fullSchedule.push({
-                    matchId: f.matchId || '', matchName: f.matchName || '',
-                    team1: t1, team2: t2, matchDate: f.matchDate || '',
-                    state: (f.status || '').toLowerCase()
-                });
-            }
+    const scheduleSource = allFixturesForSchedule.length > 0 ? allFixturesForSchedule : fixtures;
+    for (const f of scheduleSource) {
+        const parts = (f.matchName || '').split(/\s+vs?\s+/i);
+        const t1 = (parts[0] || '').replace(/[,\-]\s*(match|\d+).*$/i, '').trim();
+        const t2 = (parts[1] || '').replace(/[,\-]\s*(match|\d+).*$/i, '').trim();
+        if (t1 && t2) {
+            fullSchedule.push({
+                matchId: f.matchId || '', matchName: f.matchName || '',
+                team1: t1, team2: t2, matchDate: f.matchDate || '',
+                state: (f.status || '').toLowerCase()
+            });
         }
-        fullSchedule.sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
     }
+    fullSchedule.sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
 
     fantasyCache = {
         seriesId: 'ipl_fantasy_public',
@@ -1394,6 +1390,7 @@ function parseIPLPublicPlayerPoints(json) {
 
 function parseIPLFixtures(json) {
     const fixtures = [];
+    const upcomingFixtures = [];
 
     // Collect all fixture objects regardless of nesting structure
     let allFixtureObjects = [];
@@ -1441,9 +1438,6 @@ function parseIPLFixtures(json) {
                             statusStr === 'completed' || statusStr === 'result' ||
                             statusStr === 'finished' || statusStr === 'post';
 
-        // A "live" flag takes priority over "completed" classification
-        if (!isLive && !isCompleted) continue;
-
         const gamedayId = f?.GamedayId || f?.gamedayId || f?.GameDayId || f?.gameDayId ||
                           f?.MatchId || f?.matchId || f?.FixtureId || f?.fixtureId;
         if (!gamedayId) continue;
@@ -1451,6 +1445,20 @@ function parseIPLFixtures(json) {
         const home = f?.HomeTeam?.ShortName || f?.HomeTeam?.Name || f?.HomeTeam || f?.Team1 || f?.team1 || '';
         const away = f?.AwayTeam?.ShortName || f?.AwayTeam?.Name || f?.AwayTeam || f?.Team2 || f?.team2 || '';
         const matchName = f?.MatchName || f?.matchName || (home && away ? `${home} vs ${away}` : `Match ${gamedayId}`);
+
+        // A "live" flag takes priority over "completed" classification.
+        // Upcoming/scheduled matches are collected separately for schedule building.
+        if (!isLive && !isCompleted) {
+            upcomingFixtures.push({
+                matchId: String(f?.FixtureId || f?.fixtureId || f?.MatchId || f?.matchId || gamedayId),
+                matchName,
+                matchDate: f?.StartDate || f?.startDate || f?.MatchDate || f?.matchDate || '',
+                status: 'upcoming',
+                gamedayId: String(gamedayId),
+                phaseId: String(f?.PhaseId || f?.phaseId || 1)
+            });
+            continue;
+        }
 
         fixtures.push({
             matchId: String(f?.FixtureId || f?.fixtureId || f?.MatchId || f?.matchId || gamedayId),
@@ -1461,7 +1469,8 @@ function parseIPLFixtures(json) {
             phaseId: String(f?.PhaseId || f?.phaseId || 1)
         });
     }
-    return fixtures;
+    // Return active (live+completed) fixtures and all fixtures including upcoming (for schedule building)
+    return { fixtures, allFixtures: [...fixtures, ...upcomingFixtures] };
 }
 
 function parseIPLPlayerPoints(json) {
