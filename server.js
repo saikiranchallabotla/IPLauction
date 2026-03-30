@@ -2034,6 +2034,20 @@ function buildNameMapping(matches) {
         const exact = playersData.find(p => p.name.toLowerCase() === apiName.toLowerCase());
         if (exact) { mapping[apiName] = exact.name; continue; }
 
+        // First-initial + last-name match: e.g. "V Suryavanshi" -> "Vaibhav Suryavanshi"
+        const apiParts = apiName.trim().split(/\s+/);
+        if (apiParts.length >= 2 && apiParts[0].length === 1) {
+            const firstInitial = apiParts[0].toLowerCase();
+            const lastName = apiParts[apiParts.length - 1].toLowerCase();
+            const initialMatches = playersData.filter(p => {
+                const pParts = p.name.trim().split(/\s+/);
+                return pParts.length >= 2 &&
+                    pParts[0][0].toLowerCase() === firstInitial &&
+                    p.name.toLowerCase().endsWith(lastName);
+            });
+            if (initialMatches.length === 1) { mapping[apiName] = initialMatches[0].name; continue; }
+        }
+
         // Last-name match
         const apiLastName = apiName.split(' ').pop().toLowerCase();
         const lastNameMatches = playersData.filter(p => p.name.toLowerCase().endsWith(apiLastName));
@@ -2098,11 +2112,13 @@ function computeCurrentMatchDay(matches, schedule) {
         };
     }
 
-    // Step 2: Check for today's matches (completed today)
-    const todayMatches = matches.filter(m => toISTDateStr(m.matchDate) === todayIST);
+    // Step 2: Check for today's matches (completed today) — show only the most recent one
+    const todayMatches = matches
+        .filter(m => toISTDateStr(m.matchDate) === todayIST)
+        .sort((a, b) => new Date(b.matchDate) - new Date(a.matchDate));
     if (todayMatches.length > 0) {
         return {
-            matches: todayMatches.map(enrichWithTeams),
+            matches: [todayMatches[0]].map(enrichWithTeams),
             label: "Today's Match",
             isLive: false,
             isToday: true
@@ -2138,13 +2154,10 @@ function computeCurrentMatchDay(matches, schedule) {
         });
 
     if (completedMatches.length > 0) {
-        // Group by date: undated matches (probed) share a null key and are treated as a group.
-        const mostRecentDateKey = completedMatches[0].matchDate ? toISTDateStr(completedMatches[0].matchDate) : null;
-        // Get ALL matches from that same date/group (could be a double-header day)
-        const lastDayMatches = completedMatches.filter(m => {
-            const key = m.matchDate ? toISTDateStr(m.matchDate) : null;
-            return key === mostRecentDateKey;
-        });
+        // Show only the single most recently completed match.
+        // IPL schedules one match per day (or at most a double-header on the same day at different times),
+        // but users expect to see only the last played match until the next one starts.
+        const lastDayMatches = [completedMatches[0]];
 
         // Find the next upcoming match from schedule
         let nextMatch = null;
