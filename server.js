@@ -2147,7 +2147,10 @@ function computeCurrentMatchDay(matches, schedule) {
     const completedMatches = matches
         .filter(m => m.status === 'completed')
         .sort((a, b) => {
-            if (!a.matchDate && !b.matchDate) return 0;
+            if (!a.matchDate && !b.matchDate) {
+                // Both undated: use reverse array insertion order — last added = most recent
+                return matches.indexOf(b) - matches.indexOf(a);
+            }
             if (!a.matchDate) return -1; // undated = treat as most recent
             if (!b.matchDate) return 1;
             return new Date(b.matchDate) - new Date(a.matchDate);
@@ -2194,9 +2197,29 @@ function computeRoomFantasyPoints(room) {
         reverseMapping[ourName].push(apiName);
     }
 
+    // Fuzzy reverse lookup: handles name spelling variants in room data
+    // e.g. "Vaibhav Sooryavanshi" (room) -> "Vaibhav Suryavanshi" (mapping key)
+    const reverseKeys = Object.keys(reverseMapping);
+    const reverseFuse = reverseKeys.length > 0 ? new Fuse(reverseKeys, { threshold: 0.4, includeScore: true }) : null;
+    const normalize = s => s.toLowerCase().replace(/[^a-z]/g, '');
+    function lookupApiNames(playerName) {
+        if (reverseMapping[playerName]) return reverseMapping[playerName];
+        // Normalized match (strips spaces/punctuation, lowercased)
+        const normalizedTarget = normalize(playerName);
+        for (const key of reverseKeys) {
+            if (normalize(key) === normalizedTarget) return reverseMapping[key];
+        }
+        // Fuzzy match for spelling variants
+        if (reverseFuse) {
+            const results = reverseFuse.search(playerName);
+            if (results.length > 0 && results[0].score < 0.4) return reverseMapping[results[0].item] || [];
+        }
+        return [];
+    }
+
     const teamPoints = (room.teams || []).map(team => {
         const playerBreakdowns = (team.players || []).map(player => {
-            const apiNames = reverseMapping[player.name] || [];
+            const apiNames = lookupApiNames(player.name);
             const matchPoints = matches.reduce((acc, match) => {
                 let pts = 0;
                 let inMatch = false;
