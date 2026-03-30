@@ -1072,6 +1072,59 @@ async function fetchFromIPLFantasyPublic() {
         console.log('IPL Fantasy Public: tour-fixtures endpoint unavailable, will probe gameday IDs');
     }
 
+    // Step 1b: If tour-fixtures gave no schedule, fall back to IPL Stats schedule for match dates.
+    // This enriches probed matches (which have empty matchDate) with real dates and teams,
+    // and also populates the schedule so Match Day Players can find today's match.
+    let iplStatsSchedule = [];
+    if (allFixturesForSchedule.length === 0) {
+        try {
+            const statsHeaders = {
+                'User-Agent': headers['User-Agent'],
+                'Accept': 'application/json, text/plain, */*',
+                'Referer': 'https://www.iplt20.com/',
+                'Origin': 'https://www.iplt20.com',
+                'Cache-Control': 'no-cache',
+            };
+            const schedRes = await fetch('https://ipl-stats.iplt20.com/ipl/json/MatchSchedule.json', { headers: statsHeaders });
+            if (schedRes.ok) {
+                const schedJson = await schedRes.json();
+                const rawList = schedJson?.Matchsummary || schedJson?.matchsummary ||
+                                schedJson?.MatchSchedule || schedJson?.matches ||
+                                schedJson?.data?.matches || schedJson?.data || [];
+                iplStatsSchedule = (Array.isArray(rawList) ? rawList : []).map(m => {
+                    if (!m) return null;
+                    const team1 = m?.Team1ShortName || m?.TeamAShortName || m?.team1 || '';
+                    const team2 = m?.Team2ShortName || m?.TeamBShortName || m?.team2 || '';
+                    if (!team1 || !team2) return null;
+                    const matchCode = String(m?.MatchCode || m?.matchCode || m?.MatchID || m?.id || '');
+                    const rawDate = m?.MatchDate || m?.matchDate || m?.date || '';
+                    const parsedDate = rawDate ? new Date(rawDate) : null;
+                    return {
+                        matchId: matchCode,
+                        matchName: m?.MatchName || m?.matchName || `${team1} vs ${team2}`,
+                        matchNumber: parseInt(m?.MatchNumber || m?.matchNumber || 0, 10),
+                        team1, team2,
+                        matchDate: (parsedDate && !isNaN(parsedDate.getTime())) ? parsedDate.toISOString() : rawDate,
+                        status: String(m?.MatchStatus || m?.matchStatus || m?.status || '').toLowerCase(),
+                    };
+                }).filter(Boolean).sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
+                console.log(`IPL Fantasy Public: fetched ${iplStatsSchedule.length} matches from IPL Stats schedule as fallback`);
+                // Use stats schedule entries as allFixturesForSchedule so Match Day Players works
+                allFixturesForSchedule = iplStatsSchedule.map(s => ({
+                    matchId: s.matchId,
+                    matchName: s.matchName,
+                    matchDate: s.matchDate,
+                    status: s.status.includes('result') || s.status === 'completed' ? 'completed'
+                          : s.status.includes('progress') || s.status === 'live' ? 'live'
+                          : 'upcoming',
+                    gamedayId: s.matchId,
+                }));
+            }
+        } catch (e) {
+            console.log('IPL Fantasy Public: IPL Stats schedule fallback also failed:', e.message);
+        }
+    }
+
     // Step 2: If no fixtures found, probe tourgamedayId sequentially (IPL has up to 74 matches)
     // We'll use discovered fixtures for matchId/matchName/matchDate metadata;
     // if none, we generate placeholder metadata and stop on consecutive no-points responses.
@@ -1226,27 +1279,40 @@ async function fetchFromIPLFantasyPublic() {
             consecutiveNoPoints = 0;
 
             // Determine live vs completed: live if flagged by fixtures, or by detecting
-            // changing points vs cached data (indicates an in-progress match)
+            // changing points vs cached data (indicates an in-progress match).
+            // Use a consecutiveUnchanged counter to avoid prematurely flipping live→completed
+            // during between-overs/innings gaps where points temporarily stop changing.
+            // LIVE_UNCHANGED_THRESHOLD: number of consecutive 30-second refreshes with no
+            // point change before a previously-live match is declared completed (~5 minutes).
+            const LIVE_UNCHANGED_THRESHOLD = 10;
             let matchStatus = 'completed';
+            let consecutiveUnchanged = 0;
             if (entry.status === 'live') {
                 matchStatus = 'live';
             } else {
-                // Check if this match's points changed compared to previous cache — if so, it's live
                 const prevMatch = existingMatches.find(m => m.matchId === entry.matchId);
                 if (prevMatch && prevMatch.playerPoints) {
                     const prevTotal = prevMatch.playerPoints.reduce((s, p) => s + (p.points || 0), 0);
                     const currTotal = playerPoints.reduce((s, p) => s + (p.points || 0), 0);
                     if (currTotal !== prevTotal) {
+                        // Points changed — definitely live
                         matchStatus = 'live';
+                        consecutiveUnchanged = 0;
+                    } else if (prevMatch.status === 'live') {
+                        // Points unchanged but was live — could be between overs/innings.
+                        // Keep as live until we've seen LIVE_UNCHANGED_THRESHOLD consecutive
+                        // refreshes with no change (≈5 minutes of inactivity = match over).
+                        consecutiveUnchanged = (prevMatch.consecutiveUnchanged || 0) + 1;
+                        if (consecutiveUnchanged < LIVE_UNCHANGED_THRESHOLD) {
+                            matchStatus = 'live';
+                        }
                     }
-                    // If fixture API says not live and points haven't changed, the match is completed.
+                    // If fixture API says not live and points haven't changed for long enough → completed.
                 }
-                // If this is the last match with points (most recent), and it was just discovered
-                // (no previous cache entry), treat as potentially live
+                // Newly discovered match in probing — could be live; correct on next refresh if unchanged.
                 if (!prevMatch && useProbing) {
-                    // This is a newly discovered match in probing — could be live
-                    // Mark as live; will be corrected to completed on next refresh if points don't change
                     matchStatus = 'live';
+                    consecutiveUnchanged = 0;
                 }
             }
 
@@ -1255,6 +1321,7 @@ async function fetchFromIPLFantasyPublic() {
                 matchName: entry.matchName,
                 matchDate: entry.matchDate || '',
                 status: matchStatus,
+                consecutiveUnchanged,
                 playerPoints,
             });
 
@@ -1286,11 +1353,33 @@ async function fetchFromIPLFantasyPublic() {
         allMatches = [...newMatches];
     }
 
+    // Enrich probed matches (which have empty matchDate) with dates and team names
+    // from the IPL Stats schedule fallback, matched by sequential match number.
+    // We sort the probed matches by their numeric matchId (= probe order = match sequence)
+    // and align them with the stats schedule sorted by date.
+    if (iplStatsSchedule.length > 0) {
+        const undated = allMatches.filter(m => !m.matchDate).sort((a, b) => parseInt(a.matchId) - parseInt(b.matchId));
+        const statsCompleted = iplStatsSchedule.filter(s =>
+            s.status.includes('result') || s.status === 'completed' || s.status.includes('progress') || s.status === 'live'
+        );
+        for (let i = 0; i < undated.length; i++) {
+            const statsMatch = statsCompleted[i];
+            if (!statsMatch) break;
+            const m = undated[i];
+            m.matchDate = statsMatch.matchDate;
+            // Also update matchName if it's a placeholder like "Match 1"
+            if (/^Match \d+$/.test(m.matchName)) {
+                m.matchName = statsMatch.matchName;
+            }
+        }
+        console.log(`IPL Fantasy Public: enriched ${Math.min(undated.length, statsCompleted.length)} probed matches with dates from IPL Stats`);
+    }
+
     // Filter out matches from before the current season start date.
-    // Keep matches without valid dates (probed matches have no date) — season boundary
+    // Keep matches without valid dates (probed matches with no matching stats entry) — season boundary
     // is enforced by hitUnplayedBoundary + maxPossibleMatches checks during probing.
     const validMatches = allMatches.filter(m => {
-        if (!m.matchDate) return true; // probed matches have no date, keep them
+        if (!m.matchDate) return true; // keep undated matches (couldn't be enriched)
         const d = new Date(m.matchDate);
         return isNaN(d.getTime()) || d >= seasonStart;
     });
@@ -1298,17 +1387,24 @@ async function fetchFromIPLFantasyPublic() {
         console.log(`IPL Fantasy Public: removed ${allMatches.length - validMatches.length} matches from before IPL ${IPL_SEASON_YEAR} season start`);
     }
 
-    validMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+    validMatches.sort((a, b) => {
+        // Sort by date; undated matches go to end (they'll be shown as most recent in Match Day Players)
+        if (!a.matchDate && !b.matchDate) return 0;
+        if (!a.matchDate) return 1;
+        if (!b.matchDate) return -1;
+        return new Date(a.matchDate) - new Date(b.matchDate);
+    });
 
     const nameMapping = buildNameMapping(validMatches);
 
-    // Build schedule from all fixtures including upcoming (so today's not-yet-started matches are shown)
+    // Build schedule from all fixtures including upcoming (so today's not-yet-started matches are shown).
+    // Prefer allFixturesForSchedule (from tour-fixtures or IPL Stats fallback); fall back to fixtures.
     let fullSchedule = [];
     const scheduleSource = allFixturesForSchedule.length > 0 ? allFixturesForSchedule : fixtures;
     for (const f of scheduleSource) {
-        const parts = (f.matchName || '').split(/\s+vs?\s+/i);
-        const t1 = (parts[0] || '').replace(/[,\-]\s*(match|\d+).*$/i, '').trim();
-        const t2 = (parts[1] || '').replace(/[,\-]\s*(match|\d+).*$/i, '').trim();
+        // If the fixture already has team1/team2 (from iplStatsSchedule), use them directly
+        const t1 = f.team1 || (f.matchName || '').split(/\s+vs?\s+/i)[0]?.replace(/[,\-]\s*(match|\d+).*$/i, '').trim() || '';
+        const t2 = f.team2 || (f.matchName || '').split(/\s+vs?\s+/i)[1]?.replace(/[,\-]\s*(match|\d+).*$/i, '').trim() || '';
         if (t1 && t2) {
             fullSchedule.push({
                 matchId: f.matchId || '', matchName: f.matchName || '',
@@ -1970,9 +2066,20 @@ function computeCurrentMatchDay(matches, schedule) {
         return dIST.toISOString().slice(0, 10);
     }
 
-    // Helper: enrich match with team1/team2 from schedule if available
+    // Helper: enrich match with team1/team2 from schedule if available.
+    // Tries matchId first, then falls back to matching by date or matchName.
     function enrichWithTeams(m) {
-        const sched = schedule.find(s => s.matchId === m.matchId);
+        let sched = schedule.find(s => s.matchId === m.matchId);
+        if (!sched && m.matchDate) {
+            // Fall back to matching by IST date
+            const mDate = toISTDateStr(m.matchDate);
+            sched = schedule.find(s => s.matchDate && toISTDateStr(s.matchDate) === mDate);
+        }
+        if (!sched && m.matchName) {
+            // Fall back to matching by matchName (case-insensitive)
+            const mName = m.matchName.toLowerCase().replace(/\s+/g, ' ').trim();
+            sched = schedule.find(s => (s.matchName || '').toLowerCase().replace(/\s+/g, ' ').trim() === mName);
+        }
         return {
             matchId: m.matchId, matchName: m.matchName,
             matchDate: m.matchDate, status: m.status,
@@ -2019,16 +2126,25 @@ function computeCurrentMatchDay(matches, schedule) {
     }
 
     // Step 4: No matches today — find the most recently completed match(es)
-    // and show them until the next match starts
+    // and show them until the next match starts.
+    // Include matches without dates (probed matches) — sort undated matches first (treated as most recent).
     const completedMatches = matches
-        .filter(m => m.status === 'completed' && m.matchDate)
-        .sort((a, b) => new Date(b.matchDate) - new Date(a.matchDate));
+        .filter(m => m.status === 'completed')
+        .sort((a, b) => {
+            if (!a.matchDate && !b.matchDate) return 0;
+            if (!a.matchDate) return -1; // undated = treat as most recent
+            if (!b.matchDate) return 1;
+            return new Date(b.matchDate) - new Date(a.matchDate);
+        });
 
     if (completedMatches.length > 0) {
-        // Get the most recent match date
-        const lastMatchDate = toISTDateStr(completedMatches[0].matchDate);
-        // Get ALL matches from that same date (could be a double-header day)
-        const lastDayMatches = completedMatches.filter(m => toISTDateStr(m.matchDate) === lastMatchDate);
+        // Group by date: undated matches (probed) share a null key and are treated as a group.
+        const mostRecentDateKey = completedMatches[0].matchDate ? toISTDateStr(completedMatches[0].matchDate) : null;
+        // Get ALL matches from that same date/group (could be a double-header day)
+        const lastDayMatches = completedMatches.filter(m => {
+            const key = m.matchDate ? toISTDateStr(m.matchDate) : null;
+            return key === mostRecentDateKey;
+        });
 
         // Find the next upcoming match from schedule
         let nextMatch = null;
