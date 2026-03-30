@@ -2079,7 +2079,7 @@
         }
 
         // Get all IPL team codes playing today — uses schedule (team1/team2 fields)
-        // Falls back to extracting from matchName
+        // Falls back to matchName parsing, then to detecting teams from playerPoints
         function getTodaysTeamCodes() {
             var todaysMatches = findTodaysScheduleMatches();
             var codes = [];
@@ -2094,7 +2094,7 @@
                     var c2 = IPL_TEAM_NAME_TO_CODE[(m.team2 || '').toLowerCase()] || m.team2;
                     if (codes.indexOf(c2) < 0) codes.push(c2);
                 }
-                // Also try extracting from matchName as fallback
+                // Fallback: try extracting from matchName
                 if (!m.team1 && !m.team2) {
                     var matchCodes = extractTeamCodesFromMatchName(m.matchName);
                     for (var j = 0; j < matchCodes.length; j++) {
@@ -2102,6 +2102,37 @@
                     }
                 }
             }
+
+            // Last resort: detect teams from playerPoints by cross-referencing
+            // scored players with state.players' previousTeam
+            if (codes.length === 0 && todaysMatches.length > 0) {
+                var todayMatchIds = todaysMatches.map(function(m) { return m.matchId; });
+                var teamCounts = {};
+                var playerTeamLookup = {};
+                ((state && state.players) || []).forEach(function(p) {
+                    if (p.previousTeam) playerTeamLookup[p.name] = p.previousTeam;
+                });
+                (fantasyData.teams || []).forEach(function(team) {
+                    (team.playerBreakdowns || []).forEach(function(p) {
+                        var hasTodayPts = (p.matchPoints || []).some(function(mp) {
+                            return todayMatchIds.indexOf(mp.matchId) >= 0 && mp.points !== 0;
+                        });
+                        if (hasTodayPts) {
+                            var iplTeam = playerTeamLookup[p.playerName];
+                            if (iplTeam) teamCounts[iplTeam] = (teamCounts[iplTeam] || 0) + 1;
+                        }
+                    });
+                });
+                // Pick top 2 teams by player count (the 2 teams that played)
+                var sortedTeams = Object.keys(teamCounts).sort(function(a, b) {
+                    return teamCounts[b] - teamCounts[a];
+                });
+                var maxTeams = todaysMatches.length * 2;
+                for (var k = 0; k < Math.min(sortedTeams.length, maxTeams); k++) {
+                    if (codes.indexOf(sortedTeams[k]) < 0) codes.push(sortedTeams[k]);
+                }
+            }
+
             return codes;
         }
 
