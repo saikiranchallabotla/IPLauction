@@ -2914,9 +2914,197 @@ app.post('/api/room/:code/fantasy-config', (req, res) => {
 });
 
 // ============ MATCH SCORECARD API ============
-// Fetches live/recent match scorecards directly from IPL Stats
+// Fetches live/recent match scorecards from multiple sources
 let scorecardCache = { lastFetched: 0, data: [] };
 const SCORECARD_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+async function fetchScorecardFromCricbuzz() {
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.105 Mobile Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-IN,en;q=0.9',
+        'Referer': 'https://www.cricbuzz.com/',
+        'Origin': 'https://www.cricbuzz.com',
+        'x-requested-with': 'com.cricbuzz.android'
+    };
+
+    // Find live/recent IPL matches from Cricbuzz
+    const [liveRes, recentRes] = await Promise.allSettled([
+        fetch('https://www.cricbuzz.com/api/cricket-match/live', { headers }),
+        fetch('https://www.cricbuzz.com/api/cricket-match/recent', { headers }),
+    ]);
+
+    const matchMap = new Map();
+    for (const result of [liveRes, recentRes]) {
+        if (result.status !== 'fulfilled' || !result.value.ok) continue;
+        try {
+            const data = await result.value.json();
+            for (const typeGroup of (data.typeMatches || [])) {
+                for (const seriesGroup of (typeGroup.seriesMatches || [])) {
+                    const wrapper = seriesGroup.seriesAdWrapper || seriesGroup;
+                    const seriesName = (wrapper.seriesName || '').toLowerCase();
+                    if (!seriesName.includes('ipl') && !seriesName.includes('indian premier')) continue;
+                    for (const m of (wrapper.matches || [])) {
+                        const info = m.matchInfo || m;
+                        const matchId = String(info.matchId || info.id || '');
+                        if (matchId && !matchMap.has(matchId)) matchMap.set(matchId, { info, score: m.matchScore });
+                    }
+                }
+            }
+        } catch (_) {}
+    }
+
+    if (matchMap.size === 0) return [];
+
+    const now = Date.now();
+    const scorecards = [];
+
+    for (const [matchId, { info, score }] of matchMap) {
+        const state = String(info.state || info.matchState || '').toLowerCase();
+        const isLive = state.includes('progress') || state === 'live' || state.includes('innings break');
+        const startMs = info.startDate ? parseInt(info.startDate) : 0;
+        const isRecent = startMs > 0 && (now - startMs) < 48 * 60 * 60 * 1000;
+        const isCompleted = state.includes('complete') || state.includes('result') || state.includes('won');
+        if (!isLive && !(isCompleted && isRecent)) continue;
+
+        try {
+            await new Promise(r => setTimeout(r, 100));
+            const scRes = await fetch(`https://www.cricbuzz.com/api/cricket-scorecard/${matchId}`, { headers });
+            if (!scRes.ok) continue;
+            const scData = await scRes.json();
+            const innings = extractCricbuzzScorecardData(scData);
+            if (innings.length === 0) continue;
+
+            const t1 = info.team1?.teamSName || info.team1?.teamName || '';
+            const t2 = info.team2?.teamSName || info.team2?.teamName || '';
+            scorecards.push({
+                matchName: info.matchDesc || `${t1} vs ${t2}`,
+                matchDate: startMs ? new Date(startMs).toISOString() : '',
+                status: isLive ? 'live' : 'completed',
+                team1: t1, team2: t2,
+                innings
+            });
+        } catch (_) {}
+    }
+
+    return scorecards;
+}
+
+function extractCricbuzzScorecardData(scData) {
+    const innings = [];
+    for (const inning of (scData.scoreCard || scData.scorecard || [])) {
+        const batTeam = inning.batTeamDetails || {};
+        const bowlTeam = inning.bowlTeamDetails || {};
+        const teamName = batTeam.batTeamShortName || batTeam.batTeamName || '';
+
+        const scoreStr = inning.scoreDetails
+            ? `${inning.scoreDetails.runs || 0}/${inning.scoreDetails.wickets || 0}`
+            : `${batTeam.runs || batTeam.score || 0}/${batTeam.wickets || 0}`;
+        const oversStr = inning.scoreDetails
+            ? String(inning.scoreDetails.overs || '0')
+            : String(batTeam.overs || '0');
+
+        const batsmen = [];
+        for (const key of Object.keys(batTeam.batsmenData || {})) {
+            const b = batTeam.batsmenData[key];
+            const name = b.batName || b.name;
+            if (!name) continue;
+            const outDesc = String(b.outDesc || b.dismissal || '').toLowerCase();
+            const isNotOut = !outDesc || outDesc.includes('not out') || outDesc.includes('batting');
+            const r = parseInt(b.runs ?? 0), bl = parseInt(b.balls ?? 0);
+            batsmen.push({
+                name: name.trim(), runs: r, balls: bl,
+                fours: parseInt(b.fours ?? 0), sixes: parseInt(b.sixes ?? 0), isNotOut,
+                strikeRate: bl > 0 ? ((r / bl) * 100).toFixed(1) : '0.0'
+            });
+        }
+        batsmen.sort((a, b) => (b.isNotOut - a.isNotOut) || (b.runs - a.runs));
+
+        const bowlers = [];
+        for (const key of Object.keys(bowlTeam.bowlersData || {})) {
+            const bw = bowlTeam.bowlersData[key];
+            const name = bw.bowlName || bw.name;
+            if (!name) continue;
+            bowlers.push({
+                name: name.trim(), overs: String(bw.overs ?? '0'),
+                maidens: parseInt(bw.maidens ?? bw.maiden ?? 0),
+                runs: parseInt(bw.runs ?? 0), wickets: parseInt(bw.wickets ?? 0),
+                economy: parseFloat(bw.economy ?? 0).toFixed(1)
+            });
+        }
+        bowlers.sort((a, b) => (b.wickets - a.wickets) || (parseFloat(a.economy) - parseFloat(b.economy)));
+
+        innings.push({ teamName, score: scoreStr, overs: oversStr, batsmen, bowlers });
+    }
+    return innings;
+}
+
+async function fetchScorecardFromIPLStats() {
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://www.iplt20.com/',
+        'Origin': 'https://www.iplt20.com',
+    };
+
+    const schedRes = await fetch('https://ipl-stats.iplt20.com/ipl/json/MatchSchedule.json', { headers });
+    if (!schedRes.ok) throw new Error(`IPL Stats schedule HTTP ${schedRes.status}`);
+    const schedJson = await schedRes.json();
+    const rawList = schedJson?.Matchsummary || schedJson?.matchsummary ||
+                    schedJson?.MatchSchedule || schedJson?.matches ||
+                    schedJson?.data?.matches || schedJson?.data || [];
+
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const seasonStart = new Date(IPL_SEASON_START_DATE);
+    const candidates = [];
+
+    for (const m of (Array.isArray(rawList) ? rawList : [])) {
+        if (!m) continue;
+        const matchCode = String(m?.MatchCode || m?.matchCode || m?.MatchID || m?.id || '');
+        if (!matchCode) continue;
+        const status = String(m?.MatchStatus || m?.matchStatus || m?.status || '').toLowerCase();
+        const isLive = status.includes('progress') || status === 'live';
+        const isCompleted = status === 'result' || status === 'completed' || status.includes('result');
+        if (!isLive && !isCompleted) continue;
+
+        const rawDate = m?.MatchDate || m?.matchDate || m?.date || '';
+        const matchDate = rawDate ? new Date(rawDate) : null;
+        if (matchDate && !isNaN(matchDate.getTime()) && matchDate < seasonStart) continue;
+
+        const t1 = m?.Team1ShortName || m?.TeamAShortName || m?.team1 || '';
+        const t2 = m?.Team2ShortName || m?.TeamBShortName || m?.team2 || '';
+        candidates.push({
+            matchCode, matchName: m?.MatchName || m?.matchName || `${t1} vs ${t2}`,
+            matchDate: matchDate ? matchDate.toISOString() : '',
+            status: isLive ? 'live' : 'completed', isLive, t1, t2
+        });
+    }
+
+    candidates.sort((a, b) => new Date(b.matchDate || 0) - new Date(a.matchDate || 0));
+    const toFetch = [
+        ...candidates.filter(c => c.isLive),
+        ...candidates.filter(c => !c.isLive && c.matchDate && new Date(c.matchDate) > oneDayAgo).slice(0, 1)
+    ];
+    if (toFetch.length === 0 && candidates.length > 0) toFetch.push(candidates[0]);
+
+    const scorecards = [];
+    for (const match of toFetch) {
+        try {
+            const scJson = await fetchIPLScorecard(match.matchCode, headers);
+            if (scJson) {
+                const innings = extractIPLStatsScorecard(scJson);
+                if (innings.length > 0) {
+                    scorecards.push({
+                        matchName: match.matchName, matchDate: match.matchDate,
+                        status: match.status, team1: match.t1, team2: match.t2, innings
+                    });
+                }
+            }
+        } catch (_) {}
+    }
+    return scorecards;
+}
 
 app.get('/api/match-scorecards', async (req, res) => {
     try {
@@ -2925,84 +3113,24 @@ app.get('/api/match-scorecards', async (req, res) => {
             return res.json({ scorecards: scorecardCache.data });
         }
 
-        const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Referer': 'https://www.iplt20.com/',
-            'Origin': 'https://www.iplt20.com',
-        };
+        // Try multiple sources — first one that returns data wins
+        const sources = [
+            { name: 'Cricbuzz', fn: fetchScorecardFromCricbuzz },
+            { name: 'IPL Stats', fn: fetchScorecardFromIPLStats },
+        ];
 
-        // Step 1: Fetch schedule to find live/recent matches
-        const schedRes = await fetch('https://ipl-stats.iplt20.com/ipl/json/MatchSchedule.json', { headers });
-        if (!schedRes.ok) throw new Error(`Schedule HTTP ${schedRes.status}`);
-        const schedJson = await schedRes.json();
-        const rawList = schedJson?.Matchsummary || schedJson?.matchsummary ||
-                        schedJson?.MatchSchedule || schedJson?.matches ||
-                        schedJson?.data?.matches || schedJson?.data || [];
-        const matchList = Array.isArray(rawList) ? rawList : [];
-
-        // Find live and recently completed matches
-        const now = Date.now();
-        const oneDayAgo = now - 24 * 60 * 60 * 1000;
-        const seasonStart = new Date(IPL_SEASON_START_DATE);
-        const candidates = [];
-
-        for (const m of matchList) {
-            if (!m) continue;
-            const matchCode = String(m?.MatchCode || m?.matchCode || m?.MatchID || m?.id || '');
-            if (!matchCode) continue;
-            const status = String(m?.MatchStatus || m?.matchStatus || m?.status || '').toLowerCase();
-            const isLive = status.includes('progress') || status === 'live';
-            const isCompleted = status === 'result' || status === 'completed' || status.includes('result');
-            if (!isLive && !isCompleted) continue;
-
-            const rawDate = m?.MatchDate || m?.matchDate || m?.date || '';
-            const matchDate = rawDate ? new Date(rawDate) : null;
-            if (matchDate && !isNaN(matchDate.getTime()) && matchDate < seasonStart) continue;
-
-            const t1 = m?.Team1ShortName || m?.TeamAShortName || m?.team1 || '';
-            const t2 = m?.Team2ShortName || m?.TeamBShortName || m?.team2 || '';
-            const matchName = m?.MatchName || m?.matchName || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchCode}`);
-
-            candidates.push({
-                matchCode, matchName, matchDate: matchDate ? matchDate.toISOString() : '',
-                status: isLive ? 'live' : 'completed',
-                isLive, t1, t2
-            });
-        }
-
-        // Sort by date desc, take live matches + last 2 completed
-        candidates.sort((a, b) => new Date(b.matchDate || 0) - new Date(a.matchDate || 0));
-        const liveMatches = candidates.filter(c => c.isLive);
-        const recentCompleted = candidates.filter(c => !c.isLive && c.matchDate && new Date(c.matchDate) > oneDayAgo).slice(0, 2);
-        const toFetch = [...liveMatches, ...recentCompleted];
-
-        if (toFetch.length === 0) {
-            // No live, show the most recent completed match
-            const latest = candidates.find(c => !c.isLive);
-            if (latest) toFetch.push(latest);
-        }
-
-        // Step 2: Fetch scorecards
-        const scorecards = [];
-        for (const match of toFetch) {
+        let scorecards = [];
+        for (const src of sources) {
             try {
-                const scJson = await fetchIPLScorecard(match.matchCode, headers);
-                if (scJson) {
-                    const innings = extractIPLStatsScorecard(scJson);
-                    if (innings.length > 0) {
-                        scorecards.push({
-                            matchName: match.matchName,
-                            matchDate: match.matchDate,
-                            status: match.status,
-                            team1: match.t1,
-                            team2: match.t2,
-                            innings
-                        });
-                    }
+                console.log(`Scorecard API: trying ${src.name}...`);
+                scorecards = await src.fn();
+                if (scorecards.length > 0) {
+                    console.log(`Scorecard API: ${src.name} returned ${scorecards.length} scorecards`);
+                    break;
                 }
+                console.log(`Scorecard API: ${src.name} returned 0 scorecards`);
             } catch (e) {
-                console.warn(`Scorecard fetch failed for ${match.matchName}:`, e.message);
+                console.warn(`Scorecard API: ${src.name} failed: ${e.message}`);
             }
         }
 
