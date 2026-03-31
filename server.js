@@ -542,7 +542,6 @@ async function fetchFromCricbuzz() {
                 continue;
             }
             const playerPoints = computeCricbuzzMatchPoints(scData);
-            const scorecard = extractCricbuzzScorecard(scData);
             if (playerPoints.length === 0) {
                 if (isLive) {
                     console.log(`Cricbuzz match ${matchId}: live but no points computed yet — adding with 0 points`);
@@ -551,8 +550,7 @@ async function fetchFromCricbuzz() {
                         matchName: info.matchDesc || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchId}`),
                         matchDate: startMs ? new Date(startMs).toISOString() : '',
                         status: 'live',
-                        playerPoints: [],
-                        scorecard
+                        playerPoints: []
                     });
                 }
                 continue;
@@ -566,8 +564,7 @@ async function fetchFromCricbuzz() {
                 matchName: info.matchDesc || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchId}`),
                 matchDate: startMs ? new Date(startMs).toISOString() : '',
                 status: matchStillInProgress ? 'live' : 'completed',
-                playerPoints,
-                scorecard
+                playerPoints
             });
             console.log(`  Cricbuzz: ${playerPoints.length} players, ${inningsCount} innings for ${newMatches.at(-1).matchName}`);
         } catch (e) { console.error(`Cricbuzz match ${matchId}:`, e.message); }
@@ -599,69 +596,6 @@ async function fetchFromCricbuzz() {
     broadcastFantasyUpdate();
     if (seasonFiltered.some(m => m.status === 'live')) startLiveMatchTimer(); else stopLiveMatchTimer();
     return { totalMatches: allCached.length, newMatches: newMatches.length };
-}
-
-function extractCricbuzzScorecard(scData) {
-    const innings = [];
-    for (const inning of (scData.scoreCard || scData.scorecard || [])) {
-        const batTeam = inning.batTeamDetails || {};
-        const bowlTeam = inning.bowlTeamDetails || {};
-        const teamName = batTeam.batTeamShortName || batTeam.batTeamName || '';
-
-        // Extract score from innings header
-        const scoreStr = inning.scoreDetails
-            ? `${inning.scoreDetails.runs || 0}/${inning.scoreDetails.wickets || 0}`
-            : `${batTeam.runs || batTeam.score || 0}/${batTeam.wickets || 0}`;
-        const oversStr = inning.scoreDetails
-            ? String(inning.scoreDetails.overs || '0')
-            : String(batTeam.overs || '0');
-
-        // Batsmen — collect all with their stats
-        const batsmen = [];
-        const batsmenData = batTeam.batsmenData || {};
-        for (const key of Object.keys(batsmenData)) {
-            const b = batsmenData[key];
-            const name = b.batName || b.name;
-            if (!name) continue;
-            const outDesc = String(b.outDesc || b.dismissal || '').toLowerCase();
-            const isNotOut = !outDesc || outDesc.includes('not out') || outDesc.includes('batting');
-            batsmen.push({
-                name: name.trim(),
-                runs: parseInt(b.runs ?? 0),
-                balls: parseInt(b.balls ?? 0),
-                fours: parseInt(b.fours ?? 0),
-                sixes: parseInt(b.sixes ?? 0),
-                isNotOut,
-                strikeRate: parseInt(b.balls ?? 0) > 0
-                    ? ((parseInt(b.runs ?? 0) / parseInt(b.balls ?? 0)) * 100).toFixed(1)
-                    : '0.0'
-            });
-        }
-        // Sort: not-out batsmen first (currently batting), then by runs desc
-        batsmen.sort((a, b) => (b.isNotOut - a.isNotOut) || (b.runs - a.runs));
-
-        // Bowlers — collect all with their figures
-        const bowlers = [];
-        const bowlersData = bowlTeam.bowlersData || {};
-        for (const key of Object.keys(bowlersData)) {
-            const bw = bowlersData[key];
-            const name = bw.bowlName || bw.name;
-            if (!name) continue;
-            bowlers.push({
-                name: name.trim(),
-                overs: String(bw.overs ?? '0'),
-                maidens: parseInt(bw.maidens ?? bw.maiden ?? 0),
-                runs: parseInt(bw.runs ?? 0),
-                wickets: parseInt(bw.wickets ?? 0),
-                economy: parseFloat(bw.economy ?? 0).toFixed(1)
-            });
-        }
-        // Sort by wickets desc, then economy asc
-        bowlers.sort((a, b) => (b.wickets - a.wickets) || (parseFloat(a.economy) - parseFloat(b.economy)));
-
-        innings.push({ teamName, score: scoreStr, overs: oversStr, batsmen, bowlers });
-    }
-    return innings;
 }
 
 function computeCricbuzzMatchPoints(scData) {
@@ -743,52 +677,6 @@ function computeCricbuzzMatchPoints(scData) {
     }));
 }
 
-
-function extractCricAPIScorecard(matchData) {
-    const innings = [];
-    for (const inning of (matchData.scorecard || [])) {
-        const teamName = inning.batting || inning.team || '';
-        const batsmen = [];
-        for (const b of (inning.batting_list || inning.batsman || [])) {
-            const name = b.batsman || b.name;
-            if (!name) continue;
-            const r = parseInt(b.r ?? b.runs ?? 0);
-            const bl = parseInt(b.b ?? b.balls ?? 0);
-            const dcode = String(b['dismissal-code'] || b.dismissal || '').toLowerCase();
-            const isNotOut = dcode.includes('not out') || dcode === 'not-out' || dcode === '';
-            batsmen.push({
-                name, runs: r, balls: bl,
-                fours: parseInt(b['4s'] ?? b.fours ?? 0),
-                sixes: parseInt(b['6s'] ?? b.sixes ?? 0),
-                isNotOut,
-                strikeRate: bl > 0 ? ((r / bl) * 100).toFixed(1) : '0.0'
-            });
-        }
-        batsmen.sort((a, b) => (b.isNotOut - a.isNotOut) || (b.runs - a.runs));
-
-        const bowlers = [];
-        for (const bw of (inning.bowling_list || inning.bowling || [])) {
-            const name = bw.bowler || bw.name;
-            if (!name) continue;
-            const overs = String(bw.o ?? bw.overs ?? '0');
-            const r = parseInt(bw.r ?? bw.runs ?? 0);
-            bowlers.push({
-                name, overs, maidens: parseInt(bw.m ?? bw.maidens ?? 0),
-                runs: r, wickets: parseInt(bw.w ?? bw.wickets ?? 0),
-                economy: parseFloat(bw.eco ?? (r / (parseFloat(overs) || 1))).toFixed(1)
-            });
-        }
-        bowlers.sort((a, b) => (b.wickets - a.wickets) || (parseFloat(a.economy) - parseFloat(b.economy)));
-
-        // Compute total score from batsmen
-        const totalRuns = batsmen.reduce((s, b) => s + b.runs, 0);
-        const totalWickets = batsmen.filter(b => !b.isNotOut).length;
-        const score = `${totalRuns}/${totalWickets}`;
-
-        innings.push({ teamName, score, overs: String(inning.overs || '0'), batsmen, bowlers });
-    }
-    return innings;
-}
 
 function computeCricAPIMatchPoints(matchData) {
     const playerMap = new Map();
@@ -966,7 +854,6 @@ async function fetchFromESPN() {
             const playerPoints = computeESPNMatchPoints(scData);
             if (playerPoints.length === 0) continue;
 
-            const scorecard = extractESPNScorecard(scData);
             const team1 = m?.teams?.[0]?.team?.shortName || m?.team1 || '';
             const team2 = m?.teams?.[1]?.team?.shortName || m?.team2 || '';
             const stage = String(m?.stage || m?.status || '').toLowerCase();
@@ -982,8 +869,7 @@ async function fetchFromESPN() {
                 matchName: m?.title || (team1 && team2 ? `${team1} vs ${team2}` : `Match ${matchId}`),
                 matchDate: m?.startDate || m?.date || '',
                 status: espnMatchLive ? 'live' : 'completed',
-                playerPoints,
-                scorecard
+                playerPoints
             });
             console.log(`  ESPN: ${playerPoints.length} players, ${espnInningsCount} innings for ${newMatches.at(-1).matchName}`);
         } catch (e) { console.error(`ESPN match ${matchId}:`, e.message); }
@@ -1015,53 +901,6 @@ async function fetchFromESPN() {
     broadcastFantasyUpdate();
     if (seasonMatches.some(m => m.status === 'live')) startLiveMatchTimer(); else stopLiveMatchTimer();
     return { totalMatches: allMatches.length, newMatches: newMatches.length };
-}
-
-function extractESPNScorecard(scData) {
-    const innings = [];
-    const scorecardInnings = scData?.scorecard || scData?.innings || [];
-    for (const inningWrapper of scorecardInnings) {
-        const inning = inningWrapper?.innings || inningWrapper;
-        const teamName = inning?.team?.shortName || inning?.team?.name || inning?.teamName || '';
-        const runs = parseInt(inning?.runs ?? inning?.score ?? 0);
-        const wickets = parseInt(inning?.wickets ?? 0);
-        const oversStr = String(inning?.overs ?? '0');
-        const scoreStr = `${runs}/${wickets}`;
-
-        const batsmen = [];
-        for (const b of (inning?.inningsBatsmen || [])) {
-            const name = b?.player?.longName || b?.player?.name || b?.name;
-            if (!name) continue;
-            const dismissal = String(b?.dismissalText?.long || b?.dismissalText || b?.howOut || '').toLowerCase();
-            const isNotOut = b?.isOut === false || dismissal.includes('not out') || dismissal.includes('batting') || dismissal === '';
-            const r = parseInt(b?.runs ?? 0);
-            const bl = parseInt(b?.balls ?? 0);
-            batsmen.push({
-                name, runs: r, balls: bl,
-                fours: parseInt(b?.fours ?? 0), sixes: parseInt(b?.sixes ?? 0),
-                isNotOut,
-                strikeRate: bl > 0 ? ((r / bl) * 100).toFixed(1) : '0.0'
-            });
-        }
-        batsmen.sort((a, b) => (b.isNotOut - a.isNotOut) || (b.runs - a.runs));
-
-        const bowlers = [];
-        for (const bw of (inning?.inningsBowlers || [])) {
-            const name = bw?.player?.longName || bw?.player?.name || bw?.name;
-            if (!name) continue;
-            const overs = String(bw?.overs ?? '0');
-            const r = parseInt(bw?.conceded ?? bw?.runs ?? 0);
-            bowlers.push({
-                name, overs, maidens: parseInt(bw?.maidens ?? 0),
-                runs: r, wickets: parseInt(bw?.wickets ?? 0),
-                economy: parseFloat(bw?.economy ?? (r / (parseFloat(overs) || 1))).toFixed(1)
-            });
-        }
-        bowlers.sort((a, b) => (b.wickets - a.wickets) || (parseFloat(a.economy) - parseFloat(b.economy)));
-
-        innings.push({ teamName, score: scoreStr, overs: oversStr, batsmen, bowlers });
-    }
-    return innings;
 }
 
 function computeESPNMatchPoints(scData) {
@@ -1922,7 +1761,6 @@ async function fetchFromCricAPI() {
             if (scData.status === 'success' && scData.data?.scorecard?.length) {
                 const playerPoints = computeCricAPIMatchPoints(scData.data);
                 if (playerPoints.length > 0) {
-                    const scorecard = extractCricAPIScorecard(scData.data);
                     // Cricket has two innings — if only one innings scorecard exists,
                     // the match is still in progress (innings break or second innings)
                     const cricApiInningsCount = scData.data.scorecard.length;
@@ -1932,8 +1770,7 @@ async function fetchFromCricAPI() {
                         matchName: match.name || scData.data.name || 'Match',
                         matchDate: match.date || match.dateTimeGMT || scData.data.date || '',
                         status: isMatchEnded ? 'completed' : 'live',
-                        playerPoints,
-                        scorecard
+                        playerPoints
                     });
                     console.log(`  CricAPI: ${playerPoints.length} players, ${cricApiInningsCount} innings for ${newMatches.at(-1).matchName}`);
                 }
@@ -2599,12 +2436,134 @@ function computeRoomFantasyPoints(room) {
     };
 }
 
+// Enrich matches with scorecard data from IPL Stats (ipl-stats.iplt20.com).
+// Called after any data source fetch to add batting/bowling details to matches
+// that only have fantasy points (e.g. from IPL Fantasy Public or Cricbuzz).
+let scorecardEnrichmentRunning = false;
+async function enrichMatchScorecards() {
+    if (scorecardEnrichmentRunning) return;
+    const matches = fantasyCache?.matches || [];
+    if (matches.length === 0) return;
+
+    // Find matches missing scorecard data (only live or recent completed)
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const needsScorecard = matches.filter(m => {
+        if (m.scorecard && m.scorecard.length > 0) return false;
+        if (m.status === 'live') return true;
+        // Also enrich recently completed matches
+        const mDate = m.matchDate ? new Date(m.matchDate).getTime() : 0;
+        return m.status === 'completed' && mDate > oneDayAgo;
+    });
+
+    if (needsScorecard.length === 0) return;
+
+    scorecardEnrichmentRunning = true;
+    console.log(`Scorecard enrichment: fetching scorecards for ${needsScorecard.length} matches from IPL Stats...`);
+
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://www.iplt20.com/',
+        'Origin': 'https://www.iplt20.com',
+    };
+
+    try {
+        // Get schedule to map match names/dates to match codes
+        let matchCodeMap = new Map(); // matchId or matchName → matchCode
+        try {
+            const schedRes = await fetch('https://ipl-stats.iplt20.com/ipl/json/MatchSchedule.json', { headers });
+            if (schedRes.ok) {
+                const schedJson = await schedRes.json();
+                const rawList = schedJson?.Matchsummary || schedJson?.matchsummary ||
+                                schedJson?.MatchSchedule || schedJson?.matches ||
+                                schedJson?.data?.matches || schedJson?.data || [];
+                for (const m of (Array.isArray(rawList) ? rawList : [])) {
+                    if (!m) continue;
+                    const matchCode = String(m?.MatchCode || m?.matchCode || m?.MatchID || m?.id || '');
+                    if (!matchCode) continue;
+                    matchCodeMap.set(matchCode, matchCode);
+                    // Also map by match name for cross-source matching
+                    const matchName = (m?.MatchName || m?.matchName || '').toLowerCase().trim();
+                    if (matchName) matchCodeMap.set(matchName, matchCode);
+                    // Map by team names
+                    const t1 = (m?.Team1ShortName || m?.TeamAShortName || '').toUpperCase();
+                    const t2 = (m?.Team2ShortName || m?.TeamBShortName || '').toUpperCase();
+                    if (t1 && t2) {
+                        matchCodeMap.set(`${t1} vs ${t2}`, matchCode);
+                        matchCodeMap.set(`${t2} vs ${t1}`, matchCode);
+                    }
+                    // Map by match number
+                    const matchNum = m?.MatchOrder || m?.MatchNumber || m?.matchNumber;
+                    if (matchNum) matchCodeMap.set(`match ${matchNum}`, matchCode);
+                }
+                console.log(`Scorecard enrichment: loaded ${matchCodeMap.size} match code mappings from IPL Stats schedule`);
+            }
+        } catch (e) {
+            console.warn('Scorecard enrichment: could not fetch IPL Stats schedule:', e.message);
+        }
+
+        let enriched = 0;
+        for (const match of needsScorecard) {
+            // Try to find the match code
+            let matchCode = matchCodeMap.get(match.matchId) || null;
+            if (!matchCode) {
+                const nameKey = (match.matchName || '').toLowerCase().trim();
+                matchCode = matchCodeMap.get(nameKey) || null;
+            }
+            if (!matchCode) {
+                // Try extracting team codes from matchName like "GT vs PBKS" or "Match 4"
+                const teamMatch = (match.matchName || '').match(/^([A-Z]{2,5})\s+vs\s+([A-Z]{2,5})$/i);
+                if (teamMatch) {
+                    const key = `${teamMatch[1].toUpperCase()} vs ${teamMatch[2].toUpperCase()}`;
+                    matchCode = matchCodeMap.get(key) || null;
+                }
+                if (!matchCode) {
+                    const numMatch = (match.matchName || '').match(/match\s*(\d+)/i);
+                    if (numMatch) matchCode = matchCodeMap.get(`match ${numMatch[1]}`) || null;
+                }
+            }
+            // Last resort: try using the matchId directly as matchCode
+            if (!matchCode) matchCode = match.matchId;
+
+            try {
+                await new Promise(r => setTimeout(r, 200));
+                const scorecardJson = await fetchIPLScorecard(matchCode, headers);
+                if (scorecardJson) {
+                    const scorecard = extractIPLStatsScorecard(scorecardJson);
+                    if (scorecard.length > 0) {
+                        match.scorecard = scorecard;
+                        enriched++;
+                    }
+                }
+            } catch (e) {
+                console.warn(`Scorecard enrichment: failed for ${match.matchName}:`, e.message);
+            }
+        }
+
+        if (enriched > 0) {
+            console.log(`Scorecard enrichment: added scorecards to ${enriched} matches`);
+            // Re-broadcast with scorecard data (direct emit, no re-enrichment)
+            for (const [code, room] of rooms) {
+                const data = computeRoomFantasyPoints(room);
+                data.configured = isFantasyConfigured();
+                io.to(code).emit('fantasyPointsUpdate', data);
+            }
+        }
+    } catch (e) {
+        console.error('Scorecard enrichment error:', e.message);
+    } finally {
+        scorecardEnrichmentRunning = false;
+    }
+}
+
 function broadcastFantasyUpdate() {
     for (const [code, room] of rooms) {
         const data = computeRoomFantasyPoints(room);
         data.configured = isFantasyConfigured();
         io.to(code).emit('fantasyPointsUpdate', data);
     }
+    // Enrich matches missing scorecard data (runs asynchronously, doesn't block)
+    enrichMatchScorecards().catch(e => console.error('Scorecard enrichment error:', e.message));
 }
 
 // Emit fantasy points update to a single room (called after team/player changes)
