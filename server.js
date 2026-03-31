@@ -236,6 +236,7 @@ async function initFantasyPoints() {
 
     // Always start — public IPL stats requires no credentials
     startFantasyRefreshTimer();
+    startNextMatchWatcher();
     fetchAllFantasyPoints().catch(err =>
         console.error('Initial fantasy fetch failed:', err.message)
     );
@@ -2202,15 +2203,20 @@ function computeCurrentMatchDay(matches, schedule) {
     // Step 3: Also check schedule for today's matches (may be upcoming, not yet in matches array)
     const todayScheduled = schedule.filter(s => toISTDateStr(s.matchDate) === todayIST);
     if (todayScheduled.length > 0) {
-        // There are matches scheduled today but not yet started/completed
+        // Determine if any of today's scheduled matches should have already started
+        // (start time has passed — could be live but not yet in matches array, e.g., during toss)
+        const anyStarted = todayScheduled.some(s => {
+            if (!s.matchDate) return false;
+            return new Date(s.matchDate) <= now;
+        });
         return {
             matches: todayScheduled.map(s => ({
                 matchId: s.matchId || '', matchName: s.matchName || '',
-                matchDate: s.matchDate || '', status: 'scheduled',
+                matchDate: s.matchDate || '', status: anyStarted ? 'live' : 'scheduled',
                 team1: s.team1, team2: s.team2
             })),
-            label: "Today's Match (Upcoming)",
-            isLive: false,
+            label: anyStarted ? 'Live Match' : "Today's Match (Upcoming)",
+            isLive: anyStarted,
             isToday: true
         };
     }
