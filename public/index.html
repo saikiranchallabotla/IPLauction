@@ -1890,55 +1890,6 @@
                 </div>
             </div>
 
-            <div class="card" id="fantasy-admin-config" style="margin-top: 1rem;">
-                <h3 class="card-title">Fantasy Points Configuration</h3>
-                <div style="margin-bottom: 1rem;">
-                    <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Data Source</label>
-                    <select id="fantasy-source" onchange="toggleFantasySource(this.value)" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                        <option value="auto">Auto (Cricbuzz / ESPN / IPL Stats — No setup needed)</option>
-                        <option value="cric">CricAPI (Free key — Most reliable)</option>
-                        <option value="ipl">IPL Fantasy Official (Session cookies)</option>
-                    </select>
-                </div>
-
-                <!-- Auto fields (default, no credentials needed) -->
-                <div id="ipl-stats-fields">
-                    <p style="color: var(--text-secondary); font-size: 0.8rem; line-height: 1.5;">
-                        Points are fetched automatically from <strong style="color: var(--text);">Cricbuzz → ESPN Cricinfo → IPL Stats</strong> — tried in order, no login or API keys needed. Fantasy points are computed from live batting, bowling &amp; fielding data using IPL Fantasy scoring rules and refresh every 5 minutes.
-                    </p>
-                </div>
-
-                <!-- CricAPI fields — API key only, series auto-discovered -->
-                <div id="cricapi-fields" style="display:none">
-                    <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
-                        Get a <strong style="color: var(--text);">free API key</strong> (30 seconds) from <a href="https://cricketdata.org" target="_blank" style="color: var(--accent);">cricketdata.org</a>. The IPL series is auto-detected — no series ID needed.
-                    </p>
-                    <div>
-                        <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">CricAPI Key</label>
-                        <input type="password" id="fantasy-api-key" placeholder="Paste your CricAPI key" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                    </div>
-                    <p style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 0.4rem;">Free tier: 100 calls/day — more than enough with 5-minute caching.</p>
-                </div>
-
-                <!-- IPL Fantasy Official cookie fields (hidden by default) -->
-                <div id="ipl-fantasy-fields" style="display:none">
-                    <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
-                        Log in to <a href="https://fantasy.iplt20.com" target="_blank" style="color: var(--accent);">fantasy.iplt20.com</a>, open DevTools (F12) &rarr; Application &rarr; Cookies, and copy the two values below.
-                    </p>
-                    <div class="fantasy-config-grid">
-                        <div>
-                            <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">my11c-uid</label>
-                            <input type="text" id="ipl-fantasy-uid" placeholder="Paste my11c-uid cookie value" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                        </div>
-                        <div>
-                            <label style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">my11c-authToken</label>
-                            <input type="password" id="ipl-fantasy-token" placeholder="Paste my11c-authToken cookie value" style="width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--dark-elevated); color: var(--text); font-family: 'Outfit', sans-serif;">
-                        </div>
-                    </div>
-                </div>
-
-                <button class="btn btn-primary" onclick="saveFantasyConfig()" style="margin-top: 0.75rem;">Save & Fetch Points</button>
-            </div>
         </div>
     </div>
 
@@ -3325,104 +3276,100 @@
             renderFantasyMatchTabs();
         }
 
+        var scorecardFetchInProgress = false;
         function renderScorecard() {
-            const container = document.getElementById('scorecard-container');
-            const grid = document.getElementById('scorecard-grid');
-            if (!container || !grid) return;
+            if (scorecardFetchInProgress) return;
+            scorecardFetchInProgress = true;
 
-            // Show scorecards for current match day matches
-            const matchDayInfo = getCurrentMatchDayInfo();
-            const matchDayMatchIds = (matchDayInfo.matches || []).map(function(m) { return m.matchId; });
-            const allMatches = fantasyData.matches || [];
+            fetch('/api/match-scorecards')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    scorecardFetchInProgress = false;
+                    var container = document.getElementById('scorecard-container');
+                    var grid = document.getElementById('scorecard-grid');
+                    if (!container || !grid) return;
 
-            // Get matches to display: current match day matches that have scorecard data
-            var scorecardMatches = allMatches.filter(function(m) {
-                return matchDayMatchIds.indexOf(m.matchId) >= 0 && m.scorecard && m.scorecard.length > 0;
-            });
-
-            // If no current match day scorecards, show the most recent match with scorecard
-            if (scorecardMatches.length === 0) {
-                var recent = allMatches.slice().reverse().find(function(m) {
-                    return m.scorecard && m.scorecard.length > 0;
-                });
-                if (recent) scorecardMatches = [recent];
-            }
-
-            if (scorecardMatches.length === 0) {
-                container.style.display = 'none';
-                return;
-            }
-
-            container.style.display = 'block';
-            var html = '';
-            scorecardMatches.forEach(function(match) {
-                var isLive = match.status === 'live';
-                var statusClass = isLive ? 'scorecard-status-live' : 'scorecard-status-completed';
-                var statusText = isLive ? 'LIVE' : 'Completed';
-
-                html += '<div class="scorecard-match">';
-                html += '<div class="scorecard-match-header">';
-                html += '<span class="scorecard-match-name">' + escapeHtml(match.matchName) + '</span>';
-                html += '<span class="scorecard-match-status ' + statusClass + '">' + statusText + '</span>';
-                html += '</div>';
-
-                (match.scorecard || []).forEach(function(inn, idx) {
-                    html += '<div class="scorecard-innings">';
-
-                    // Team score header
-                    html += '<div class="scorecard-team-score">';
-                    html += '<span class="scorecard-team-name">' + escapeHtml(inn.teamName) + '</span>';
-                    html += '<span class="scorecard-score">' + escapeHtml(inn.score);
-                    html += '<span class="scorecard-overs">(' + escapeHtml(inn.overs) + ' ov)</span></span>';
-                    html += '</div>';
-
-                    // Current/top batsmen (show not-out first, then top scorers — max 4)
-                    var topBatsmen = (inn.batsmen || []).slice(0, 4);
-                    if (topBatsmen.length > 0) {
-                        html += '<div class="scorecard-players-section">';
-                        html += '<div class="scorecard-section-label">Batting</div>';
-                        topBatsmen.forEach(function(bat) {
-                            var nameClass = bat.isNotOut ? 'scorecard-player-name not-out' : 'scorecard-player-name';
-                            html += '<div class="scorecard-player-row">';
-                            html += '<span class="' + nameClass + '">' + escapeHtml(bat.name);
-                            if (bat.isNotOut) html += ' *';
-                            html += '</span>';
-                            html += '<span class="scorecard-player-stats">';
-                            html += '<strong>' + bat.runs + '</strong> (' + bat.balls + 'b)';
-                            html += ' ' + bat.fours + '×4 ' + bat.sixes + '×6';
-                            html += '<span class="scorecard-player-sr"> SR ' + bat.strikeRate + '</span>';
-                            html += '</span>';
-                            html += '</div>';
-                        });
-                        html += '</div>';
+                    var scorecards = data.scorecards || [];
+                    if (scorecards.length === 0) {
+                        container.style.display = 'none';
+                        return;
                     }
 
-                    // Top bowlers (by wickets — max 3)
-                    var topBowlers = (inn.bowlers || []).slice(0, 3);
-                    if (topBowlers.length > 0) {
-                        html += '<div class="scorecard-divider"></div>';
-                        html += '<div class="scorecard-players-section">';
-                        html += '<div class="scorecard-section-label">Bowling</div>';
-                        topBowlers.forEach(function(bwl) {
-                            html += '<div class="scorecard-player-row">';
-                            html += '<span class="scorecard-player-name">' + escapeHtml(bwl.name) + '</span>';
-                            html += '<span class="scorecard-player-stats">';
-                            html += '<strong>' + bwl.wickets + '/' + bwl.runs + '</strong>';
-                            html += ' (' + bwl.overs + ' ov)';
-                            html += '<span class="scorecard-player-sr"> Eco ' + bwl.economy + '</span>';
-                            html += '</span>';
-                            html += '</div>';
-                        });
+                    container.style.display = 'block';
+                    var html = '';
+                    scorecards.forEach(function(match) {
+                        var isLive = match.status === 'live';
+                        var statusClass = isLive ? 'scorecard-status-live' : 'scorecard-status-completed';
+                        var statusText = isLive ? 'LIVE' : 'Completed';
+
+                        html += '<div class="scorecard-match">';
+                        html += '<div class="scorecard-match-header">';
+                        html += '<span class="scorecard-match-name">' + escapeHtml(match.matchName) + '</span>';
+                        html += '<span class="scorecard-match-status ' + statusClass + '">' + statusText + '</span>';
                         html += '</div>';
-                    }
 
-                    html += '</div>'; // scorecard-innings
+                        (match.innings || []).forEach(function(inn) {
+                            html += '<div class="scorecard-innings">';
+
+                            // Team score header
+                            html += '<div class="scorecard-team-score">';
+                            html += '<span class="scorecard-team-name">' + escapeHtml(inn.teamName) + '</span>';
+                            html += '<span class="scorecard-score">' + escapeHtml(inn.score);
+                            html += '<span class="scorecard-overs">(' + escapeHtml(inn.overs) + ' ov)</span></span>';
+                            html += '</div>';
+
+                            // Top batsmen (not-out first, then top scorers — max 4)
+                            var topBatsmen = (inn.batsmen || []).slice(0, 4);
+                            if (topBatsmen.length > 0) {
+                                html += '<div class="scorecard-players-section">';
+                                html += '<div class="scorecard-section-label">Batting</div>';
+                                topBatsmen.forEach(function(bat) {
+                                    var nameClass = bat.isNotOut ? 'scorecard-player-name not-out' : 'scorecard-player-name';
+                                    html += '<div class="scorecard-player-row">';
+                                    html += '<span class="' + nameClass + '">' + escapeHtml(bat.name);
+                                    if (bat.isNotOut) html += ' *';
+                                    html += '</span>';
+                                    html += '<span class="scorecard-player-stats">';
+                                    html += '<strong>' + bat.runs + '</strong> (' + bat.balls + 'b)';
+                                    html += ' ' + bat.fours + '×4 ' + bat.sixes + '×6';
+                                    html += '<span class="scorecard-player-sr"> SR ' + bat.strikeRate + '</span>';
+                                    html += '</span>';
+                                    html += '</div>';
+                                });
+                                html += '</div>';
+                            }
+
+                            // Top bowlers (by wickets — max 3)
+                            var topBowlers = (inn.bowlers || []).slice(0, 3);
+                            if (topBowlers.length > 0) {
+                                html += '<div class="scorecard-divider"></div>';
+                                html += '<div class="scorecard-players-section">';
+                                html += '<div class="scorecard-section-label">Bowling</div>';
+                                topBowlers.forEach(function(bwl) {
+                                    html += '<div class="scorecard-player-row">';
+                                    html += '<span class="scorecard-player-name">' + escapeHtml(bwl.name) + '</span>';
+                                    html += '<span class="scorecard-player-stats">';
+                                    html += '<strong>' + bwl.wickets + '/' + bwl.runs + '</strong>';
+                                    html += ' (' + bwl.overs + ' ov)';
+                                    html += '<span class="scorecard-player-sr"> Eco ' + bwl.economy + '</span>';
+                                    html += '</span>';
+                                    html += '</div>';
+                                });
+                                html += '</div>';
+                            }
+
+                            html += '</div>'; // scorecard-innings
+                        });
+
+                        html += '</div>'; // scorecard-match
+                    });
+
+                    grid.innerHTML = html;
+                })
+                .catch(function(err) {
+                    scorecardFetchInProgress = false;
+                    console.error('Scorecard fetch error:', err);
                 });
-
-                html += '</div>'; // scorecard-match
-            });
-
-            grid.innerHTML = html;
         }
 
         function toggleFantasyTeam(teamId) {
@@ -3886,58 +3833,6 @@
 
             var dateStr = new Date().toISOString().slice(0,10);
             XLSX.writeFile(wb, 'IPL_Fantasy_Points_' + (roomCode || 'export') + '_' + dateStr + '.xlsx');
-        }
-
-        function toggleFantasySource(val) {
-            document.getElementById('ipl-stats-fields').style.display  = val === 'auto' ? '' : 'none';
-            document.getElementById('ipl-fantasy-fields').style.display = val === 'ipl'  ? '' : 'none';
-            document.getElementById('cricapi-fields').style.display     = val === 'cric' ? '' : 'none';
-        }
-
-        async function saveFantasyConfig() {
-            if (!roomCode) return;
-            const source = document.getElementById('fantasy-source').value;
-            let body = {};
-
-            if (source === 'auto') {
-                body = { source: 'auto' };
-            } else if (source === 'ipl') {
-                const uid = document.getElementById('ipl-fantasy-uid').value.trim();
-                const token = document.getElementById('ipl-fantasy-token').value.trim();
-                if (!uid || !token) {
-                    showAuctionPopup('Missing Fields', 'Both my11c-uid and my11c-authToken cookie values are required.', true);
-                    return;
-                }
-                body = { iplFantasyUid: uid, iplFantasyToken: token };
-            } else {
-                // CricAPI — only API key needed, series ID auto-detected
-                const apiKey = document.getElementById('fantasy-api-key').value.trim();
-                if (!apiKey) {
-                    showAuctionPopup('Missing Field', 'Please enter your CricAPI key. Get a free one at cricketdata.org.', true);
-                    return;
-                }
-                body = { apiKey };  // seriesId intentionally omitted — server auto-discovers it
-            }
-
-            const saveBtn = document.querySelector('#fantasy-admin-config .btn-primary');
-            if (saveBtn) { saveBtn.textContent = 'Saving...'; saveBtn.disabled = true; }
-            try {
-                const res = await fetch('/api/room/' + roomCode + '/fantasy-config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                if (data.success) {
-                    if (saveBtn) { saveBtn.textContent = 'Fetching Points...'; }
-                    // Now trigger a real refresh so the user sees actual results or errors
-                    await refreshFantasyPoints();
-                }
-            } catch (err) {
-                showAuctionPopup('Error', 'Failed to save config: ' + err.message, true);
-            } finally {
-                if (saveBtn) { saveBtn.textContent = 'Save & Fetch Points'; saveBtn.disabled = false; }
-            }
         }
 
         // ============ BID LOG ============
