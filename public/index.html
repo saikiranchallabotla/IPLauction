@@ -1097,6 +1097,72 @@
             .fantasy-stats-grid { grid-template-columns: 1fr; }
             .fantasy-stat-card { padding: 0.8rem 1rem; }
         }
+        /* ============ MATCH SCORECARD ============ */
+        .scorecard-container { margin-bottom: 1.5rem; }
+        .scorecard-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem;
+        }
+        .scorecard-match {
+            background: var(--card); border: 1px solid var(--border-light); border-radius: 14px;
+            overflow: hidden; transition: all 0.3s ease;
+        }
+        .scorecard-match:hover { border-color: rgba(245,197,24,0.25); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+        .scorecard-match-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.75rem 1rem; background: rgba(245,197,24,0.06);
+            border-bottom: 1px solid var(--border-light);
+        }
+        .scorecard-match-name { font-weight: 700; font-size: 0.85rem; color: var(--text); }
+        .scorecard-match-status {
+            font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.5rem;
+            border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .scorecard-status-live { background: rgba(255,23,68,0.15); color: #ff1744; }
+        .scorecard-status-completed { background: rgba(0,200,83,0.12); color: var(--success); }
+        .scorecard-innings {
+            padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .scorecard-innings:last-child { border-bottom: none; }
+        .scorecard-team-score {
+            display: flex; justify-content: space-between; align-items: baseline;
+            margin-bottom: 0.5rem;
+        }
+        .scorecard-team-name { font-weight: 700; font-size: 0.9rem; color: var(--text); }
+        .scorecard-score {
+            font-weight: 800; font-size: 1.1rem; color: var(--accent);
+            font-variant-numeric: tabular-nums;
+        }
+        .scorecard-overs { font-size: 0.75rem; color: var(--text-secondary); margin-left: 0.3rem; font-weight: 400; }
+        .scorecard-players-section { margin-top: 0.4rem; }
+        .scorecard-section-label {
+            font-size: 0.65rem; font-weight: 600; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 0.3rem;
+        }
+        .scorecard-player-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.2rem 0; font-size: 0.8rem;
+        }
+        .scorecard-player-name {
+            color: var(--text); font-weight: 500; flex: 1; min-width: 0;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .scorecard-player-name.not-out { color: var(--accent); font-weight: 600; }
+        .scorecard-player-stats {
+            color: var(--text-secondary); font-size: 0.75rem; font-variant-numeric: tabular-nums;
+            white-space: nowrap; margin-left: 0.5rem;
+        }
+        .scorecard-player-stats strong { color: var(--text); font-weight: 700; }
+        .scorecard-player-sr { color: var(--text-secondary); font-size: 0.7rem; margin-left: 0.3rem; }
+        .scorecard-divider {
+            height: 1px; background: rgba(255,255,255,0.04); margin: 0.4rem 0;
+        }
+        .scorecard-no-data {
+            text-align: center; padding: 1.5rem; color: var(--text-secondary); font-size: 0.85rem;
+        }
+        @media (max-width: 480px) {
+            .scorecard-grid { grid-template-columns: 1fr; }
+        }
+
         .fantasy-container { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
         .fantasy-header {
             display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;
@@ -1788,6 +1854,10 @@
                         <div class="fantasy-stat-title">Match Day Top Scorer</div>
                     </div>
                 </div>
+            </div>
+
+            <div class="scorecard-container" id="scorecard-container" style="display: none;">
+                <div class="scorecard-grid" id="scorecard-grid"></div>
             </div>
 
             <div class="card">
@@ -2493,7 +2563,7 @@
             socket.on('teamsUpdated', (teams) => { try { state.teams = teams; renderTeams(); } catch(e) { console.error('teamsUpdated render error:', e); } });
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
             socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); renderLiveCategories(); } catch(e) { console.error('playersUpdated render error:', e); } });
-            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); var todayTab = document.getElementById('fantasy-today-tab'); if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
+            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); renderScorecard(); var todayTab = document.getElementById('fantasy-today-tab'); if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
             socket.on('roomPinned', (data) => { try { roomPinned = data.pinned; updatePinButton(); } catch(e) {} });
             socket.on('roomError', (msg) => {
                 showAuctionPopup('Room Error', msg, false);
@@ -2873,6 +2943,12 @@
                 });
         }
 
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
+
         function formatPrice(price) {
             if (price >= 1) return price + ' Cr';
             return (price * 100) + ' L';
@@ -3249,6 +3325,106 @@
             renderFantasyMatchTabs();
         }
 
+        function renderScorecard() {
+            const container = document.getElementById('scorecard-container');
+            const grid = document.getElementById('scorecard-grid');
+            if (!container || !grid) return;
+
+            // Show scorecards for current match day matches
+            const matchDayInfo = getCurrentMatchDayInfo();
+            const matchDayMatchIds = (matchDayInfo.matches || []).map(function(m) { return m.matchId; });
+            const allMatches = fantasyData.matches || [];
+
+            // Get matches to display: current match day matches that have scorecard data
+            var scorecardMatches = allMatches.filter(function(m) {
+                return matchDayMatchIds.indexOf(m.matchId) >= 0 && m.scorecard && m.scorecard.length > 0;
+            });
+
+            // If no current match day scorecards, show the most recent match with scorecard
+            if (scorecardMatches.length === 0) {
+                var recent = allMatches.slice().reverse().find(function(m) {
+                    return m.scorecard && m.scorecard.length > 0;
+                });
+                if (recent) scorecardMatches = [recent];
+            }
+
+            if (scorecardMatches.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            var html = '';
+            scorecardMatches.forEach(function(match) {
+                var isLive = match.status === 'live';
+                var statusClass = isLive ? 'scorecard-status-live' : 'scorecard-status-completed';
+                var statusText = isLive ? 'LIVE' : 'Completed';
+
+                html += '<div class="scorecard-match">';
+                html += '<div class="scorecard-match-header">';
+                html += '<span class="scorecard-match-name">' + escapeHtml(match.matchName) + '</span>';
+                html += '<span class="scorecard-match-status ' + statusClass + '">' + statusText + '</span>';
+                html += '</div>';
+
+                (match.scorecard || []).forEach(function(inn, idx) {
+                    html += '<div class="scorecard-innings">';
+
+                    // Team score header
+                    html += '<div class="scorecard-team-score">';
+                    html += '<span class="scorecard-team-name">' + escapeHtml(inn.teamName) + '</span>';
+                    html += '<span class="scorecard-score">' + escapeHtml(inn.score);
+                    html += '<span class="scorecard-overs">(' + escapeHtml(inn.overs) + ' ov)</span></span>';
+                    html += '</div>';
+
+                    // Current/top batsmen (show not-out first, then top scorers — max 4)
+                    var topBatsmen = (inn.batsmen || []).slice(0, 4);
+                    if (topBatsmen.length > 0) {
+                        html += '<div class="scorecard-players-section">';
+                        html += '<div class="scorecard-section-label">Batting</div>';
+                        topBatsmen.forEach(function(bat) {
+                            var nameClass = bat.isNotOut ? 'scorecard-player-name not-out' : 'scorecard-player-name';
+                            html += '<div class="scorecard-player-row">';
+                            html += '<span class="' + nameClass + '">' + escapeHtml(bat.name);
+                            if (bat.isNotOut) html += ' *';
+                            html += '</span>';
+                            html += '<span class="scorecard-player-stats">';
+                            html += '<strong>' + bat.runs + '</strong> (' + bat.balls + 'b)';
+                            html += ' ' + bat.fours + '×4 ' + bat.sixes + '×6';
+                            html += '<span class="scorecard-player-sr"> SR ' + bat.strikeRate + '</span>';
+                            html += '</span>';
+                            html += '</div>';
+                        });
+                        html += '</div>';
+                    }
+
+                    // Top bowlers (by wickets — max 3)
+                    var topBowlers = (inn.bowlers || []).slice(0, 3);
+                    if (topBowlers.length > 0) {
+                        html += '<div class="scorecard-divider"></div>';
+                        html += '<div class="scorecard-players-section">';
+                        html += '<div class="scorecard-section-label">Bowling</div>';
+                        topBowlers.forEach(function(bwl) {
+                            html += '<div class="scorecard-player-row">';
+                            html += '<span class="scorecard-player-name">' + escapeHtml(bwl.name) + '</span>';
+                            html += '<span class="scorecard-player-stats">';
+                            html += '<strong>' + bwl.wickets + '/' + bwl.runs + '</strong>';
+                            html += ' (' + bwl.overs + ' ov)';
+                            html += '<span class="scorecard-player-sr"> Eco ' + bwl.economy + '</span>';
+                            html += '</span>';
+                            html += '</div>';
+                        });
+                        html += '</div>';
+                    }
+
+                    html += '</div>'; // scorecard-innings
+                });
+
+                html += '</div>'; // scorecard-match
+            });
+
+            grid.innerHTML = html;
+        }
+
         function toggleFantasyTeam(teamId) {
             const row = document.getElementById('fantasy-team-' + teamId);
             if (row) row.classList.toggle('expanded');
@@ -3516,6 +3692,7 @@
                 const pointsRes = await fetch('/api/room/' + roomCode + '/fantasy-points');
                 fantasyData = await pointsRes.json();
                 renderPointsTable();
+                renderScorecard();
                 const total = data.totalMatches || 0;
                 const newM = data.newMatches || 0;
                 if (total === 0) {
@@ -4367,7 +4544,7 @@
             if (view === 'fantasy' && roomCode) {
                 fetch('/api/room/' + roomCode + '/fantasy-points')
                     .then(r => r.json())
-                    .then(data => { fantasyData = data; renderPointsTable(); })
+                    .then(data => { fantasyData = data; renderPointsTable(); renderScorecard(); })
                     .catch(err => console.error('Failed to fetch fantasy points:', err));
                 // Start client-side poll when tab is open — polls for live match updates
                 // and also checks for newly started matches (so points appear as soon as a match goes live)
@@ -4383,6 +4560,7 @@
                                 .then(data => {
                                     fantasyData = data;
                                     renderPointsTable();
+                                    renderScorecard();
                                     var todayTab = document.getElementById('fantasy-today-tab');
                                     if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers();
                                 })
