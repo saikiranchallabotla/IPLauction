@@ -555,14 +555,18 @@ async function fetchFromCricbuzz() {
                 }
                 continue;
             }
+            // Cricket has two innings — if only one innings scorecard exists, the match
+            // is still in progress (innings break or second innings just started).
+            const inningsCount = (scData.scoreCard || scData.scorecard || []).length;
+            const matchStillInProgress = isLive || inningsCount < 2;
             newMatches.push({
                 matchId,
                 matchName: info.matchDesc || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchId}`),
                 matchDate: startMs ? new Date(startMs).toISOString() : '',
-                status: isLive ? 'live' : 'completed',
+                status: matchStillInProgress ? 'live' : 'completed',
                 playerPoints
             });
-            console.log(`  Cricbuzz: ${playerPoints.length} players for ${newMatches.at(-1).matchName}`);
+            console.log(`  Cricbuzz: ${playerPoints.length} players, ${inningsCount} innings for ${newMatches.at(-1).matchName}`);
         } catch (e) { console.error(`Cricbuzz match ${matchId}:`, e.message); }
     }
 
@@ -816,7 +820,8 @@ async function fetchFromESPN() {
                             stage === 'result'   || stage === 'post'     || stage === 'closed' ||
                             stage.includes('result') || stage.includes('finish') || stage.includes('complet') ||
                             m?.isComplete === true || m?.matchEnded === true;
-        const isLive = stage === 'live' || stage.includes('progress') || m?.isLive === true;
+        const isLive = stage === 'live' || stage.includes('progress') || stage.includes('innings break') ||
+                       stage.includes('break') || stage.includes('interval') || m?.isLive === true;
         // Fallback: include any match whose scheduled start was >3 hours ago (likely completed/started)
         const startDate = m?.startDate || m?.date || m?.dateTimeGMT;
         const likelyPast = startDate && new Date(startDate).getTime() < threeHoursAgo;
@@ -852,14 +857,21 @@ async function fetchFromESPN() {
             const team1 = m?.teams?.[0]?.team?.shortName || m?.team1 || '';
             const team2 = m?.teams?.[1]?.team?.shortName || m?.team2 || '';
             const stage = String(m?.stage || m?.status || '').toLowerCase();
+            const stageIsLive = stage.includes('progress') || stage === 'live' ||
+                                stage.includes('innings break') || stage.includes('break') ||
+                                stage.includes('interval');
+            // Cricket has two innings — if scorecard has fewer than 2, match is still in progress
+            const espnInnings = scData?.content?.innings || scData?.innings || [];
+            const espnInningsCount = Array.isArray(espnInnings) ? espnInnings.length : 0;
+            const espnMatchLive = stageIsLive || espnInningsCount < 2;
             newMatches.push({
                 matchId,
                 matchName: m?.title || (team1 && team2 ? `${team1} vs ${team2}` : `Match ${matchId}`),
                 matchDate: m?.startDate || m?.date || '',
-                status: (stage.includes('progress') || stage === 'live') ? 'live' : 'completed',
+                status: espnMatchLive ? 'live' : 'completed',
                 playerPoints
             });
-            console.log(`  ESPN: ${playerPoints.length} players for ${newMatches.at(-1).matchName}`);
+            console.log(`  ESPN: ${playerPoints.length} players, ${espnInningsCount} innings for ${newMatches.at(-1).matchName}`);
         } catch (e) { console.error(`ESPN match ${matchId}:`, e.message); }
     }
 
@@ -1352,8 +1364,11 @@ async function fetchFromIPLFantasyPublic() {
             // Use a consecutiveUnchanged counter to avoid prematurely flipping live→completed
             // during between-overs/innings gaps where points temporarily stop changing.
             // LIVE_UNCHANGED_THRESHOLD: number of consecutive 30-second refreshes with no
-            // point change before a previously-live match is declared completed (~5 minutes).
-            const LIVE_UNCHANGED_THRESHOLD = 10;
+            // point change before a previously-live match is declared completed.
+            // Cricket has two innings with a 15-40 minute break between them where points
+            // don't change. Set high enough (~50 minutes) to avoid marking a match as
+            // completed during the innings break.
+            const LIVE_UNCHANGED_THRESHOLD = 100;
             let matchStatus = 'completed';
             let consecutiveUnchanged = 0;
             if (entry.status === 'live') {
@@ -1603,7 +1618,8 @@ function parseIPLFixtures(json) {
         // Some versions use 1=completed or 4=live; also accept boolean/string flags.
         const isLive = statusId === 2 || statusId === 4 || statusStr === '2' || statusStr === '4' ||
                        !!(f?.IsLive || f?.isLive || f?.matchStarted || f?.MatchStarted || f?.IsStarted || f?.isStarted) ||
-                       statusStr === 'live' || statusStr === 'inprogress' || statusStr === 'started';
+                       statusStr === 'live' || statusStr === 'inprogress' || statusStr === 'started' ||
+                       statusStr.includes('innings break') || statusStr.includes('break') || statusStr.includes('interval');
         const isCompleted = statusId === 1 || statusId === 3 || statusStr === '1' || statusStr === '3' ||
                             !!(f?.IsCompleted || f?.isCompleted || f?.MatchEnded || f?.matchEnded) ||
                             statusStr === 'completed' || statusStr === 'result' ||
@@ -1745,14 +1761,18 @@ async function fetchFromCricAPI() {
             if (scData.status === 'success' && scData.data?.scorecard?.length) {
                 const playerPoints = computeCricAPIMatchPoints(scData.data);
                 if (playerPoints.length > 0) {
+                    // Cricket has two innings — if only one innings scorecard exists,
+                    // the match is still in progress (innings break or second innings)
+                    const cricApiInningsCount = scData.data.scorecard.length;
+                    const isMatchEnded = (match.matchEnded || statusStr.includes('won') || statusStr.includes('lost')) && cricApiInningsCount >= 2;
                     newMatches.push({
                         matchId: match.id,
                         matchName: match.name || scData.data.name || 'Match',
                         matchDate: match.date || match.dateTimeGMT || scData.data.date || '',
-                        status: (match.matchEnded || statusStr.includes('won') || statusStr.includes('lost')) ? 'completed' : 'live',
+                        status: isMatchEnded ? 'completed' : 'live',
                         playerPoints
                     });
-                    console.log(`  CricAPI: ${playerPoints.length} players for ${newMatches.at(-1).matchName}`);
+                    console.log(`  CricAPI: ${playerPoints.length} players, ${cricApiInningsCount} innings for ${newMatches.at(-1).matchName}`);
                 }
             }
         } catch (err) {
