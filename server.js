@@ -236,6 +236,7 @@ async function initFantasyPoints() {
 
     // Always start — public IPL stats requires no credentials
     startFantasyRefreshTimer();
+    startNextMatchWatcher();
     fetchAllFantasyPoints().catch(err =>
         console.error('Initial fantasy fetch failed:', err.message)
     );
@@ -300,6 +301,39 @@ function stopLiveMatchTimer() {
         liveMatchTimer = null;
         console.log('No live matches: stopped live refresh timer');
     }
+}
+
+// Next-match watcher: checks every 60 seconds if a scheduled match should have started by now.
+// When a match start time passes (IST), force an immediate refresh to detect the live match
+// without waiting for the 5-minute interval. Eliminates the need for manual intervention.
+let nextMatchWatcherTimer = null;
+
+function startNextMatchWatcher() {
+    if (nextMatchWatcherTimer) return;
+    nextMatchWatcherTimer = setInterval(() => {
+        if (!fantasyCache?.schedule?.length) return;
+        if (liveMatchTimer) return; // already in live refresh mode
+        const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+        const nowIST = new Date(Date.now() + IST_OFFSET);
+        const schedule = fantasyCache.schedule;
+        // Check if any scheduled match's start time is within the last 4 hours and we have no live match
+        const hasLive = (fantasyCache?.matches || []).some(m => m.status === 'live');
+        if (hasLive) return;
+        const recentlyStarted = schedule.some(s => {
+            if (!s.matchDate) return false;
+            const matchTime = new Date(s.matchDate);
+            const diffMs = nowIST - matchTime;
+            // Match was supposed to start in the last 4 hours
+            return diffMs > 0 && diffMs < 4 * 60 * 60 * 1000;
+        });
+        if (recentlyStarted) {
+            console.log('Next-match watcher: a scheduled match should be live now — triggering immediate refresh');
+            fetchAllFantasyPoints().catch(err =>
+                console.error('Next-match watcher refresh failed:', err.message)
+            );
+        }
+    }, 60 * 1000); // check every 60 seconds
+    console.log('Next-match watcher started (checks every 60 seconds for newly started matches)');
 }
 
 async function fetchAllFantasyPoints() {
@@ -439,6 +473,12 @@ async function fetchFromCricbuzz() {
     }
     fullSchedule.sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
 
+    // Preserve existing schedule if new one is empty
+    if (fullSchedule.length === 0 && fantasyCache?.schedule?.length > 0) {
+        fullSchedule = fantasyCache.schedule;
+        console.log(`Cricbuzz: schedule empty, preserving ${fullSchedule.length} existing schedule entries`);
+    }
+
     const now = Date.now();
     const existingMatches = fantasyCache?.matches || [];
     // Skip matches we already have that are completed and > 24h old
@@ -483,16 +523,38 @@ async function fetchFromCricbuzz() {
                 continue;
             }
             const scData = await scRes.json();
-            // Only process if there's actual innings data
+            const t1 = info.team1?.teamSName || info.team1?.teamName || '';
+            const t2 = info.team2?.teamSName || info.team2?.teamName || '';
+            // Only process if there's actual innings data; but if match is live (toss/start), include with empty points
             if (!scData.scoreCard?.length && !scData.scorecard?.length) {
-                console.warn(`Cricbuzz match ${matchId}: scorecard has no innings data yet`);
+                if (isLive) {
+                    console.log(`Cricbuzz match ${matchId}: live but no innings yet (toss/start) — adding with 0 points`);
+                    newMatches.push({
+                        matchId,
+                        matchName: info.matchDesc || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchId}`),
+                        matchDate: startMs ? new Date(startMs).toISOString() : '',
+                        status: 'live',
+                        playerPoints: []
+                    });
+                } else {
+                    console.warn(`Cricbuzz match ${matchId}: scorecard has no innings data yet`);
+                }
                 continue;
             }
             const playerPoints = computeCricbuzzMatchPoints(scData);
-            if (playerPoints.length === 0) continue;
-
-            const t1 = info.team1?.teamSName || info.team1?.teamName || '';
-            const t2 = info.team2?.teamSName || info.team2?.teamName || '';
+            if (playerPoints.length === 0) {
+                if (isLive) {
+                    console.log(`Cricbuzz match ${matchId}: live but no points computed yet — adding with 0 points`);
+                    newMatches.push({
+                        matchId,
+                        matchName: info.matchDesc || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchId}`),
+                        matchDate: startMs ? new Date(startMs).toISOString() : '',
+                        status: 'live',
+                        playerPoints: []
+                    });
+                }
+                continue;
+            }
             newMatches.push({
                 matchId,
                 matchName: info.matchDesc || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchId}`),
@@ -1263,17 +1325,24 @@ async function fetchFromIPLFantasyPublic() {
             const hasPoints = playerPoints.some(p => p.points > 0);
 
             if (!hasPoints) {
-                // Match has players but no points — it hasn't been played in the CURRENT season.
-                // Stop probing immediately: IPL matches are sequential, so if match N is unplayed,
-                // match N+1 can't have been played either. Any data returned for subsequent gameday
-                // IDs would be stale from a prior IPL season (same IDs are reused across seasons).
-                if (useProbing) {
-                    hitUnplayedBoundary = true;
-                    console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} has players but 0 points (unplayed in IPL ${IPL_SEASON_YEAR}) — stopping probe to avoid prior season data`);
-                    break;
+                // If the fixture explicitly says this match is live, include it even with 0 points.
+                // This happens at the very start of a match (toss, first over) before runs are scored.
+                if (entry.status === 'live') {
+                    console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} is live but has 0 points (toss/match start) — including as live`);
+                    // Fall through to add as 'live' below
+                } else {
+                    // Match has players but no points — it hasn't been played in the CURRENT season.
+                    // Stop probing immediately: IPL matches are sequential, so if match N is unplayed,
+                    // match N+1 can't have been played either. Any data returned for subsequent gameday
+                    // IDs would be stale from a prior IPL season (same IDs are reused across seasons).
+                    if (useProbing) {
+                        hitUnplayedBoundary = true;
+                        console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} has players but 0 points (unplayed in IPL ${IPL_SEASON_YEAR}) — stopping probe to avoid prior season data`);
+                        break;
+                    }
+                    consecutiveNoPoints++;
+                    continue;
                 }
-                consecutiveNoPoints++;
-                continue;
             }
 
             consecutiveNoPoints = 0;
@@ -1414,6 +1483,12 @@ async function fetchFromIPLFantasyPublic() {
         }
     }
     fullSchedule.sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
+
+    // Preserve existing schedule if new one is empty (API calls failed)
+    if (fullSchedule.length === 0 && fantasyCache?.schedule?.length > 0) {
+        fullSchedule = fantasyCache.schedule;
+        console.log(`IPL Fantasy Public: schedule fetch failed, preserving ${fullSchedule.length} existing schedule entries`);
+    }
 
     fantasyCache = {
         seriesId: 'ipl_fantasy_public',
@@ -2128,15 +2203,20 @@ function computeCurrentMatchDay(matches, schedule) {
     // Step 3: Also check schedule for today's matches (may be upcoming, not yet in matches array)
     const todayScheduled = schedule.filter(s => toISTDateStr(s.matchDate) === todayIST);
     if (todayScheduled.length > 0) {
-        // There are matches scheduled today but not yet started/completed
+        // Determine if any of today's scheduled matches should have already started
+        // (start time has passed — could be live but not yet in matches array, e.g., during toss)
+        const anyStarted = todayScheduled.some(s => {
+            if (!s.matchDate) return false;
+            return new Date(s.matchDate) <= now;
+        });
         return {
             matches: todayScheduled.map(s => ({
                 matchId: s.matchId || '', matchName: s.matchName || '',
-                matchDate: s.matchDate || '', status: 'scheduled',
+                matchDate: s.matchDate || '', status: anyStarted ? 'live' : 'scheduled',
                 team1: s.team1, team2: s.team2
             })),
-            label: "Today's Match (Upcoming)",
-            isLive: false,
+            label: anyStarted ? 'Live Match' : "Today's Match (Upcoming)",
+            isLive: anyStarted,
             isToday: true
         };
     }
