@@ -2427,133 +2427,12 @@ function computeRoomFantasyPoints(room) {
             matchId: m.matchId,
             matchName: m.matchName,
             matchDate: m.matchDate,
-            status: m.status,
-            scorecard: m.scorecard || null
+            status: m.status
         })),
         schedule: fantasyCache?.schedule || [],
         currentMatchDay,
         lastUpdated: fantasyCache?.lastFetchedAt || null
     };
-}
-
-// Enrich matches with scorecard data from IPL Stats (ipl-stats.iplt20.com).
-// Called after any data source fetch to add batting/bowling details to matches
-// that only have fantasy points (e.g. from IPL Fantasy Public or Cricbuzz).
-let scorecardEnrichmentRunning = false;
-async function enrichMatchScorecards() {
-    if (scorecardEnrichmentRunning) return;
-    const matches = fantasyCache?.matches || [];
-    if (matches.length === 0) return;
-
-    // Find matches missing scorecard data (only live or recent completed)
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-    const needsScorecard = matches.filter(m => {
-        if (m.scorecard && m.scorecard.length > 0) return false;
-        if (m.status === 'live') return true;
-        // Also enrich recently completed matches
-        const mDate = m.matchDate ? new Date(m.matchDate).getTime() : 0;
-        return m.status === 'completed' && mDate > oneDayAgo;
-    });
-
-    if (needsScorecard.length === 0) return;
-
-    scorecardEnrichmentRunning = true;
-    console.log(`Scorecard enrichment: fetching scorecards for ${needsScorecard.length} matches from IPL Stats...`);
-
-    const headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Referer': 'https://www.iplt20.com/',
-        'Origin': 'https://www.iplt20.com',
-    };
-
-    try {
-        // Get schedule to map match names/dates to match codes
-        let matchCodeMap = new Map(); // matchId or matchName → matchCode
-        try {
-            const schedRes = await fetch('https://ipl-stats.iplt20.com/ipl/json/MatchSchedule.json', { headers });
-            if (schedRes.ok) {
-                const schedJson = await schedRes.json();
-                const rawList = schedJson?.Matchsummary || schedJson?.matchsummary ||
-                                schedJson?.MatchSchedule || schedJson?.matches ||
-                                schedJson?.data?.matches || schedJson?.data || [];
-                for (const m of (Array.isArray(rawList) ? rawList : [])) {
-                    if (!m) continue;
-                    const matchCode = String(m?.MatchCode || m?.matchCode || m?.MatchID || m?.id || '');
-                    if (!matchCode) continue;
-                    matchCodeMap.set(matchCode, matchCode);
-                    // Also map by match name for cross-source matching
-                    const matchName = (m?.MatchName || m?.matchName || '').toLowerCase().trim();
-                    if (matchName) matchCodeMap.set(matchName, matchCode);
-                    // Map by team names
-                    const t1 = (m?.Team1ShortName || m?.TeamAShortName || '').toUpperCase();
-                    const t2 = (m?.Team2ShortName || m?.TeamBShortName || '').toUpperCase();
-                    if (t1 && t2) {
-                        matchCodeMap.set(`${t1} vs ${t2}`, matchCode);
-                        matchCodeMap.set(`${t2} vs ${t1}`, matchCode);
-                    }
-                    // Map by match number
-                    const matchNum = m?.MatchOrder || m?.MatchNumber || m?.matchNumber;
-                    if (matchNum) matchCodeMap.set(`match ${matchNum}`, matchCode);
-                }
-                console.log(`Scorecard enrichment: loaded ${matchCodeMap.size} match code mappings from IPL Stats schedule`);
-            }
-        } catch (e) {
-            console.warn('Scorecard enrichment: could not fetch IPL Stats schedule:', e.message);
-        }
-
-        let enriched = 0;
-        for (const match of needsScorecard) {
-            // Try to find the match code
-            let matchCode = matchCodeMap.get(match.matchId) || null;
-            if (!matchCode) {
-                const nameKey = (match.matchName || '').toLowerCase().trim();
-                matchCode = matchCodeMap.get(nameKey) || null;
-            }
-            if (!matchCode) {
-                // Try extracting team codes from matchName like "GT vs PBKS" or "Match 4"
-                const teamMatch = (match.matchName || '').match(/^([A-Z]{2,5})\s+vs\s+([A-Z]{2,5})$/i);
-                if (teamMatch) {
-                    const key = `${teamMatch[1].toUpperCase()} vs ${teamMatch[2].toUpperCase()}`;
-                    matchCode = matchCodeMap.get(key) || null;
-                }
-                if (!matchCode) {
-                    const numMatch = (match.matchName || '').match(/match\s*(\d+)/i);
-                    if (numMatch) matchCode = matchCodeMap.get(`match ${numMatch[1]}`) || null;
-                }
-            }
-            // Last resort: try using the matchId directly as matchCode
-            if (!matchCode) matchCode = match.matchId;
-
-            try {
-                await new Promise(r => setTimeout(r, 200));
-                const scorecardJson = await fetchIPLScorecard(matchCode, headers);
-                if (scorecardJson) {
-                    const scorecard = extractIPLStatsScorecard(scorecardJson);
-                    if (scorecard.length > 0) {
-                        match.scorecard = scorecard;
-                        enriched++;
-                    }
-                }
-            } catch (e) {
-                console.warn(`Scorecard enrichment: failed for ${match.matchName}:`, e.message);
-            }
-        }
-
-        if (enriched > 0) {
-            console.log(`Scorecard enrichment: added scorecards to ${enriched} matches`);
-            // Re-broadcast with scorecard data (direct emit, no re-enrichment)
-            for (const [code, room] of rooms) {
-                const data = computeRoomFantasyPoints(room);
-                data.configured = isFantasyConfigured();
-                io.to(code).emit('fantasyPointsUpdate', data);
-            }
-        }
-    } catch (e) {
-        console.error('Scorecard enrichment error:', e.message);
-    } finally {
-        scorecardEnrichmentRunning = false;
-    }
 }
 
 function broadcastFantasyUpdate() {
@@ -2562,8 +2441,6 @@ function broadcastFantasyUpdate() {
         data.configured = isFantasyConfigured();
         io.to(code).emit('fantasyPointsUpdate', data);
     }
-    // Enrich matches missing scorecard data (runs asynchronously, doesn't block)
-    enrichMatchScorecards().catch(e => console.error('Scorecard enrichment error:', e.message));
 }
 
 // Emit fantasy points update to a single room (called after team/player changes)
@@ -3034,6 +2911,107 @@ app.post('/api/room/:code/fantasy-config', (req, res) => {
     );
 
     res.json({ success: true, source: getFantasySource() });
+});
+
+// ============ MATCH SCORECARD API ============
+// Fetches live/recent match scorecards directly from IPL Stats
+let scorecardCache = { lastFetched: 0, data: [] };
+const SCORECARD_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+app.get('/api/match-scorecards', async (req, res) => {
+    try {
+        // Return cached data if fresh
+        if (Date.now() - scorecardCache.lastFetched < SCORECARD_CACHE_TTL && scorecardCache.data.length > 0) {
+            return res.json({ scorecards: scorecardCache.data });
+        }
+
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Referer': 'https://www.iplt20.com/',
+            'Origin': 'https://www.iplt20.com',
+        };
+
+        // Step 1: Fetch schedule to find live/recent matches
+        const schedRes = await fetch('https://ipl-stats.iplt20.com/ipl/json/MatchSchedule.json', { headers });
+        if (!schedRes.ok) throw new Error(`Schedule HTTP ${schedRes.status}`);
+        const schedJson = await schedRes.json();
+        const rawList = schedJson?.Matchsummary || schedJson?.matchsummary ||
+                        schedJson?.MatchSchedule || schedJson?.matches ||
+                        schedJson?.data?.matches || schedJson?.data || [];
+        const matchList = Array.isArray(rawList) ? rawList : [];
+
+        // Find live and recently completed matches
+        const now = Date.now();
+        const oneDayAgo = now - 24 * 60 * 60 * 1000;
+        const seasonStart = new Date(IPL_SEASON_START_DATE);
+        const candidates = [];
+
+        for (const m of matchList) {
+            if (!m) continue;
+            const matchCode = String(m?.MatchCode || m?.matchCode || m?.MatchID || m?.id || '');
+            if (!matchCode) continue;
+            const status = String(m?.MatchStatus || m?.matchStatus || m?.status || '').toLowerCase();
+            const isLive = status.includes('progress') || status === 'live';
+            const isCompleted = status === 'result' || status === 'completed' || status.includes('result');
+            if (!isLive && !isCompleted) continue;
+
+            const rawDate = m?.MatchDate || m?.matchDate || m?.date || '';
+            const matchDate = rawDate ? new Date(rawDate) : null;
+            if (matchDate && !isNaN(matchDate.getTime()) && matchDate < seasonStart) continue;
+
+            const t1 = m?.Team1ShortName || m?.TeamAShortName || m?.team1 || '';
+            const t2 = m?.Team2ShortName || m?.TeamBShortName || m?.team2 || '';
+            const matchName = m?.MatchName || m?.matchName || (t1 && t2 ? `${t1} vs ${t2}` : `Match ${matchCode}`);
+
+            candidates.push({
+                matchCode, matchName, matchDate: matchDate ? matchDate.toISOString() : '',
+                status: isLive ? 'live' : 'completed',
+                isLive, t1, t2
+            });
+        }
+
+        // Sort by date desc, take live matches + last 2 completed
+        candidates.sort((a, b) => new Date(b.matchDate || 0) - new Date(a.matchDate || 0));
+        const liveMatches = candidates.filter(c => c.isLive);
+        const recentCompleted = candidates.filter(c => !c.isLive && c.matchDate && new Date(c.matchDate) > oneDayAgo).slice(0, 2);
+        const toFetch = [...liveMatches, ...recentCompleted];
+
+        if (toFetch.length === 0) {
+            // No live, show the most recent completed match
+            const latest = candidates.find(c => !c.isLive);
+            if (latest) toFetch.push(latest);
+        }
+
+        // Step 2: Fetch scorecards
+        const scorecards = [];
+        for (const match of toFetch) {
+            try {
+                const scJson = await fetchIPLScorecard(match.matchCode, headers);
+                if (scJson) {
+                    const innings = extractIPLStatsScorecard(scJson);
+                    if (innings.length > 0) {
+                        scorecards.push({
+                            matchName: match.matchName,
+                            matchDate: match.matchDate,
+                            status: match.status,
+                            team1: match.t1,
+                            team2: match.t2,
+                            innings
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn(`Scorecard fetch failed for ${match.matchName}:`, e.message);
+            }
+        }
+
+        scorecardCache = { lastFetched: Date.now(), data: scorecards };
+        res.json({ scorecards });
+    } catch (err) {
+        console.error('Match scorecard API error:', err.message);
+        res.json({ scorecards: scorecardCache.data || [] });
+    }
 });
 
 // ============ SOCKET.IO EVENTS ============
