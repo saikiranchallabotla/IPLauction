@@ -3277,7 +3277,109 @@
         }
 
         var scorecardFetchInProgress = false;
+        function renderScorecardHTML(scorecards) {
+            var container = document.getElementById('scorecard-container');
+            var grid = document.getElementById('scorecard-grid');
+            if (!container || !grid) return false;
+
+            if (!scorecards || scorecards.length === 0) {
+                container.style.display = 'none';
+                return false;
+            }
+
+            container.style.display = 'block';
+            var html = '';
+            scorecards.forEach(function(match) {
+                var isLive = match.status === 'live';
+                var statusClass = isLive ? 'scorecard-status-live' : 'scorecard-status-completed';
+                var statusText = isLive ? 'LIVE' : 'Completed';
+
+                html += '<div class="scorecard-match">';
+                html += '<div class="scorecard-match-header">';
+                html += '<span class="scorecard-match-name">' + escapeHtml(match.matchName || 'Match') + '</span>';
+                html += '<span class="scorecard-match-status ' + statusClass + '">' + statusText + '</span>';
+                html += '</div>';
+
+                (match.innings || []).forEach(function(inn) {
+                    html += '<div class="scorecard-innings">';
+                    html += '<div class="scorecard-team-score">';
+                    html += '<span class="scorecard-team-name">' + escapeHtml(inn.teamName || '') + '</span>';
+                    if (inn.score) {
+                        html += '<span class="scorecard-score">' + escapeHtml(inn.score);
+                        if (inn.overs) html += '<span class="scorecard-overs">(' + escapeHtml(inn.overs) + ' ov)</span>';
+                        html += '</span>';
+                    }
+                    html += '</div>';
+
+                    var topBatsmen = (inn.batsmen || []).slice(0, 4);
+                    if (topBatsmen.length > 0) {
+                        html += '<div class="scorecard-players-section">';
+                        html += '<div class="scorecard-section-label">Batting</div>';
+                        topBatsmen.forEach(function(bat) {
+                            var nameClass = bat.isNotOut ? 'scorecard-player-name not-out' : 'scorecard-player-name';
+                            html += '<div class="scorecard-player-row">';
+                            html += '<span class="' + nameClass + '">' + escapeHtml(bat.name);
+                            if (bat.isNotOut) html += ' *';
+                            html += '</span>';
+                            html += '<span class="scorecard-player-stats">';
+                            html += '<strong>' + bat.runs + '</strong> (' + bat.balls + 'b)';
+                            html += ' ' + bat.fours + '×4 ' + bat.sixes + '×6';
+                            html += '<span class="scorecard-player-sr"> SR ' + bat.strikeRate + '</span>';
+                            html += '</span>';
+                            html += '</div>';
+                        });
+                        html += '</div>';
+                    }
+
+                    var topBowlers = (inn.bowlers || []).slice(0, 3);
+                    if (topBowlers.length > 0) {
+                        html += '<div class="scorecard-divider"></div>';
+                        html += '<div class="scorecard-players-section">';
+                        html += '<div class="scorecard-section-label">Bowling</div>';
+                        topBowlers.forEach(function(bwl) {
+                            html += '<div class="scorecard-player-row">';
+                            html += '<span class="scorecard-player-name">' + escapeHtml(bwl.name) + '</span>';
+                            html += '<span class="scorecard-player-stats">';
+                            html += '<strong>' + bwl.wickets + '/' + bwl.runs + '</strong>';
+                            html += ' (' + bwl.overs + ' ov)';
+                            html += '<span class="scorecard-player-sr"> Eco ' + bwl.economy + '</span>';
+                            html += '</span>';
+                            html += '</div>';
+                        });
+                        html += '</div>';
+                    }
+
+                    html += '</div>';
+                });
+
+                html += '</div>';
+            });
+
+            grid.innerHTML = html;
+            return true;
+        }
+
         function renderScorecard() {
+            // Path 1: Try using scorecard data already in fantasyData (from socket broadcast)
+            var socketScorecards = [];
+            if (fantasyData && fantasyData.matches) {
+                fantasyData.matches.forEach(function(m) {
+                    if (m.scorecard && Array.isArray(m.scorecard) && m.scorecard.length > 0) {
+                        socketScorecards.push({
+                            matchName: m.matchName || 'Match',
+                            matchDate: m.matchDate || '',
+                            status: m.status || 'completed',
+                            innings: m.scorecard
+                        });
+                    }
+                });
+            }
+            if (socketScorecards.length > 0) {
+                renderScorecardHTML(socketScorecards);
+                return;
+            }
+
+            // Path 2: Fetch from dedicated endpoint
             if (scorecardFetchInProgress) return;
             scorecardFetchInProgress = true;
 
@@ -3285,86 +3387,7 @@
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     scorecardFetchInProgress = false;
-                    var container = document.getElementById('scorecard-container');
-                    var grid = document.getElementById('scorecard-grid');
-                    if (!container || !grid) return;
-
-                    var scorecards = data.scorecards || [];
-                    if (scorecards.length === 0) {
-                        container.style.display = 'none';
-                        return;
-                    }
-
-                    container.style.display = 'block';
-                    var html = '';
-                    scorecards.forEach(function(match) {
-                        var isLive = match.status === 'live';
-                        var statusClass = isLive ? 'scorecard-status-live' : 'scorecard-status-completed';
-                        var statusText = isLive ? 'LIVE' : 'Completed';
-
-                        html += '<div class="scorecard-match">';
-                        html += '<div class="scorecard-match-header">';
-                        html += '<span class="scorecard-match-name">' + escapeHtml(match.matchName) + '</span>';
-                        html += '<span class="scorecard-match-status ' + statusClass + '">' + statusText + '</span>';
-                        html += '</div>';
-
-                        (match.innings || []).forEach(function(inn) {
-                            html += '<div class="scorecard-innings">';
-
-                            // Team score header
-                            html += '<div class="scorecard-team-score">';
-                            html += '<span class="scorecard-team-name">' + escapeHtml(inn.teamName) + '</span>';
-                            html += '<span class="scorecard-score">' + escapeHtml(inn.score);
-                            html += '<span class="scorecard-overs">(' + escapeHtml(inn.overs) + ' ov)</span></span>';
-                            html += '</div>';
-
-                            // Top batsmen (not-out first, then top scorers — max 4)
-                            var topBatsmen = (inn.batsmen || []).slice(0, 4);
-                            if (topBatsmen.length > 0) {
-                                html += '<div class="scorecard-players-section">';
-                                html += '<div class="scorecard-section-label">Batting</div>';
-                                topBatsmen.forEach(function(bat) {
-                                    var nameClass = bat.isNotOut ? 'scorecard-player-name not-out' : 'scorecard-player-name';
-                                    html += '<div class="scorecard-player-row">';
-                                    html += '<span class="' + nameClass + '">' + escapeHtml(bat.name);
-                                    if (bat.isNotOut) html += ' *';
-                                    html += '</span>';
-                                    html += '<span class="scorecard-player-stats">';
-                                    html += '<strong>' + bat.runs + '</strong> (' + bat.balls + 'b)';
-                                    html += ' ' + bat.fours + '×4 ' + bat.sixes + '×6';
-                                    html += '<span class="scorecard-player-sr"> SR ' + bat.strikeRate + '</span>';
-                                    html += '</span>';
-                                    html += '</div>';
-                                });
-                                html += '</div>';
-                            }
-
-                            // Top bowlers (by wickets — max 3)
-                            var topBowlers = (inn.bowlers || []).slice(0, 3);
-                            if (topBowlers.length > 0) {
-                                html += '<div class="scorecard-divider"></div>';
-                                html += '<div class="scorecard-players-section">';
-                                html += '<div class="scorecard-section-label">Bowling</div>';
-                                topBowlers.forEach(function(bwl) {
-                                    html += '<div class="scorecard-player-row">';
-                                    html += '<span class="scorecard-player-name">' + escapeHtml(bwl.name) + '</span>';
-                                    html += '<span class="scorecard-player-stats">';
-                                    html += '<strong>' + bwl.wickets + '/' + bwl.runs + '</strong>';
-                                    html += ' (' + bwl.overs + ' ov)';
-                                    html += '<span class="scorecard-player-sr"> Eco ' + bwl.economy + '</span>';
-                                    html += '</span>';
-                                    html += '</div>';
-                                });
-                                html += '</div>';
-                            }
-
-                            html += '</div>'; // scorecard-innings
-                        });
-
-                        html += '</div>'; // scorecard-match
-                    });
-
-                    grid.innerHTML = html;
+                    renderScorecardHTML(data.scorecards || []);
                 })
                 .catch(function(err) {
                     scorecardFetchInProgress = false;
