@@ -2156,6 +2156,20 @@ async function fetchFromIPLStats() {
     return { totalMatches: allMatches.length, newMatches: newMatches.length };
 }
 
+// Known player name aliases: maps common API name variants to the canonical name in players.json.
+// Add entries here when external APIs use a different name than what's in players.json.
+const PLAYER_NAME_ALIASES = {
+    // "Vyshak Vijaykumar" in players.json — APIs may return reversed/shortened variants
+    'vijaykumar vyshak': 'Vyshak Vijaykumar',
+    'vijay vyshak': 'Vyshak Vijaykumar',
+    'vk vyshak': 'Vyshak Vijaykumar',
+    'v vyshak': 'Vyshak Vijaykumar',
+    'vyshak v': 'Vyshak Vijaykumar',
+    'vyshak vk': 'Vyshak Vijaykumar',
+    'vijaykumar v': 'Vyshak Vijaykumar',
+    'v vijaykumar': 'Vyshak Vijaykumar',
+};
+
 function buildNameMapping(matches) {
     const cricApiNames = new Set();
     for (const match of matches) {
@@ -2173,6 +2187,10 @@ function buildNameMapping(matches) {
 
     const mapping = {};
     for (const apiName of cricApiNames) {
+        // Alias lookup (case-insensitive)
+        const aliasMatch = PLAYER_NAME_ALIASES[apiName.toLowerCase().trim()];
+        if (aliasMatch) { mapping[apiName] = aliasMatch; continue; }
+
         // Exact match
         const exact = playersData.find(p => p.name.toLowerCase() === apiName.toLowerCase());
         if (exact) { mapping[apiName] = exact.name; continue; }
@@ -2191,16 +2209,36 @@ function buildNameMapping(matches) {
             if (initialMatches.length === 1) { mapping[apiName] = initialMatches[0].name; continue; }
         }
 
+        // Reversed name match: "FirstName LastName" -> try "LastName FirstName"
+        if (apiParts.length === 2) {
+            const reversed = apiParts[1] + ' ' + apiParts[0];
+            const reversedMatch = playersData.find(p => p.name.toLowerCase() === reversed.toLowerCase());
+            if (reversedMatch) { mapping[apiName] = reversedMatch.name; continue; }
+        }
+
         // Last-name match
         const apiLastName = apiName.split(' ').pop().toLowerCase();
         const lastNameMatches = playersData.filter(p => p.name.toLowerCase().endsWith(apiLastName));
         if (lastNameMatches.length === 1) { mapping[apiName] = lastNameMatches[0].name; continue; }
+
+        // First-name match (for cases where API uses "Vyshak" and only one player has that first name)
+        const apiFirstName = apiParts[0].toLowerCase();
+        if (apiFirstName.length > 1) {
+            const firstNameMatches = playersData.filter(p => p.name.toLowerCase().startsWith(apiFirstName + ' ') || p.name.toLowerCase() === apiFirstName);
+            if (firstNameMatches.length === 1) { mapping[apiName] = firstNameMatches[0].name; continue; }
+        }
 
         // Fuzzy match
         const results = fuse.search(apiName);
         if (results.length > 0 && results[0].score < 0.35) {
             mapping[apiName] = results[0].item.name;
         }
+    }
+
+    // Log unmatched API names for debugging
+    const unmapped = [...cricApiNames].filter(n => !mapping[n]);
+    if (unmapped.length > 0) {
+        console.log(`Name mapping: ${Object.keys(mapping).length} matched, ${unmapped.length} unmatched: ${unmapped.slice(0, 10).join(', ')}${unmapped.length > 10 ? '...' : ''}`);
     }
 
     return mapping;
