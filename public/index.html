@@ -3292,7 +3292,7 @@
             scorecards.forEach(function(match) {
                 var isLive = match.status === 'live';
                 var statusClass = isLive ? 'scorecard-status-live' : 'scorecard-status-completed';
-                var statusText = isLive ? 'LIVE' : 'Completed';
+                var statusText = isLive ? 'LIVE' : (match.statusText || 'Completed');
 
                 html += '<div class="scorecard-match">';
                 html += '<div class="scorecard-match-header">';
