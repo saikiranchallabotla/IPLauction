@@ -1912,7 +1912,136 @@ async function fetchFromCricAPI() {
     // Accelerate polling if any live match is ongoing
     if (allMatches.some(m => m.status === 'live')) startLiveMatchTimer();
     else stopLiveMatchTimer();
+
+    // Background: enrich matches with scorecard data from Cricbuzz/ESPN
+    enrichMatchesWithScorecards().catch(err =>
+        console.warn('Background scorecard enrichment failed:', err.message)
+    );
+
     return { totalMatches: allMatches.length, newMatches: newMatches.length };
+}
+
+// ============ SCORECARD ENRICHMENT ============
+// After the main fantasy fetch (especially ipl_public which only returns points),
+// try to fetch detailed scorecard data (batting/bowling) from Cricbuzz or ESPN
+// and attach it to the cached matches so the client can display scorecards.
+
+let scorecardEnrichmentInProgress = false;
+
+async function enrichMatchesWithScorecards() {
+    if (!fantasyCache?.matches?.length) return;
+    if (scorecardEnrichmentInProgress) return;
+    scorecardEnrichmentInProgress = true;
+
+    try {
+        // Only enrich matches that don't already have scorecard data
+        const now = Date.now();
+        const oneDayAgo = now - 24 * 60 * 60 * 1000;
+        const matchesNeedingScorecard = fantasyCache.matches.filter(m => {
+            if (m.scorecard && m.scorecard.length > 0) return false; // already has scorecard
+            if (m.status === 'live') return true; // always refresh live
+            // Recently completed (within 24h)
+            const d = new Date(m.matchDate);
+            return !isNaN(d.getTime()) && d.getTime() > oneDayAgo;
+        });
+
+        if (matchesNeedingScorecard.length === 0) {
+            console.log('Scorecard enrichment: all matches already have scorecards');
+            return;
+        }
+
+        console.log(`Scorecard enrichment: ${matchesNeedingScorecard.length} matches need scorecards`);
+
+        // Try Cricbuzz first — find matching IPL matches
+        const cbHeaders = {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.105 Mobile Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'x-requested-with': 'com.cricbuzz.android'
+        };
+
+        let enriched = 0;
+
+        // Fetch live + recent IPL matches from Cricbuzz
+        const [liveRes, recentRes] = await Promise.allSettled([
+            fetch('https://www.cricbuzz.com/api/cricket-match/live', { headers: cbHeaders }),
+            fetch('https://www.cricbuzz.com/api/cricket-match/recent', { headers: cbHeaders }),
+        ]);
+
+        const cbMatchMap = new Map();
+        for (const result of [liveRes, recentRes]) {
+            if (result.status !== 'fulfilled' || !result.value.ok) continue;
+            try {
+                const data = await result.value.json();
+                for (const typeGroup of (data.typeMatches || [])) {
+                    for (const seriesGroup of (typeGroup.seriesMatches || [])) {
+                        const wrapper = seriesGroup.seriesAdWrapper || seriesGroup;
+                        const seriesName = (wrapper.seriesName || '').toLowerCase();
+                        if (!seriesName.includes('ipl') && !seriesName.includes('indian premier')) continue;
+                        for (const m of (wrapper.matches || [])) {
+                            const info = m.matchInfo || m;
+                            const matchId = String(info.matchId || info.id || '');
+                            const t1 = (info.team1?.teamSName || info.team1?.teamName || '').toLowerCase();
+                            const t2 = (info.team2?.teamSName || info.team2?.teamName || '').toLowerCase();
+                            if (matchId) cbMatchMap.set(matchId, { info, t1, t2 });
+                        }
+                    }
+                }
+            } catch (_) {}
+        }
+
+        if (cbMatchMap.size === 0) {
+            console.log('Scorecard enrichment: Cricbuzz returned no IPL matches');
+            return;
+        }
+
+        console.log(`Scorecard enrichment: found ${cbMatchMap.size} Cricbuzz IPL matches`);
+
+        // Match fantasy cache matches to Cricbuzz matches by team names
+        for (const match of matchesNeedingScorecard) {
+            const matchNameLower = (match.matchName || '').toLowerCase();
+            // Find matching Cricbuzz match by team abbreviations in the match name
+            let cbMatchId = null;
+            for (const [mId, cb] of cbMatchMap) {
+                if (cb.t1 && cb.t2 && matchNameLower.includes(cb.t1) && matchNameLower.includes(cb.t2)) {
+                    cbMatchId = mId;
+                    break;
+                }
+                // Also try matching by Cricbuzz match description
+                const cbDesc = (cb.info.matchDesc || '').toLowerCase();
+                const cbNum = cbDesc.match(/match\s*(\d+)/)?.[1];
+                const fcNum = matchNameLower.match(/match\s*(\d+)/)?.[1];
+                if (cbNum && fcNum && cbNum === fcNum) {
+                    cbMatchId = mId;
+                    break;
+                }
+            }
+
+            if (!cbMatchId) continue;
+
+            try {
+                const scRes = await fetch(`https://www.cricbuzz.com/api/cricket-scorecard/${cbMatchId}`, { headers: cbHeaders });
+                if (!scRes.ok) continue;
+                const scData = await scRes.json();
+                const innings = extractCricbuzzScorecardData(scData);
+                if (innings.length > 0) {
+                    match.scorecard = innings;
+                    enriched++;
+                    console.log(`  Enriched scorecard for ${match.matchName} (${innings.length} innings)`);
+                }
+            } catch (_) {}
+        }
+
+        if (enriched > 0) {
+            console.log(`Scorecard enrichment: enriched ${enriched} matches`);
+            // Update the cache and re-broadcast
+            scorecardCache = { lastFetched: 0, data: [] }; // invalidate endpoint cache
+            broadcastFantasyUpdate();
+        } else {
+            console.log('Scorecard enrichment: could not enrich any matches from Cricbuzz');
+        }
+    } finally {
+        scorecardEnrichmentInProgress = false;
+    }
 }
 
 // ============ IPL PUBLIC STATS — no authentication required ============
