@@ -1959,73 +1959,94 @@ async function enrichMatchesWithScorecards() {
         console.log(`Scorecard enrichment: ${matchesNeedingScorecard.length} matches need scorecards`);
         let enriched = 0;
 
-        // === Strategy 1: IPL Stats (ipl-stats.iplt20.com) — Official IPL, free, no auth ===
-        const iplHeaders = {
+        // === Strategy 1: IPL Scores (scores.iplt20.com) — Official IPL JSONP feeds, free, no auth ===
+        const scoresHeaders = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Referer': 'https://www.iplt20.com/',
-            'Origin': 'https://www.iplt20.com'
+            'Accept': '*/*',
+            'Referer': 'https://www.iplt20.com/'
         };
 
         try {
-            const scheduleUrls = [
-                'https://ipl-stats.iplt20.com/ipl/json/MatchSchedule.json',
-                'https://ipl-stats.iplt20.com/ipl/json/Fixtures.json',
-                'https://ipl-stats.iplt20.com/ipl/json/matchschedule/MatchSchedule.json',
-            ];
-            let iplFixtures = [];
-            for (const url of scheduleUrls) {
+            // Step 1: Get competition list to find current IPL season
+            const compRes = await fetch('https://scores.iplt20.com/ipl/mc/competition.js', { headers: scoresHeaders });
+            let competitionId = 203; // Default: IPL 2025
+            if (compRes.ok) {
+                const compText = await compRes.text();
                 try {
-                    const res = await fetch(url, { headers: iplHeaders });
-                    if (res.ok) {
-                        const data = await res.json();
-                        iplFixtures = parseIPLStatsSchedule(data);
-                        if (iplFixtures.length > 0) {
-                            console.log(`Scorecard enrichment: found ${iplFixtures.length} IPL Stats fixtures`);
-                            break;
-                        }
+                    const compJson = JSON.parse(compText.substring(compText.indexOf('{'), compText.lastIndexOf('}') + 1));
+                    const divisions = compJson.division || [];
+                    // Find latest IPL season
+                    const latestIPL = divisions.find(d => d.DivisionName === 'IPL');
+                    if (latestIPL) {
+                        // CompetitionID can be derived: check schedule endpoints
+                        // For now scan competition IDs around known range
                     }
                 } catch (_) {}
             }
 
-            if (iplFixtures.length > 0) {
-                iplFixtures.sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
+            // Step 2: Fetch match schedule (JSONP wrapped)
+            const schedUrl = `https://scores.iplt20.com/ipl/feeds/${competitionId}-matchschedule.js`;
+            const schedRes = await fetch(schedUrl, { headers: scoresHeaders });
+            let scoresFeed = [];
+            if (schedRes.ok) {
+                const schedText = await schedRes.text();
+                try {
+                    const schedJson = JSON.parse(schedText.substring(schedText.indexOf('{'), schedText.lastIndexOf('}') + 1));
+                    const allMatches = schedJson.Matchsummary || schedJson.matchsummary || [];
+                    // Only completed matches
+                    scoresFeed = allMatches
+                        .filter(m => m.MatchStatus === 'Post' || m.MatchStatus === 'Live')
+                        .sort((a, b) => (a.RowNo || 0) - (b.RowNo || 0));
+                    console.log(`Scorecard enrichment: found ${scoresFeed.length} completed matches from scores.iplt20.com`);
+                } catch (_) {}
+            }
 
+            if (scoresFeed.length > 0) {
                 for (const match of matchesNeedingScorecard) {
-                    // Match by match number (e.g., "Match 5" -> fixture index 4)
+                    // Match by match number (e.g., "Match 5" -> RowNo 5)
                     const matchNum = (match.matchName || '').match(/match\s*(\d+)/i)?.[1];
                     let fixture = null;
                     if (matchNum) {
-                        const idx = parseInt(matchNum) - 1;
-                        if (idx >= 0 && idx < iplFixtures.length) fixture = iplFixtures[idx];
+                        fixture = scoresFeed.find(f => f.RowNo === parseInt(matchNum));
                     }
-                    // Also try matching by team names
+                    // Also try matching by team codes
                     if (!fixture) {
                         const matchNameLower = (match.matchName || '').toLowerCase();
-                        fixture = iplFixtures.find(f => {
-                            const fName = (f.matchName || '').toLowerCase();
-                            const teams = fName.split(/\s+vs\s+/i);
-                            return teams.length === 2 && teams.every(t => matchNameLower.includes(t.trim().split(' ')[0]));
+                        fixture = scoresFeed.find(f => {
+                            const t1 = (f.FirstBattingTeamCode || '').toLowerCase();
+                            const t2 = (f.SecondBattingTeamCode || '').toLowerCase();
+                            return t1 && t2 && (matchNameLower.includes(t1) || matchNameLower.includes(t2));
                         });
                     }
                     if (!fixture) continue;
 
                     try {
                         await new Promise(r => setTimeout(r, 150));
-                        const scorecard = await fetchIPLScorecard(fixture.matchCode, iplHeaders);
-                        if (scorecard) {
-                            const innings = extractIPLStatsScorecard(scorecard);
-                            if (innings.length > 0) {
-                                match.scorecard = innings;
-                                enriched++;
-                                console.log(`  Enriched scorecard (IPL Stats) for ${match.matchName} -> ${fixture.matchName} (${innings.length} innings)`);
+                        const innings = await fetchScoresIPLTScorecard(fixture.MatchID, scoresHeaders);
+                        if (innings && innings.length > 0) {
+                            // Set team names from schedule data
+                            if (innings[0]) innings[0].teamName = fixture.FirstBattingTeamCode || fixture.FirstBattingTeamName || '';
+                            if (innings[1]) innings[1].teamName = fixture.SecondBattingTeamCode || fixture.SecondBattingTeamName || '';
+                            // Set overs from schedule summary
+                            if (innings[0] && fixture.FirstBattingSummary) {
+                                const oMatch = fixture.FirstBattingSummary.match(/\((\d+[\.\d]*)\s*[Oo]v\)/);
+                                if (oMatch) innings[0].overs = oMatch[1];
+                                innings[0].score = fixture.FirstBattingSummary.replace(/\s*\(.*\)/, '') || innings[0].score;
                             }
+                            if (innings[1] && fixture.SecondBattingSummary) {
+                                const oMatch = fixture.SecondBattingSummary.match(/\((\d+[\.\d]*)\s*[Oo]v\)/);
+                                if (oMatch) innings[1].overs = oMatch[1];
+                                innings[1].score = fixture.SecondBattingSummary.replace(/\s*\(.*\)/, '') || innings[1].score;
+                            }
+                            match.scorecard = innings;
+                            enriched++;
+                            console.log(`  Enriched scorecard (scores.iplt20.com) for ${match.matchName} -> ${fixture.FirstBattingTeamCode} vs ${fixture.SecondBattingTeamCode} (${innings.length} innings)`);
                         }
                     } catch (_) {}
                 }
             }
         } catch (e) {
-            console.warn('Scorecard enrichment: IPL Stats failed:', e.message);
+            console.warn('Scorecard enrichment: scores.iplt20.com failed:', e.message);
         }
 
         // === Strategy 2: Cricbuzz fallback for remaining matches ===
@@ -2090,7 +2111,7 @@ async function enrichMatchesWithScorecards() {
             scorecardCache = { lastFetched: 0, data: [] };
             broadcastFantasyUpdate();
         } else {
-            console.log('Scorecard enrichment: could not enrich any matches (IPL Stats may be unavailable)');
+            console.log('Scorecard enrichment: could not enrich any matches (scores.iplt20.com may be unavailable)');
         }
     } finally {
         scorecardEnrichmentInProgress = false;
@@ -2182,6 +2203,76 @@ function parseIPLStatsSchedule(json) {
         });
     }
     return fixtures;
+}
+
+// Fetch full scorecard from scores.iplt20.com JSONP feeds (free, public, no auth)
+async function fetchScoresIPLTScorecard(matchId, headers) {
+    const innings = [];
+    for (let innNo = 1; innNo <= 2; innNo++) {
+        try {
+            const url = `https://scores.iplt20.com/ipl/feeds/${matchId}-Innings${innNo}.js`;
+            const res = await fetch(url, { headers });
+            if (!res.ok) continue;
+            const text = await res.text();
+            // Strip JSONP wrapper: onScoring({...})
+            const start = text.indexOf('{');
+            const end = text.lastIndexOf('}');
+            if (start < 0 || end < 0) continue;
+            const data = JSON.parse(text.substring(start, end + 1));
+            const innKey = `Innings${innNo}`;
+            const innData = data[innKey];
+            if (!innData) continue;
+
+            const batsmen = [];
+            for (const b of (innData.BattingCard || [])) {
+                if (!b.PlayerName) continue;
+                const isNotOut = !b.OutDesc || b.OutDesc.toLowerCase().includes('not out') || b.OutDesc === '';
+                batsmen.push({
+                    name: b.PlayerName.trim(),
+                    runs: parseInt(b.Runs || 0),
+                    balls: parseInt(b.Balls || 0),
+                    fours: parseInt(b.Fours || 0),
+                    sixes: parseInt(b.Sixes || 0),
+                    isNotOut,
+                    strikeRate: parseFloat(b.StrikeRate || 0),
+                    outDesc: b.ShortOutDesc || b.OutDesc || ''
+                });
+            }
+
+            const bowlers = [];
+            for (const bw of (innData.BowlingCard || [])) {
+                if (!bw.PlayerName) continue;
+                bowlers.push({
+                    name: bw.PlayerName.trim(),
+                    overs: String(bw.Overs || '0'),
+                    maidens: parseInt(bw.Maidens || 0),
+                    runs: parseInt(bw.Runs || 0),
+                    wickets: parseInt(bw.Wickets || 0),
+                    economy: parseFloat(bw.Economy || 0)
+                });
+            }
+
+            if (batsmen.length > 0) {
+                // Get team name from schedule data or batting card
+                const teamId = innData.BattingCard?.[0]?.TeamID;
+                // Calculate total from extras
+                const extras = innData.Extras;
+                const totalRuns = batsmen.reduce((s, b) => s + b.runs, 0) + (extras ? parseInt(extras.Total || extras.total || 0) : 0);
+                const totalWickets = batsmen.filter(b => !b.isNotOut).length;
+
+                innings.push({
+                    teamName: '',  // Will be set below if schedule data available
+                    score: `${totalRuns}/${totalWickets}`,
+                    overs: '',
+                    batsmen,
+                    bowlers
+                });
+            }
+        } catch (e) {
+            // Continue to next innings
+        }
+    }
+    return innings;
 }
 
 async function fetchIPLScorecard(matchCode, headers) {
