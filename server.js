@@ -1204,6 +1204,12 @@ async function fetchFromIPLFantasy() {
     // Accelerate polling if any live match is ongoing
     if (allMatches.some(m => m.status === 'live')) startLiveMatchTimer();
     else stopLiveMatchTimer();
+
+    // Background: enrich matches with scorecard data from CricAPI/Cricbuzz
+    enrichMatchesWithScorecards().catch(err =>
+        console.warn('Background scorecard enrichment failed:', err.message)
+    );
+
     return { totalMatches: allMatches.length, newMatches: newMatches.length };
 }
 
@@ -1619,6 +1625,12 @@ async function fetchFromIPLFantasyPublic() {
     broadcastFantasyUpdate();
     if (validMatches.some(m => m.status === 'live')) startLiveMatchTimer();
     else stopLiveMatchTimer();
+
+    // Background: enrich matches with scorecard data from CricAPI/Cricbuzz
+    enrichMatchesWithScorecards().catch(err =>
+        console.warn('Background scorecard enrichment failed:', err.message)
+    );
+
     return { totalMatches: validMatches.length, newMatches: newMatches.length };
 }
 
@@ -1863,7 +1875,8 @@ async function fetchFromCricAPI() {
                         matchName: match.name || scData.data.name || 'Match',
                         matchDate: match.date || match.dateTimeGMT || scData.data.date || '',
                         status: isMatchEnded ? 'completed' : 'live',
-                        playerPoints
+                        playerPoints,
+                        scorecard: extractCricAPIScorecardData(scData.data)
                     });
                     console.log(`  CricAPI: ${playerPoints.length} players, ${cricApiInningsCount} innings for ${newMatches.at(-1).matchName}`);
                 }
@@ -1935,14 +1948,9 @@ async function enrichMatchesWithScorecards() {
 
     try {
         // Only enrich matches that don't already have scorecard data
-        const now = Date.now();
-        const oneDayAgo = now - 24 * 60 * 60 * 1000;
         const matchesNeedingScorecard = fantasyCache.matches.filter(m => {
             if (m.scorecard && m.scorecard.length > 0) return false; // already has scorecard
-            if (m.status === 'live') return true; // always refresh live
-            // Recently completed (within 24h)
-            const d = new Date(m.matchDate);
-            return !isNaN(d.getTime()) && d.getTime() > oneDayAgo;
+            return true; // enrich all matches without scorecard
         });
 
         if (matchesNeedingScorecard.length === 0) {
