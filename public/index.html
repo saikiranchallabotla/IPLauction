@@ -3130,7 +3130,7 @@
                     var liveText = '';
                     liveMatch.scorecard.forEach(function(inn, i) {
                         if (i > 0) liveText += ' vs ';
-                        liveText += (inn.teamName || '?') + ' ' + (inn.score || '');
+                        liveText += (inn.teamName || '?') + ' ' + (inn.score || '') + (inn.overs ? ' (' + inn.overs + ' ov)' : '');
                     });
                     if (liveScoreEl) liveScoreEl.textContent = liveText;
                     liveScoreCard.style.display = '';
