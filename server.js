@@ -1969,35 +1969,45 @@ async function enrichMatchesWithScorecards() {
         try {
             // Step 1: Get competition list to find current IPL season
             const compRes = await fetch('https://scores.iplt20.com/ipl/mc/competition.js', { headers: scoresHeaders });
-            let competitionId = 203; // Default: IPL 2025
+            let competitionId = 284; // Default: IPL 2026
+            let feedSource = 'https://scores.iplt20.com/ipl/feeds';
             if (compRes.ok) {
                 const compText = await compRes.text();
                 try {
                     const compJson = JSON.parse(compText.substring(compText.indexOf('{'), compText.lastIndexOf('}') + 1));
-                    const divisions = compJson.division || [];
-                    // Find latest IPL season
-                    const latestIPL = divisions.find(d => d.DivisionName === 'IPL');
-                    if (latestIPL) {
-                        // CompetitionID can be derived: check schedule endpoints
-                        // For now scan competition IDs around known range
+                    const competitions = compJson.competition || [];
+                    // Find the latest live IPL competition (live:1 means active season)
+                    const liveComp = competitions.find(c => c.DivisionName === 'IPL' && c.live === 1);
+                    // Or just pick the first IPL competition (sorted by most recent)
+                    const latestComp = liveComp || competitions.find(c => c.DivisionName === 'IPL');
+                    if (latestComp) {
+                        competitionId = latestComp.CompetitionID;
+                        if (latestComp.feedsource) feedSource = latestComp.feedsource;
+                        console.log(`Scorecard enrichment: using ${latestComp.CompetitionName} (ID: ${competitionId})`);
                     }
                 } catch (_) {}
             }
 
-            // Step 2: Fetch match schedule (JSONP wrapped)
-            const schedUrl = `https://scores.iplt20.com/ipl/feeds/${competitionId}-matchschedule.js`;
-            const schedRes = await fetch(schedUrl, { headers: scoresHeaders });
+            // Step 2: Fetch match schedule — try both feed sources
             let scoresFeed = [];
-            if (schedRes.ok) {
-                const schedText = await schedRes.text();
+            const schedUrls = [
+                `https://scores.iplt20.com/ipl/feeds/${competitionId}-matchschedule.js`,
+                `${feedSource}/${competitionId}-matchschedule.js`,
+            ];
+            for (const schedUrl of schedUrls) {
+                if (scoresFeed.length > 0) break;
                 try {
+                    const schedRes = await fetch(schedUrl, { headers: scoresHeaders });
+                    if (!schedRes.ok) continue;
+                    const schedText = await schedRes.text();
                     const schedJson = JSON.parse(schedText.substring(schedText.indexOf('{'), schedText.lastIndexOf('}') + 1));
                     const allMatches = schedJson.Matchsummary || schedJson.matchsummary || [];
-                    // Only completed matches
                     scoresFeed = allMatches
                         .filter(m => m.MatchStatus === 'Post' || m.MatchStatus === 'Live')
                         .sort((a, b) => (a.RowNo || 0) - (b.RowNo || 0));
-                    console.log(`Scorecard enrichment: found ${scoresFeed.length} completed matches from scores.iplt20.com`);
+                    if (scoresFeed.length > 0) {
+                        console.log(`Scorecard enrichment: found ${scoresFeed.length} completed matches from ${schedUrl}`);
+                    }
                 } catch (_) {}
             }
 

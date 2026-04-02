@@ -3447,11 +3447,15 @@
                 return;
             }
 
-            // Build inline scorecard for this match
+            // Build scorecard HTML (hidden by default, shown via toggle button)
             var scorecardHTML = '';
             var innings = match.scorecard || [];
             if (innings.length > 0) {
-                scorecardHTML = '<div class="scorecard-match" style="margin-bottom:1.5rem;">';
+                scorecardHTML = '<div style="margin-bottom:1rem; text-align:center;">' +
+                    '<button onclick="var sc=document.getElementById(\'scorecard-' + matchId + '\');if(sc.style.display===\'none\'){sc.style.display=\'block\';this.textContent=\'Hide Scorecard\';}else{sc.style.display=\'none\';this.textContent=\'Show Scorecard\';}" ' +
+                    'style="background:var(--accent);color:#fff;border:none;padding:0.5rem 1.5rem;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.85rem;">Show Scorecard</button>' +
+                    '</div>';
+                scorecardHTML += '<div id="scorecard-' + matchId + '" class="scorecard-match" style="display:none;margin-bottom:1.5rem;">';
                 innings.forEach(function(inn) {
                     scorecardHTML += '<div class="scorecard-innings">';
                     scorecardHTML += '<div class="scorecard-team-score">';
