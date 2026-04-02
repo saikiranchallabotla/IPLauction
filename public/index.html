@@ -1856,10 +1856,6 @@
                 </div>
             </div>
 
-            <div class="scorecard-container" id="scorecard-container" style="display: none;">
-                <div class="scorecard-grid" id="scorecard-grid"></div>
-            </div>
-
             <div class="card">
                 <div class="tabs" style="margin-bottom: 1rem;">
                     <button class="tab active" onclick="showFantasyTab('leaderboard', this)">Points Table</button>
@@ -2514,7 +2510,7 @@
             socket.on('teamsUpdated', (teams) => { try { state.teams = teams; renderTeams(); } catch(e) { console.error('teamsUpdated render error:', e); } });
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
             socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); renderLiveCategories(); } catch(e) { console.error('playersUpdated render error:', e); } });
-            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); renderScorecard(); var todayTab = document.getElementById('fantasy-today-tab'); if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
+            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); var todayTab = document.getElementById('fantasy-today-tab'); if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
             socket.on('roomPinned', (data) => { try { roomPinned = data.pinned; updatePinButton(); } catch(e) {} });
             socket.on('roomError', (msg) => {
                 showAuctionPopup('Room Error', msg, false);
@@ -3736,7 +3732,6 @@
                 const pointsRes = await fetch('/api/room/' + roomCode + '/fantasy-points');
                 fantasyData = await pointsRes.json();
                 renderPointsTable();
-                renderScorecard();
                 const total = data.totalMatches || 0;
                 const newM = data.newMatches || 0;
                 if (total === 0) {
@@ -4536,7 +4531,7 @@
             if (view === 'fantasy' && roomCode) {
                 fetch('/api/room/' + roomCode + '/fantasy-points')
                     .then(r => r.json())
-                    .then(data => { fantasyData = data; renderPointsTable(); renderScorecard(); })
+                    .then(data => { fantasyData = data; renderPointsTable(); })
                     .catch(err => console.error('Failed to fetch fantasy points:', err));
                 // Start client-side poll when tab is open — polls for live match updates
                 // and also checks for newly started matches (so points appear as soon as a match goes live)
@@ -4552,7 +4547,6 @@
                                 .then(data => {
                                     fantasyData = data;
                                     renderPointsTable();
-                                    renderScorecard();
                                     var todayTab = document.getElementById('fantasy-today-tab');
                                     if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers();
                                 })
