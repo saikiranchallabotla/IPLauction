@@ -1854,6 +1854,13 @@
                         <div class="fantasy-stat-title">Match Day Top Scorer</div>
                     </div>
                 </div>
+                <div class="fantasy-stat-card" id="fantasy-live-score-card" style="display:none; background: linear-gradient(135deg, rgba(244,67,54,0.12), rgba(244,67,54,0.04)); border: 1px solid rgba(244,67,54,0.25);">
+                    <div class="fantasy-stat-icon" style="background: rgba(244,67,54,0.15); color: #ef5350;">&#9898;</div>
+                    <div class="fantasy-stat-content">
+                        <div class="fantasy-stat-number" id="fantasy-live-score" style="font-size:0.85rem;">-</div>
+                        <div class="fantasy-stat-title" style="display:flex;align-items:center;gap:0.4rem;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ef5350;animation:livePulse 1.5s infinite;"></span> LIVE</div>
+                    </div>
+                </div>
             </div>
 
             <div class="card">
@@ -3113,6 +3120,28 @@
             // Show/hide live match indicator
             const liveIndicator = el('fantasy-live-indicator');
             if (liveIndicator) liveIndicator.style.display = hasLiveMatch ? 'flex' : 'none';
+
+            // Show live match score card
+            const liveScoreCard = el('fantasy-live-score-card');
+            const liveScoreEl = el('fantasy-live-score');
+            if (liveScoreCard) {
+                const liveMatch = (fantasyData.matches || []).find(m => m.status === 'live' || m.status === 'Live' || m.status === 'In Progress');
+                if (liveMatch && liveMatch.scorecard && liveMatch.scorecard.length > 0) {
+                    var liveText = '';
+                    liveMatch.scorecard.forEach(function(inn, i) {
+                        if (i > 0) liveText += ' vs ';
+                        liveText += (inn.teamName || '?') + ' ' + (inn.score || '');
+                    });
+                    if (liveScoreEl) liveScoreEl.textContent = liveText;
+                    liveScoreCard.style.display = '';
+                } else if (liveMatch) {
+                    // Live but no scorecard yet — show team names from match name
+                    if (liveScoreEl) liveScoreEl.textContent = liveMatch.matchName || 'Live Match';
+                    liveScoreCard.style.display = '';
+                } else {
+                    liveScoreCard.style.display = 'none';
+                }
+            }
 
             const lastUpdated = el('fantasy-last-updated');
             if (lastUpdated) {
