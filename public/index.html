@@ -2517,7 +2517,7 @@
             socket.on('teamsUpdated', (teams) => { try { state.teams = teams; renderTeams(); } catch(e) { console.error('teamsUpdated render error:', e); } });
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
             socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); renderLiveCategories(); } catch(e) { console.error('playersUpdated render error:', e); } });
-            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; renderPointsTable(); var todayTab = document.getElementById('fantasy-today-tab'); if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
+            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; _fantasyDataVersion++; _matchContentCache = {}; renderPointsTable(); var todayTab = document.getElementById('fantasy-today-tab'); if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
             socket.on('roomPinned', (data) => { try { roomPinned = data.pinned; updatePinButton(); } catch(e) {} });
             socket.on('roomError', (msg) => {
                 showAuctionPopup('Room Error', msg, false);
@@ -3425,15 +3425,21 @@
             if (row) row.classList.toggle('expanded');
         }
 
+        var _todayTabRenderedVersion = -1;
         function showFantasyTab(tab, btn) {
             btn.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById('fantasy-leaderboard-tab').style.display = tab === 'leaderboard' ? 'block' : 'none';
             document.getElementById('fantasy-match-view-tab').style.display = tab === 'match-view' ? 'block' : 'none';
             document.getElementById('fantasy-today-tab').style.display = tab === 'today' ? 'block' : 'none';
-            if (tab === 'today') renderTodaysPlayers();
+            if (tab === 'today' && _todayTabRenderedVersion !== _fantasyDataVersion) {
+                renderTodaysPlayers();
+                _todayTabRenderedVersion = _fantasyDataVersion;
+            }
         }
 
+        var _matchTabsRenderedVersion = -1;
+        var _matchTabsRenderedCount = -1;
         function renderFantasyMatchTabs() {
             const container = document.getElementById('fantasy-match-tabs');
             if (!container) return;
@@ -3448,6 +3454,10 @@
                 selectedFantasyMatch = live ? live.matchId : matches[matches.length - 1].matchId;
                 setTimeout(function() { renderFantasyMatchContent(selectedFantasyMatch); }, 0);
             }
+            // Skip re-rendering tabs if match count hasn't changed
+            if (_matchTabsRenderedVersion === _fantasyDataVersion && _matchTabsRenderedCount === matches.length) return;
+            _matchTabsRenderedVersion = _fantasyDataVersion;
+            _matchTabsRenderedCount = matches.length;
             var cmdMatchIds = new Set((findCurrentMatchDayMatches() || []).map(function(cm) { return cm.matchId; }));
             container.innerHTML = matches.map(m => {
                 const shortName = m.matchName.length > 30 ? m.matchName.substring(0, 30) + '...' : m.matchName;
@@ -3457,9 +3467,16 @@
             }).join('');
         }
 
+        var _matchContentCache = {};
+        var _fantasyDataVersion = 0;
+        var _matchCacheVersion = 0;
+
         function selectFantasyMatch(matchId) {
             selectedFantasyMatch = matchId;
-            renderFantasyMatchTabs();
+            // Just toggle active class instead of rebuilding all tabs
+            document.querySelectorAll('.fantasy-match-tab').forEach(function(btn) {
+                btn.classList.toggle('active', btn.getAttribute('onclick').indexOf("'" + matchId + "'") !== -1);
+            });
             renderFantasyMatchContent(matchId);
         }
 
@@ -3469,6 +3486,13 @@
             const match = (fantasyData.matches || []).find(m => m.matchId === matchId);
             if (!match) {
                 content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Match data not found</p>';
+                return;
+            }
+
+            // Use cached HTML if data version hasn't changed
+            var cacheKey = matchId + '_v' + _fantasyDataVersion;
+            if (_matchContentCache[cacheKey]) {
+                content.innerHTML = _matchContentCache[cacheKey];
                 return;
             }
 
@@ -3547,7 +3571,7 @@
                 return { teamName: team.teamName, matchTotal, players: playerMatchPoints, countedPlayers: team.countedPlayers || 0 };
             }).sort((a, b) => b.matchTotal - a.matchTotal);
 
-            content.innerHTML = '<h4 style="color: var(--accent); margin-bottom: 1rem;">' + match.matchName + '</h4>' +
+            var builtHTML = '<h4 style="color: var(--accent); margin-bottom: 1rem;">' + match.matchName + '</h4>' +
                 '<div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">' + match.matchDate + ' | ' + match.status + '</div>' +
                 scorecardHTML +
                 '<h4 style="color: var(--text); margin-bottom: 0.75rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Fantasy Points</h4>' +
@@ -3566,6 +3590,12 @@
                         ).join('') +
                     '</div>'
                 ).join('');
+
+            // Cache the built HTML (skip caching live matches since they change)
+            if (match.status !== 'live') {
+                _matchContentCache[cacheKey] = builtHTML;
+            }
+            content.innerHTML = builtHTML;
         }
 
         function renderTodaysPlayers() {
@@ -3760,6 +3790,8 @@
                 if (!res.ok) throw new Error(data.error || 'Refresh failed');
                 const pointsRes = await fetch('/api/room/' + roomCode + '/fantasy-points');
                 fantasyData = await pointsRes.json();
+                _fantasyDataVersion++;
+                _matchContentCache = {};
                 renderPointsTable();
                 const total = data.totalMatches || 0;
                 const newM = data.newMatches || 0;
@@ -4560,7 +4592,12 @@
             if (view === 'fantasy' && roomCode) {
                 fetch('/api/room/' + roomCode + '/fantasy-points')
                     .then(r => r.json())
-                    .then(data => { fantasyData = data; renderPointsTable(); })
+                    .then(data => {
+                        var changed = JSON.stringify(data.lastUpdated) !== JSON.stringify(fantasyData.lastUpdated) || (data.matches||[]).length !== (fantasyData.matches||[]).length;
+                        fantasyData = data;
+                        if (changed) { _fantasyDataVersion++; _matchContentCache = {}; }
+                        renderPointsTable();
+                    })
                     .catch(err => console.error('Failed to fetch fantasy points:', err));
                 // Start client-side poll when tab is open — polls for live match updates
                 // and also checks for newly started matches (so points appear as soon as a match goes live)
@@ -4575,6 +4612,8 @@
                                 .then(r => r.json())
                                 .then(data => {
                                     fantasyData = data;
+                                    _fantasyDataVersion++;
+                                    _matchContentCache = {};
                                     renderPointsTable();
                                     var todayTab = document.getElementById('fantasy-today-tab');
                                     if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers();
