@@ -3417,6 +3417,12 @@
                 container.innerHTML = '<p style="color: var(--text-secondary);">No matches available</p>';
                 return;
             }
+            // Auto-select latest or live match on first render
+            if (!selectedFantasyMatch && matches.length > 0) {
+                var live = matches.find(function(m) { return m.status === 'live'; });
+                selectedFantasyMatch = live ? live.matchId : matches[matches.length - 1].matchId;
+                setTimeout(function() { renderFantasyMatchContent(selectedFantasyMatch); }, 0);
+            }
             var cmdMatchIds = new Set((findCurrentMatchDayMatches() || []).map(function(cm) { return cm.matchId; }));
             container.innerHTML = matches.map(m => {
                 const shortName = m.matchName.length > 30 ? m.matchName.substring(0, 30) + '...' : m.matchName;
@@ -3440,6 +3446,68 @@
                 content.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Match data not found</p>';
                 return;
             }
+
+            // Build inline scorecard for this match
+            var scorecardHTML = '';
+            var innings = match.scorecard || [];
+            if (innings.length > 0) {
+                scorecardHTML = '<div class="scorecard-match" style="margin-bottom:1.5rem;">';
+                innings.forEach(function(inn) {
+                    scorecardHTML += '<div class="scorecard-innings">';
+                    scorecardHTML += '<div class="scorecard-team-score">';
+                    scorecardHTML += '<span class="scorecard-team-name">' + escapeHtml(inn.teamName || '') + '</span>';
+                    if (inn.score) {
+                        scorecardHTML += '<span class="scorecard-score">' + escapeHtml(inn.score);
+                        if (inn.overs) scorecardHTML += '<span class="scorecard-overs">(' + escapeHtml(inn.overs) + ' ov)</span>';
+                        scorecardHTML += '</span>';
+                    }
+                    scorecardHTML += '</div>';
+
+                    // Full batting table
+                    var batsmen = inn.batsmen || [];
+                    if (batsmen.length > 0) {
+                        scorecardHTML += '<div class="scorecard-players-section">';
+                        scorecardHTML += '<div class="scorecard-section-label">Batting</div>';
+                        batsmen.forEach(function(bat) {
+                            var nameClass = bat.isNotOut ? 'scorecard-player-name not-out' : 'scorecard-player-name';
+                            scorecardHTML += '<div class="scorecard-player-row">';
+                            scorecardHTML += '<span class="' + nameClass + '">' + escapeHtml(bat.name);
+                            if (bat.isNotOut) scorecardHTML += ' *';
+                            scorecardHTML += '</span>';
+                            scorecardHTML += '<span class="scorecard-player-stats">';
+                            scorecardHTML += '<strong>' + bat.runs + '</strong> (' + bat.balls + 'b)';
+                            scorecardHTML += ' ' + bat.fours + '×4 ' + bat.sixes + '×6';
+                            scorecardHTML += '<span class="scorecard-player-sr"> SR ' + bat.strikeRate + '</span>';
+                            scorecardHTML += '</span>';
+                            scorecardHTML += '</div>';
+                        });
+                        scorecardHTML += '</div>';
+                    }
+
+                    // Full bowling table
+                    var bowlers = inn.bowlers || [];
+                    if (bowlers.length > 0) {
+                        scorecardHTML += '<div class="scorecard-divider"></div>';
+                        scorecardHTML += '<div class="scorecard-players-section">';
+                        scorecardHTML += '<div class="scorecard-section-label">Bowling</div>';
+                        bowlers.forEach(function(bwl) {
+                            scorecardHTML += '<div class="scorecard-player-row">';
+                            scorecardHTML += '<span class="scorecard-player-name">' + escapeHtml(bwl.name) + '</span>';
+                            scorecardHTML += '<span class="scorecard-player-stats">';
+                            scorecardHTML += '<strong>' + bwl.wickets + '/' + bwl.runs + '</strong>';
+                            scorecardHTML += ' (' + bwl.overs + ' ov)';
+                            scorecardHTML += '<span class="scorecard-player-sr"> Eco ' + bwl.economy + '</span>';
+                            scorecardHTML += '</span>';
+                            scorecardHTML += '</div>';
+                        });
+                        scorecardHTML += '</div>';
+                    }
+
+                    scorecardHTML += '</div>';
+                });
+                scorecardHTML += '</div>';
+            }
+
             const teams = fantasyData.teams || [];
             const matchTeamData = teams.map(team => {
                 const playerMatchPoints = (team.playerBreakdowns || []).map(p => {
@@ -3452,6 +3520,8 @@
 
             content.innerHTML = '<h4 style="color: var(--accent); margin-bottom: 1rem;">' + match.matchName + '</h4>' +
                 '<div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">' + match.matchDate + ' | ' + match.status + '</div>' +
+                scorecardHTML +
+                '<h4 style="color: var(--text); margin-bottom: 0.75rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Fantasy Points</h4>' +
                 matchTeamData.map((td, idx) =>
                     '<div style="margin-bottom: 1.5rem;">' +
                         '<div style="display: flex; justify-content: space-between; padding: 0.5rem 0.75rem; background: ' + (idx === 0 ? 'var(--accent-dim)' : 'var(--glass)') + '; border-radius: 8px; margin-bottom: 0.5rem; border-left: 3px solid ' + (idx === 0 ? 'var(--accent)' : 'var(--border)') + ';">' +
