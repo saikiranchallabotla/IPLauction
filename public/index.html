@@ -3455,21 +3455,21 @@
         var _growthChartInstances = [];
         // Vibrant IPL-inspired distinct colours — one per fantasy team
         var GROWTH_CHART_COLORS = [
-            '#FFD700', // Gold
-            '#00BFFF', // Deep Sky Blue
-            '#FF4560', // Vivid Red
-            '#BF5FFF', // Violet
-            '#00E5CC', // Teal
-            '#FF7043', // Deep Orange
-            '#FF1493', // Hot Pink
-            '#29B6F6', // Light Blue
-            '#69F0AE', // Mint Green
-            '#FF80AB', // Pink
-            '#FFCA28', // Amber
-            '#EF5350', // Red
-            '#40C4FF', // Sky Blue
-            '#B39DDB', // Lavender
-            '#CCFF90'  // Lime
+            '#D4A017', // Dark Gold
+            '#0077B6', // Strong Blue
+            '#D32F2F', // Strong Red
+            '#7B1FA2', // Deep Purple
+            '#00897B', // Teal
+            '#E64A19', // Deep Orange
+            '#C2185B', // Dark Pink
+            '#0288D1', // Blue
+            '#2E7D32', // Green
+            '#AD1457', // Rose
+            '#F57F17', // Dark Amber
+            '#C62828', // Dark Red
+            '#0277BD', // Ocean Blue
+            '#5E35B1', // Deep Violet
+            '#558B2F'  // Olive Green
         ];
 
         function _makeGradient(ctx, color, height) {
@@ -3521,10 +3521,10 @@
 
             // ── Shared chart style helpers ──────────────────────────────────
             var tooltipDefaults = {
-                backgroundColor: 'rgba(15,20,36,0.95)',
-                titleColor: '#ffffff',
-                bodyColor: '#d0d0d0',
-                borderColor: 'rgba(255,255,255,0.15)',
+                backgroundColor: '#ffffff',
+                titleColor: '#1a1a2e',
+                bodyColor: '#333333',
+                borderColor: '#e0e0e0',
                 borderWidth: 1,
                 padding: 10,
                 cornerRadius: 8,
@@ -3538,7 +3538,7 @@
             var legendDefaults = {
                 position: 'bottom',
                 labels: {
-                    color: '#d8d8d8',
+                    color: '#333333',
                     usePointStyle: true,
                     pointStyleWidth: 10,
                     padding: 18,
@@ -3547,14 +3547,14 @@
             };
             var scaleDefaults = {
                 x: {
-                    ticks: { color: '#b0b0b0', font: { size: 11 } },
-                    grid: { color: 'rgba(255,255,255,0.07)', lineWidth: 1 },
-                    border: { color: 'rgba(255,255,255,0.1)' }
+                    ticks: { color: '#555555', font: { size: 11 } },
+                    grid: { color: 'rgba(0,0,0,0.08)', lineWidth: 1 },
+                    border: { color: 'rgba(0,0,0,0.15)' }
                 },
                 y: {
-                    ticks: { color: '#b0b0b0', font: { size: 11 } },
-                    grid: { color: 'rgba(255,255,255,0.1)', lineWidth: 1 },
-                    border: { color: 'rgba(255,255,255,0.1)' }
+                    ticks: { color: '#555555', font: { size: 11 } },
+                    grid: { color: 'rgba(0,0,0,0.08)', lineWidth: 1 },
+                    border: { color: 'rgba(0,0,0,0.15)' }
                 }
             };
 
@@ -3564,27 +3564,27 @@
             // ── Build individual team card HTML first (so canvases exist in DOM) ──
             var teamCardsHtml = teams.map(function(team, idx) {
                 var color = GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length];
-                return '<div style="background:rgba(255,255,255,0.06);border-radius:14px;padding:1rem 1rem 0.75rem;border:1px solid rgba(255,255,255,0.12);box-shadow:0 4px 20px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.07);overflow:hidden;position:relative;">' +
-                    '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,' + color + ',' + color + '88);border-radius:14px 14px 0 0;"></div>' +
+                return '<div style="background:#ffffff;border-radius:14px;padding:1rem 1rem 0.75rem;border:1px solid #e0e0e0;box-shadow:0 2px 8px rgba(0,0,0,0.08);overflow:hidden;position:relative;">' +
+                    '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,' + color + ',' + color + 'AA);border-radius:14px 14px 0 0;"></div>' +
                     '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.1rem;">' +
-                        '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';box-shadow:0 0 6px ' + color + ';flex-shrink:0;"></span>' +
-                        '<div style="font-weight:700;font-size:0.88rem;color:#f0f0f0;">' + team.teamName + '</div>' +
+                        '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span>' +
+                        '<div style="font-weight:700;font-size:0.88rem;color:#1a1a2e;">' + team.teamName + '</div>' +
                     '</div>' +
-                    (team.ownerName ? '<div style="font-size:0.72rem;color:#8a95aa;margin-bottom:0.65rem;padding-left:1.3rem;">' + team.ownerName + '</div>' : '<div style="margin-bottom:0.65rem;"></div>') +
+                    (team.ownerName ? '<div style="font-size:0.72rem;color:#666666;margin-bottom:0.65rem;padding-left:1.3rem;">' + team.ownerName + '</div>' : '<div style="margin-bottom:0.65rem;"></div>') +
                     '<canvas id="growth-team-' + team.teamId + '-chart" style="max-height:160px;"></canvas>' +
                     '</div>';
             }).join('');
 
             // Chart container style helper
-            var chartBox = 'position:relative;background:rgba(255,255,255,0.06);border-radius:16px;padding:1.5rem 1.25rem 1rem;border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.08);backdrop-filter:blur(4px);';
+            var chartBox = 'position:relative;background:#ffffff;border-radius:16px;padding:1.5rem 1.25rem 1rem;border:1px solid #e0e0e0;box-shadow:0 2px 12px rgba(0,0,0,0.08);';
 
             content.innerHTML = analysisHtml +
                 '<div style="margin-bottom:2.25rem;">' +
                     '<div style="display:flex;align-items:baseline;gap:0.6rem;margin-bottom:0.3rem;">' +
                         '<span style="font-size:1.1rem;">📈</span>' +
-                        '<h4 style="background:linear-gradient(135deg,#FFD700,#FFA500);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;font-size:1.05rem;font-weight:800;letter-spacing:0.01em;">Cumulative Points Growth</h4>' +
+                        '<h4 style="color:#1a1a2e;margin:0;font-size:1.05rem;font-weight:800;letter-spacing:0.01em;">Cumulative Points Growth</h4>' +
                     '</div>' +
-                    '<p style="font-size:0.8rem;color:#8a95aa;margin-bottom:1rem;padding-left:1.7rem;">Total points accumulated by each team across matches (Best XI)</p>' +
+                    '<p style="font-size:0.8rem;color:#666666;margin-bottom:1rem;padding-left:1.7rem;">Total points accumulated by each team across matches (Best XI)</p>' +
                     '<div style="' + chartBox + '">' +
                         '<canvas id="growth-cumulative-chart"></canvas>' +
                     '</div>' +
@@ -3592,9 +3592,9 @@
                 '<div style="margin-bottom:2.25rem;">' +
                     '<div style="display:flex;align-items:baseline;gap:0.6rem;margin-bottom:0.3rem;">' +
                         '<span style="font-size:1.1rem;">📊</span>' +
-                        '<h4 style="background:linear-gradient(135deg,#00BFFF,#00E5CC);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;font-size:1.05rem;font-weight:800;letter-spacing:0.01em;">Match-by-Match Points Comparison</h4>' +
+                        '<h4 style="color:#1a1a2e;margin:0;font-size:1.05rem;font-weight:800;letter-spacing:0.01em;">Match-by-Match Points Comparison</h4>' +
                     '</div>' +
-                    '<p style="font-size:0.8rem;color:#8a95aa;margin-bottom:1rem;padding-left:1.7rem;">Points scored per match — all teams with colour-coded bars</p>' +
+                    '<p style="font-size:0.8rem;color:#666666;margin-bottom:1rem;padding-left:1.7rem;">Points scored per match — all teams with colour-coded bars</p>' +
                     '<div style="' + chartBox + '">' +
                         '<canvas id="growth-per-match-chart"></canvas>' +
                     '</div>' +
@@ -3602,7 +3602,7 @@
                 '<div>' +
                     '<div style="display:flex;align-items:baseline;gap:0.6rem;margin-bottom:1rem;">' +
                         '<span style="font-size:1.1rem;">🏆</span>' +
-                        '<h4 style="background:linear-gradient(135deg,#BF5FFF,#FF80AB);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;font-size:1.05rem;font-weight:800;letter-spacing:0.01em;">Individual Team Growth</h4>' +
+                        '<h4 style="color:#1a1a2e;margin:0;font-size:1.05rem;font-weight:800;letter-spacing:0.01em;">Individual Team Growth</h4>' +
                     '</div>' +
                     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:1rem;">' +
                         teamCardsHtml +
@@ -3620,15 +3620,15 @@
                         label: team.teamName + (team.ownerName ? ' (' + team.ownerName + ')' : ''),
                         data: teamMatchPoints[idx].map(function(p) { cum += p; return parseFloat(cum.toFixed(1)); }),
                         borderColor: color,
-                        backgroundColor: _makeGradient(gradCtx1, color, 320),
+                        backgroundColor: color,
                         borderWidth: 2.5,
                         pointRadius: 4,
                         pointHoverRadius: 8,
                         pointBackgroundColor: color,
-                        pointBorderColor: '#0f1420',
+                        pointBorderColor: '#ffffff',
                         pointBorderWidth: 2,
                         tension: 0.4,
-                        fill: true
+                        fill: false
                     };
                 });
                 var c1 = new Chart(gradCtx1, {
@@ -3645,7 +3645,7 @@
                         },
                         scales: Object.assign({}, scaleDefaults, {
                             y: Object.assign({}, scaleDefaults.y, {
-                                title: { display: true, text: 'Cumulative Points', color: '#b0b0b0', font: { size: 11 } }
+                                title: { display: true, text: 'Cumulative Points', color: '#555555', font: { size: 11 } }
                             })
                         })
                     }
@@ -3667,7 +3667,7 @@
                         borderRadius: 5,
                         borderSkipped: false,
                         hoverBackgroundColor: color,
-                        hoverBorderColor: '#ffffff44',
+                        hoverBorderColor: '#00000022',
                         hoverBorderWidth: 2
                     };
                 });
@@ -3697,9 +3697,6 @@
                 var miniCtx = el.getContext('2d');
                 var cum = 0;
                 var cumData = teamMatchPoints[idx].map(function(p) { cum += p; return parseFloat(cum.toFixed(1)); });
-                var miniGrad = miniCtx.createLinearGradient(0, 0, 0, 160);
-                miniGrad.addColorStop(0, color + '88');
-                miniGrad.addColorStop(1, color + '11');
                 var c = new Chart(miniCtx, {
                     type: 'bar',
                     data: {
@@ -3708,7 +3705,7 @@
                             {
                                 label: 'Match Pts',
                                 data: teamMatchPoints[idx],
-                                backgroundColor: color + 'AA',
+                                backgroundColor: color + 'CC',
                                 borderColor: color,
                                 borderWidth: 1.5,
                                 borderRadius: 4,
@@ -3720,14 +3717,14 @@
                                 data: cumData,
                                 type: 'line',
                                 borderColor: color,
-                                backgroundColor: miniGrad,
+                                backgroundColor: color,
                                 borderWidth: 2,
                                 pointRadius: 3,
                                 pointBackgroundColor: color,
-                                pointBorderColor: '#0f1420',
+                                pointBorderColor: '#ffffff',
                                 pointBorderWidth: 1.5,
                                 tension: 0.35,
-                                fill: true,
+                                fill: false,
                                 order: 1
                             }
                         ]
@@ -3738,11 +3735,13 @@
                         animation: { duration: 600 },
                         interaction: { mode: 'index', intersect: false },
                         plugins: {
-                            legend: { labels: { color: '#d0d0d0', font: { size: 10, weight: '600' }, usePointStyle: true, padding: 10 } },
+                            legend: { labels: { color: '#333333', font: { size: 10, weight: '600' }, usePointStyle: true, padding: 10 } },
                             tooltip: {
-                                backgroundColor: 'rgba(15,20,36,0.95)',
-                                titleColor: '#fff',
-                                bodyColor: '#ccc',
+                                backgroundColor: '#ffffff',
+                                titleColor: '#1a1a2e',
+                                bodyColor: '#333333',
+                                borderColor: '#e0e0e0',
+                                borderWidth: 1,
                                 cornerRadius: 8,
                                 callbacks: {
                                     title: function(items) {
@@ -3753,8 +3752,8 @@
                             }
                         },
                         scales: {
-                            x: { ticks: { color: '#a0a0a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' }, border: { color: 'rgba(255,255,255,0.08)' } },
-                            y: { ticks: { color: '#a0a0a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.08)' }, border: { color: 'rgba(255,255,255,0.08)' } }
+                            x: { ticks: { color: '#555555', font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.06)' }, border: { color: 'rgba(0,0,0,0.12)' } },
+                            y: { ticks: { color: '#555555', font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.06)' }, border: { color: 'rgba(0,0,0,0.12)' } }
                         }
                     }
                 });
