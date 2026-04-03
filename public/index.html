@@ -1361,6 +1361,132 @@
             }
         }
 
+        /* ============ IPL TEAM ANALYSIS ============ */
+        .ipl-analysis-section-title {
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--text-secondary);
+            margin: 1.4rem 0 0.75rem; display: flex; align-items: center; gap: 0.5rem;
+        }
+        .ipl-standings-table {
+            width: 100%; border-collapse: collapse; font-size: 0.83rem;
+        }
+        .ipl-standings-table th {
+            padding: 0.45rem 0.7rem; text-align: left;
+            font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-light);
+        }
+        .ipl-standings-table th.tc { text-align: center; }
+        .ipl-standings-table td { padding: 0.55rem 0.7rem; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .ipl-standings-table td.tc { text-align: center; }
+        .ipl-standings-table tr:last-child td { border-bottom: none; }
+        .ipl-standings-row.playoff td:first-child { border-left: 3px solid var(--success); }
+        .ipl-standings-row.borderline td:first-child { border-left: 3px solid var(--warning); }
+        .ipl-standings-row.eliminated td:first-child { border-left: 3px solid var(--danger); }
+        .ipl-playoffs-divider td { height: 2px; background: linear-gradient(90deg, rgba(0,200,83,0.45), transparent); padding: 0; font-size: 0; line-height: 0; }
+        .ipl-team-name-cell { display: flex; align-items: center; gap: 0.55rem; font-weight: 700; }
+        .ipl-team-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+        .zone-badge {
+            display: inline-block; font-size: 0.58rem; padding: 0.12rem 0.5rem;
+            border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .zone-badge.playoff { background: rgba(0,200,83,0.14); color: var(--success); border: 1px solid rgba(0,200,83,0.28); }
+        .zone-badge.borderline { background: rgba(255,145,0,0.12); color: var(--warning); border: 1px solid rgba(255,145,0,0.25); }
+        .zone-badge.eliminated { background: rgba(255,23,68,0.11); color: var(--danger); border: 1px solid rgba(255,23,68,0.22); }
+        .nrr-pos { color: var(--success); } .nrr-neg { color: var(--danger); }
+        /* Standings edit form */
+        .standings-edit-form {
+            display: none; padding: 1rem; margin: 0.6rem 0 1rem;
+            background: rgba(255,255,255,0.03); border: 1px solid var(--border-light); border-radius: 12px;
+        }
+        .standings-edit-form.open { display: block; }
+        .standings-edit-grid {
+            display: grid; gap: 0.35rem;
+            grid-template-columns: minmax(60px,1.5fr) repeat(5, minmax(40px, 4rem)) minmax(56px, 5rem);
+        }
+        .standings-edit-grid .se-head {
+            font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-secondary); padding-bottom: 0.3rem;
+            text-align: center;
+        }
+        .standings-edit-grid .se-head:first-child { text-align: left; }
+        .se-team-label { display: flex; align-items: center; gap: 0.4rem; font-weight: 700; font-size: 0.83rem; }
+        .se-input {
+            padding: 0.3rem 0.4rem; background: var(--dark-elevated); color: var(--text);
+            border: 1px solid var(--border-light); border-radius: 6px; font-size: 0.8rem;
+            font-family: 'Outfit', sans-serif; text-align: center; width: 100%;
+        }
+        .se-input:focus { outline: none; border-color: var(--accent); }
+        .standings-edit-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; justify-content: flex-end; }
+        /* Participant risk cards */
+        .participant-risk-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 0.9rem; margin-top: 0.75rem;
+        }
+        .participant-risk-card {
+            background: var(--dark-elevated); border: 1px solid var(--border);
+            border-radius: 14px; overflow: hidden; transition: all 0.3s ease;
+        }
+        .participant-risk-card:hover { border-color: var(--border-light); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+        .participant-risk-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.85rem 1.1rem; cursor: pointer; gap: 0.75rem;
+        }
+        .participant-risk-info { flex: 1; min-width: 0; }
+        .participant-risk-name { font-weight: 700; font-size: 0.98rem; }
+        .participant-risk-meta { font-size: 0.73rem; color: var(--text-secondary); margin-top: 0.12rem; }
+        .risk-badge {
+            padding: 0.28rem 0.75rem; border-radius: 20px; font-size: 0.73rem;
+            font-weight: 700; white-space: nowrap; flex-shrink: 0;
+        }
+        .risk-badge.high { background: rgba(255,23,68,0.14); color: var(--danger); border: 1px solid rgba(255,23,68,0.28); }
+        .risk-badge.medium { background: rgba(255,145,0,0.12); color: var(--warning); border: 1px solid rgba(255,145,0,0.25); }
+        .risk-badge.low { background: rgba(0,200,83,0.1); color: var(--success); border: 1px solid rgba(0,200,83,0.2); }
+        .risk-badge.unknown { background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid var(--border); }
+        .risk-expand-icon { color: var(--text-secondary); font-size: 0.8rem; transition: transform 0.3s ease; flex-shrink: 0; }
+        .participant-risk-card.expanded .risk-expand-icon { transform: rotate(180deg); color: var(--accent); }
+        .participant-risk-body { display: none; padding: 0 1.1rem 1rem; border-top: 1px solid var(--border); }
+        .participant-risk-card.expanded .participant-risk-body { display: block; }
+        .risk-ipl-group { margin-top: 0.8rem; }
+        .risk-ipl-group-header {
+            display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.45rem;
+        }
+        .risk-ipl-label { font-size: 0.75rem; font-weight: 700; }
+        .risk-player-list { display: flex; flex-direction: column; gap: 0.2rem; }
+        .risk-player-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.32rem 0.5rem; background: rgba(255,255,255,0.03);
+            border-radius: 6px; font-size: 0.79rem;
+        }
+        .risk-player-name { font-weight: 600; }
+        .risk-player-sub { font-size: 0.68rem; color: var(--text-secondary); }
+        .risk-pts-val { font-size: 0.74rem; font-weight: 700; }
+        .risk-pts-val.pos { color: var(--success); } .risk-pts-val.zero { color: var(--text-secondary); }
+        .risk-summary-bar { margin-top: 0.9rem; padding: 0.65rem 0.75rem; background: rgba(255,255,255,0.04); border-radius: 8px; font-size: 0.77rem; }
+        .risk-bar-label { display: flex; justify-content: space-between; margin-bottom: 0.4rem; color: var(--text-secondary); }
+        .risk-bar-track { height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+        .risk-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+        .risk-bar-safe { background: linear-gradient(90deg, var(--success), #00e676); }
+        .risk-bar-borderline { background: linear-gradient(90deg, var(--warning), #ffab00); }
+        .risk-bar-atrisk { background: linear-gradient(90deg, var(--danger), #ff1744); }
+        .risk-legend { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.45rem; font-size: 0.7rem; color: var(--text-secondary); }
+        .risk-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.3rem; vertical-align: middle; }
+        .btn-sm-outline {
+            background: rgba(255,255,255,0.05); color: var(--text-secondary);
+            border: 1px solid var(--border); padding: 0.28rem 0.7rem;
+            border-radius: 6px; font-size: 0.76rem; cursor: pointer;
+            font-family: 'Outfit', sans-serif; transition: all 0.2s ease;
+        }
+        .btn-sm-outline:hover { background: rgba(255,255,255,0.1); color: var(--text); border-color: var(--border-light); }
+        .ipl-analysis-note {
+            font-size: 0.76rem; color: var(--text-secondary); font-style: italic;
+            padding: 0.6rem 0.75rem; background: rgba(255,255,255,0.04);
+            border-radius: 8px; margin-bottom: 1rem; line-height: 1.5;
+        }
+        @media (max-width: 640px) {
+            .standings-edit-grid { grid-template-columns: minmax(50px,1.2fr) repeat(5, minmax(32px,3rem)) minmax(48px,4.5rem); gap: 0.2rem; }
+            .participant-risk-grid { grid-template-columns: 1fr; }
+        }
         /* ============ BID LOG ============ */
         .bid-log-entry {
             margin-bottom: 0.5rem; border-radius: 10px;
@@ -1870,6 +1996,7 @@
                     <button class="tab" onclick="showFantasyTab('match-view', this)">Match-by-Match</button>
                     <button class="tab" onclick="showFantasyTab('today', this)">&#127951; Match Day Players</button>
                     <button class="tab" onclick="showFantasyTab('growth-charts', this)">&#128200; Growth Charts</button>
+                    <button class="tab" onclick="showFantasyTab('ipl-analysis', this)">&#127942; IPL Team Analysis</button>
                 </div>
 
                 <div id="fantasy-leaderboard-tab">
@@ -1897,6 +2024,12 @@
                 <div id="fantasy-growth-tab" style="display: none;">
                     <div id="fantasy-growth-content">
                         <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading growth charts...</p>
+                    </div>
+                </div>
+
+                <div id="fantasy-ipl-analysis-tab" style="display: none;">
+                    <div id="fantasy-ipl-analysis-content">
+                        <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading IPL team analysis...</p>
                     </div>
                 </div>
             </div>
@@ -2012,6 +2145,48 @@
         let auctionTimerInterval = null;
         let fantasyData = { teams: [], matches: [], lastUpdated: null, configured: false };
         let selectedFantasyMatch = null;
+
+        // ============ IPL 2026 TEAM PERFORMANCE DATA ============
+        const IPL_TEAM_COLORS = {
+            'CSK': '#FDBE00', 'MI': '#004BA0', 'RCB': '#EC1C24', 'DC': '#0078BC',
+            'PBKS': '#ED1B24', 'RR': '#E83D84', 'SRH': '#F26522',
+            'GT': '#D4AF37', 'KKR': '#3A225D', 'LSG': '#A72056'
+        };
+        const IPL_TEAM_FULL_NAMES = {
+            'CSK': 'Chennai Super Kings', 'MI': 'Mumbai Indians',
+            'RCB': 'Royal Challengers Bengaluru', 'DC': 'Delhi Capitals',
+            'PBKS': 'Punjab Kings', 'RR': 'Rajasthan Royals',
+            'SRH': 'Sunrisers Hyderabad', 'GT': 'Gujarat Titans',
+            'KKR': 'Kolkata Knight Riders', 'LSG': 'Lucknow Super Giants'
+        };
+        const IPL_2026_DEFAULT_STANDINGS = [
+            { code: 'MI',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
+            { code: 'CSK',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
+            { code: 'RCB',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
+            { code: 'KKR',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
+            { code: 'DC',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
+            { code: 'PBKS', played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
+            { code: 'RR',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
+            { code: 'SRH',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
+            { code: 'GT',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
+            { code: 'LSG',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 }
+        ];
+
+        function getIPL2026Standings() {
+            try {
+                var stored = localStorage.getItem('ipl2026_standings');
+                if (stored) return JSON.parse(stored);
+            } catch(e) {}
+            return IPL_2026_DEFAULT_STANDINGS.map(function(t) { return Object.assign({}, t); });
+        }
+
+        function saveIPL2026Standings(standings) {
+            try { localStorage.setItem('ipl2026_standings', JSON.stringify(standings)); } catch(e) {}
+        }
+
+        function resetIPL2026Standings() {
+            try { localStorage.removeItem('ipl2026_standings'); } catch(e) {}
+        }
 
         // IPL team name variants → team code mapping (for matching match names to squads)
         const IPL_TEAM_NAME_TO_CODE = {
@@ -2525,7 +2700,7 @@
             socket.on('teamsUpdated', (teams) => { try { state.teams = teams; renderTeams(); } catch(e) { console.error('teamsUpdated render error:', e); } });
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
             socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); renderLiveCategories(); } catch(e) { console.error('playersUpdated render error:', e); } });
-            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; _fantasyDataVersion++; _matchContentCache = {}; renderPointsTable(); var todayTab = document.getElementById('fantasy-today-tab'); if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
+            socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; _fantasyDataVersion++; _matchContentCache = {}; renderPointsTable(); var todayTab = document.getElementById('fantasy-today-tab'); if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers(); var iplTab = document.getElementById('fantasy-ipl-analysis-tab'); if (iplTab && iplTab.style.display !== 'none') renderIPLTeamAnalysis(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
             socket.on('roomPinned', (data) => { try { roomPinned = data.pinned; updatePinButton(); } catch(e) {} });
             socket.on('roomError', (msg) => {
                 showAuctionPopup('Room Error', msg, false);
@@ -3442,6 +3617,7 @@
             document.getElementById('fantasy-match-view-tab').style.display = tab === 'match-view' ? 'block' : 'none';
             document.getElementById('fantasy-today-tab').style.display = tab === 'today' ? 'block' : 'none';
             document.getElementById('fantasy-growth-tab').style.display = tab === 'growth-charts' ? 'block' : 'none';
+            document.getElementById('fantasy-ipl-analysis-tab').style.display = tab === 'ipl-analysis' ? 'block' : 'none';
             if (tab === 'today' && _todayTabRenderedVersion !== _fantasyDataVersion) {
                 renderTodaysPlayers();
                 _todayTabRenderedVersion = _fantasyDataVersion;
@@ -3449,6 +3625,9 @@
             if (tab === 'growth-charts' && _growthTabRenderedVersion !== _fantasyDataVersion) {
                 renderGrowthCharts();
                 _growthTabRenderedVersion = _fantasyDataVersion;
+            }
+            if (tab === 'ipl-analysis' && _iplAnalysisTabRenderedVersion !== _fantasyDataVersion) {
+                renderIPLTeamAnalysis();
             }
         }
 
@@ -3975,6 +4154,371 @@
                 '</div>' +
 
             '</div>';
+        }
+
+        // ============ IPL TEAM ANALYSIS RENDER ============
+        var _iplAnalysisTabRenderedVersion = -1;
+
+        function toggleIPLStandingsEdit() {
+            var form = document.getElementById('ipl-standings-edit-form');
+            if (!form) return;
+            var isOpen = form.classList.contains('open');
+            if (isOpen) {
+                form.classList.remove('open');
+            } else {
+                // Populate form inputs with current standings
+                var standings = getIPL2026Standings();
+                standings.forEach(function(t) {
+                    var row = document.getElementById('se-row-' + t.code);
+                    if (!row) return;
+                    row.querySelector('.se-p').value  = t.played;
+                    row.querySelector('.se-w').value  = t.won;
+                    row.querySelector('.se-l').value  = t.lost;
+                    row.querySelector('.se-nr').value = t.nr;
+                    row.querySelector('.se-pts').value = t.points;
+                    row.querySelector('.se-nrr').value = t.nrr;
+                });
+                form.classList.add('open');
+            }
+        }
+
+        function saveStandingsFromForm() {
+            var standings = getIPL2026Standings();
+            standings.forEach(function(t) {
+                var row = document.getElementById('se-row-' + t.code);
+                if (!row) return;
+                t.played  = parseInt(row.querySelector('.se-p').value)   || 0;
+                t.won     = parseInt(row.querySelector('.se-w').value)    || 0;
+                t.lost    = parseInt(row.querySelector('.se-l').value)    || 0;
+                t.nr      = parseInt(row.querySelector('.se-nr').value)   || 0;
+                t.points  = parseInt(row.querySelector('.se-pts').value)  || 0;
+                t.nrr     = parseFloat(row.querySelector('.se-nrr').value) || 0;
+            });
+            saveIPL2026Standings(standings);
+            var form = document.getElementById('ipl-standings-edit-form');
+            if (form) form.classList.remove('open');
+            renderIPLTeamAnalysis();
+        }
+
+        function resetStandingsToDefault() {
+            if (!confirm('Reset IPL 2026 standings to default (all zeros)? This cannot be undone.')) return;
+            resetIPL2026Standings();
+            var form = document.getElementById('ipl-standings-edit-form');
+            if (form) form.classList.remove('open');
+            renderIPLTeamAnalysis();
+        }
+
+        function toggleParticipantRiskCard(teamId) {
+            var card = document.getElementById('risk-card-' + teamId);
+            if (card) card.classList.toggle('expanded');
+        }
+
+        function renderIPLTeamAnalysis() {
+            var content = document.getElementById('fantasy-ipl-analysis-content');
+            if (!content) return;
+            _iplAnalysisTabRenderedVersion = _fantasyDataVersion;
+
+            var standings = getIPL2026Standings();
+            // Sort by points desc, then NRR desc
+            var sorted = standings.slice().sort(function(a, b) {
+                if (b.points !== a.points) return b.points - a.points;
+                return (b.nrr || 0) - (a.nrr || 0);
+            });
+
+            var totalPlayed = sorted.reduce(function(s, t) { return s + t.played; }, 0);
+            var hasData = totalPlayed > 0;
+
+            // Zone: top-4 = playoff, 5-6 = borderline, 7-10 = eliminated
+            var zones = {};
+            sorted.forEach(function(t, i) {
+                zones[t.code] = i < 4 ? 'playoff' : (i < 6 ? 'borderline' : 'eliminated');
+            });
+
+            // Build player → IPL team mapping from auction state
+            var playerIPLTeam = {};
+            ((state && state.players) || []).forEach(function(p) {
+                if (p.name) playerIPLTeam[p.name] = p.previousTeam || null;
+            });
+
+            // Build participant teams list
+            // Prefer fantasyData.teams (has fantasy points); fallback to state.teams
+            var participantTeams = [];
+            var auctionTeams = fantasyData.teams || [];
+            if (auctionTeams.length > 0) {
+                auctionTeams.forEach(function(ft) {
+                    var players = (ft.playerBreakdowns || []).map(function(p) {
+                        return {
+                            name: p.playerName,
+                            role: p.role || '',
+                            iplTeam: (playerIPLTeam[p.playerName] || p.iplTeam || null),
+                            points: p.totalPoints || 0,
+                            isInBest11: !!p.isInBest11
+                        };
+                    });
+                    participantTeams.push({ id: ft.teamId, name: ft.teamName, ownerName: ft.ownerName || '', players: players, hasPoints: true });
+                });
+            } else if (state && state.teams) {
+                state.teams.forEach(function(t) {
+                    var players = (t.players || []).map(function(p) {
+                        return {
+                            name: p.name,
+                            role: p.role || '',
+                            iplTeam: playerIPLTeam[p.name] || p.previousTeam || null,
+                            points: 0,
+                            isInBest11: false
+                        };
+                    });
+                    participantTeams.push({ id: t.id, name: t.name, ownerName: t.ownerName || '', players: players, hasPoints: false });
+                });
+            }
+
+            // ── IPL Standings Table HTML ──
+            var standingsRows = sorted.map(function(t, i) {
+                var zone = zones[t.code];
+                var color = IPL_TEAM_COLORS[t.code] || '#888';
+                var fullName = IPL_TEAM_FULL_NAMES[t.code] || t.code;
+                var zoneBadge = zone === 'playoff'
+                    ? '<span class="zone-badge playoff">Playoff</span>'
+                    : zone === 'borderline'
+                        ? '<span class="zone-badge borderline">Borderline</span>'
+                        : '<span class="zone-badge eliminated">At Risk</span>';
+                var nrrVal = (t.nrr || 0);
+                var nrrCls = nrrVal > 0 ? 'nrr-pos' : (nrrVal < 0 ? 'nrr-neg' : '');
+                var nrrStr = (nrrVal >= 0 ? '+' : '') + nrrVal.toFixed(3);
+                var separator = (i === 3)
+                    ? '<tr class="ipl-playoffs-divider"><td colspan="8"></td></tr>'
+                    : '';
+                return separator + '<tr class="ipl-standings-row ' + zone + '">' +
+                    '<td class="tc" style="font-weight:700;color:var(--text-secondary);">' + (i+1) + '</td>' +
+                    '<td><div class="ipl-team-name-cell"><span class="ipl-team-dot" style="background:' + color + ';"></span>' + t.code + '<span style="font-size:0.72rem;font-weight:400;color:var(--text-secondary);display:none;" class="team-full-name">' + fullName + '</span></div></td>' +
+                    '<td class="tc">' + t.played + '</td>' +
+                    '<td class="tc" style="color:var(--success);font-weight:600;">' + t.won + '</td>' +
+                    '<td class="tc" style="color:var(--danger);font-weight:600;">' + t.lost + '</td>' +
+                    '<td class="tc">' + t.nr + '</td>' +
+                    '<td class="tc" style="font-weight:800;color:var(--accent);">' + t.points + '</td>' +
+                    '<td class="tc"><span class="' + nrrCls + '">' + nrrStr + '</span></td>' +
+                    '<td>' + zoneBadge + '</td>' +
+                    '</tr>';
+            }).join('');
+
+            // ── Standings edit form rows ──
+            var editRows = sorted.map(function(t) {
+                var color = IPL_TEAM_COLORS[t.code] || '#888';
+                return '<div class="se-team-label" id="se-row-' + t.code + '" style="display:contents;">' +
+                    '<div class="se-team-label"><span class="ipl-team-dot" style="background:' + color + ';"></span>' + t.code + '</div>' +
+                    '<input class="se-input se-p"   type="number" min="0" max="14" value="' + t.played  + '" title="Played">' +
+                    '<input class="se-input se-w"   type="number" min="0" max="14" value="' + t.won     + '" title="Won">' +
+                    '<input class="se-input se-l"   type="number" min="0" max="14" value="' + t.lost    + '" title="Lost">' +
+                    '<input class="se-input se-nr"  type="number" min="0" max="14" value="' + t.nr      + '" title="No Result">' +
+                    '<input class="se-input se-pts" type="number" min="0" max="28" value="' + t.points  + '" title="Points">' +
+                    '<input class="se-input se-nrr" type="text"                    value="' + (t.nrr||0).toFixed(3) + '" title="NRR">' +
+                    '</div>';
+            }).join('');
+
+            // ── Participant Team Risk Analysis ──
+            // For each participant team, compute risk stats
+            function computeRisk(pt) {
+                var safe = [], borderline = [], atRisk = [], unknown = [];
+                (pt.players || []).forEach(function(p) {
+                    var zone = p.iplTeam ? zones[p.iplTeam] : null;
+                    if (zone === 'playoff') safe.push(p);
+                    else if (zone === 'borderline') borderline.push(p);
+                    else if (zone === 'eliminated') atRisk.push(p);
+                    else unknown.push(p);
+                });
+                var total = pt.players.length;
+                var atRiskCount = atRisk.length;
+                var borderlineCount = borderline.length;
+                var safeCount = safe.length;
+                // Weighted risk by fantasy points if available
+                var totalPts = pt.players.reduce(function(s, p) { return s + Math.max(0, p.points); }, 0);
+                var atRiskPts = atRisk.reduce(function(s, p) { return s + Math.max(0, p.points); }, 0);
+                var borderlinePts = borderline.reduce(function(s, p) { return s + Math.max(0, p.points); }, 0);
+                var atRiskPct = total > 0 ? Math.round(atRiskCount / total * 100) : 0;
+                var borderlinePct = total > 0 ? Math.round(borderlineCount / total * 100) : 0;
+                var safePct = total > 0 ? Math.round(safeCount / total * 100) : 0;
+                // Risk level
+                var riskLevel;
+                if (!hasData) {
+                    riskLevel = 'unknown';
+                } else if (atRiskPct >= 50) {
+                    riskLevel = 'high';
+                } else if (atRiskPct >= 25 || (atRiskPct + borderlinePct) >= 50) {
+                    riskLevel = 'medium';
+                } else {
+                    riskLevel = 'low';
+                }
+                return { safe: safe, borderline: borderline, atRisk: atRisk, unknown: unknown,
+                         total: total, atRiskCount: atRiskCount, borderlineCount: borderlineCount, safeCount: safeCount,
+                         atRiskPts: atRiskPts, borderlinePts: borderlinePts, totalPts: totalPts,
+                         atRiskPct: atRiskPct, borderlinePct: borderlinePct, safePct: safePct,
+                         riskLevel: riskLevel };
+            }
+
+            var riskBadgeLabel = { high: '&#9888; High Risk', medium: '&#9888; Medium Risk', low: '&#10003; Low Risk', unknown: 'Pending Data' };
+
+            // Sort participant teams by risk level (high first)
+            var riskOrder = { high: 0, medium: 1, low: 2, unknown: 3 };
+            var ptsSorted = participantTeams.slice().sort(function(a, b) {
+                var ra = computeRisk(a).riskLevel, rb = computeRisk(b).riskLevel;
+                return (riskOrder[ra] || 0) - (riskOrder[rb] || 0);
+            });
+
+            var riskCards = ptsSorted.map(function(pt) {
+                var risk = computeRisk(pt);
+                var ownerLabel = pt.ownerName ? ' &mdash; ' + pt.ownerName : '';
+                var playerCount = risk.total;
+
+                // Group players by IPL team zone for body
+                function groupSection(players, title, zoneClass, color) {
+                    if (!players.length) return '';
+                    // Group by IPL team within the zone
+                    var byTeam = {};
+                    players.forEach(function(p) {
+                        var key = p.iplTeam || 'Unknown';
+                        if (!byTeam[key]) byTeam[key] = [];
+                        byTeam[key].push(p);
+                    });
+                    var teamSections = Object.keys(byTeam).map(function(teamCode) {
+                        var dotColor = IPL_TEAM_COLORS[teamCode] || '#888';
+                        var teamBadge = '<span class="ipl-team-dot" style="background:' + dotColor + ';"></span>';
+                        var teamName = teamCode;
+                        var teamZoneBadge = '<span class="zone-badge ' + zoneClass + '" style="font-size:0.55rem;padding:0.08rem 0.4rem;">' + title + '</span>';
+                        var playerRows = byTeam[teamCode].map(function(p) {
+                            var ptsClass = p.points > 0 ? 'pos' : 'zero';
+                            var ptsDisplay = pt.hasPoints ? '<span class="risk-pts-val ' + ptsClass + '">' + (p.points > 0 ? p.points.toFixed(1) : '—') + ' pts</span>' : '';
+                            return '<div class="risk-player-item">' +
+                                '<div><div class="risk-player-name">' + p.name + '</div>' +
+                                '<div class="risk-player-sub">' + p.role + (p.isInBest11 ? ' · Best XI' : '') + '</div></div>' +
+                                ptsDisplay +
+                                '</div>';
+                        }).join('');
+                        return '<div class="risk-ipl-group">' +
+                            '<div class="risk-ipl-group-header">' + teamBadge + '<span class="risk-ipl-label">' + teamName + '</span>' + teamZoneBadge + '</div>' +
+                            '<div class="risk-player-list">' + playerRows + '</div>' +
+                            '</div>';
+                    }).join('');
+                    return teamSections;
+                }
+
+                var safeSection = groupSection(risk.safe, 'Playoff', 'playoff', '#00c853');
+                var borderlineSection = groupSection(risk.borderline, 'Borderline', 'borderline', '#ff9100');
+                var atRiskSection = groupSection(risk.atRisk, 'At Risk', 'eliminated', '#ff1744');
+                var unknownSection = groupSection(risk.unknown, 'Unknown', 'unknown', '#888');
+
+                // Summary bar
+                var safePct = risk.safePct, blPct = risk.borderlinePct, arPct = risk.atRiskPct;
+                var unknownPct = 100 - safePct - blPct - arPct;
+                var summaryPtsLine = (pt.hasPoints && risk.totalPts > 0)
+                    ? '<div style="margin-top:0.35rem;font-size:0.72rem;color:var(--text-secondary);">' +
+                      'At-risk pts: <strong style="color:var(--danger);">' + risk.atRiskPts.toFixed(1) + '</strong>' +
+                      ' / ' + risk.totalPts.toFixed(1) + ' total (' +
+                      (risk.totalPts > 0 ? Math.round(risk.atRiskPts / risk.totalPts * 100) : 0) + '%)' +
+                      (risk.borderlinePts > 0 ? ' &nbsp;|&nbsp; Borderline pts: <strong style="color:var(--warning);">' + risk.borderlinePts.toFixed(1) + '</strong>' : '') +
+                      '</div>'
+                    : '';
+                var summaryBar = '<div class="risk-summary-bar">' +
+                    '<div class="risk-bar-label">' +
+                    '<span>Player distribution</span>' +
+                    '<span>' + risk.safeCount + ' safe, ' + risk.borderlineCount + ' borderline, ' + risk.atRiskCount + ' at-risk</span>' +
+                    '</div>' +
+                    '<div class="risk-bar-track" style="display:flex;">' +
+                    (safePct > 0 ? '<div class="risk-bar-fill risk-bar-safe" style="width:' + safePct + '%;"></div>' : '') +
+                    (blPct > 0 ? '<div class="risk-bar-fill risk-bar-borderline" style="width:' + blPct + '%;"></div>' : '') +
+                    (arPct > 0 ? '<div class="risk-bar-fill risk-bar-atrisk" style="width:' + arPct + '%;"></div>' : '') +
+                    (unknownPct > 0 ? '<div class="risk-bar-fill" style="width:' + unknownPct + '%;background:rgba(255,255,255,0.08);"></div>' : '') +
+                    '</div>' +
+                    '<div class="risk-legend">' +
+                    '<span><span class="risk-legend-dot" style="background:var(--success);"></span>Playoff-bound (' + safePct + '%)</span>' +
+                    (blPct > 0 ? '<span><span class="risk-legend-dot" style="background:var(--warning);"></span>Borderline (' + blPct + '%)</span>' : '') +
+                    (arPct > 0 ? '<span><span class="risk-legend-dot" style="background:var(--danger);"></span>At risk (' + arPct + '%)</span>' : '') +
+                    '</div>' +
+                    summaryPtsLine +
+                    '</div>';
+
+                return '<div class="participant-risk-card" id="risk-card-' + pt.id + '">' +
+                    '<div class="participant-risk-header" onclick="toggleParticipantRiskCard(\'' + pt.id + '\')">' +
+                        '<div class="participant-risk-info">' +
+                            '<div class="participant-risk-name">' + pt.name + '</div>' +
+                            '<div class="participant-risk-meta">' + ownerLabel.replace(/^ — /, '') + ' &nbsp;·&nbsp; ' + playerCount + ' players</div>' +
+                        '</div>' +
+                        '<span class="risk-badge ' + risk.riskLevel + '">' + riskBadgeLabel[risk.riskLevel] + '</span>' +
+                        '<span class="risk-expand-icon">&#9660;</span>' +
+                    '</div>' +
+                    '<div class="participant-risk-body">' +
+                        summaryBar +
+                        (atRiskSection || borderlineSection || safeSection || unknownSection
+                            ? atRiskSection + borderlineSection + safeSection + unknownSection
+                            : '<p style="color:var(--text-secondary);font-size:0.82rem;padding:0.75rem 0;">No players in this team yet.</p>') +
+                    '</div>' +
+                    '</div>';
+            }).join('');
+
+            var noTeamsMsg = participantTeams.length === 0
+                ? '<div class="ipl-analysis-note" style="text-align:center;padding:2rem;">No participant teams found. Add teams and players to the auction to see the risk analysis.</div>'
+                : '';
+
+            var dataNote = !hasData
+                ? '<div class="ipl-analysis-note">&#8505;&#65039; IPL 2026 standings are not yet updated. Update the standings table below to see accurate playoff risk. ' +
+                  'Risk levels are based on current standings — teams in the <strong>top 4</strong> qualify for playoffs, ' +
+                  '<strong>5th &amp; 6th</strong> are borderline, and <strong>7th–10th</strong> are at risk of missing playoffs.</div>'
+                : '<div class="ipl-analysis-note">&#8505;&#65039; Risk analysis based on current IPL 2026 standings. Teams in <strong>top 4</strong> qualify for playoffs ' +
+                  '(more matches = more points for your players). <strong>5th–6th</strong> are borderline. ' +
+                  '<strong>7th–10th</strong> are at risk of elimination — players from those teams score no playoff bonus points.</div>';
+
+            content.innerHTML =
+                // ── Section: IPL 2026 Standings ──
+                '<div>' +
+                '<div class="ipl-analysis-section-title">' +
+                    '&#127942; IPL 2026 Points Table' +
+                    '<button class="btn-sm-outline" onclick="toggleIPLStandingsEdit()" style="margin-left:auto;">&#9998; Update Standings</button>' +
+                '</div>' +
+                dataNote +
+
+                // Edit form
+                '<div class="standings-edit-form" id="ipl-standings-edit-form">' +
+                    '<div style="font-size:0.8rem;font-weight:700;margin-bottom:0.75rem;color:var(--text-secondary);">Edit IPL 2026 Standings</div>' +
+                    '<div class="standings-edit-grid">' +
+                        '<div class="se-head" style="text-align:left;">Team</div>' +
+                        '<div class="se-head">P</div>' +
+                        '<div class="se-head">W</div>' +
+                        '<div class="se-head">L</div>' +
+                        '<div class="se-head">NR</div>' +
+                        '<div class="se-head">Pts</div>' +
+                        '<div class="se-head">NRR</div>' +
+                        editRows +
+                    '</div>' +
+                    '<div class="standings-edit-actions">' +
+                        '<button class="btn-sm-outline" onclick="resetStandingsToDefault()">Reset</button>' +
+                        '<button class="btn btn-secondary" style="padding:0.35rem 1rem;font-size:0.82rem;" onclick="saveStandingsFromForm()">Save Standings</button>' +
+                    '</div>' +
+                '</div>' +
+
+                // Standings table
+                '<div style="overflow-x:auto;">' +
+                '<table class="ipl-standings-table">' +
+                    '<thead><tr>' +
+                        '<th class="tc">#</th>' +
+                        '<th>Team</th>' +
+                        '<th class="tc">P</th>' +
+                        '<th class="tc" style="color:var(--success);">W</th>' +
+                        '<th class="tc" style="color:var(--danger);">L</th>' +
+                        '<th class="tc">NR</th>' +
+                        '<th class="tc">Pts</th>' +
+                        '<th class="tc">NRR</th>' +
+                        '<th>Zone</th>' +
+                    '</tr></thead>' +
+                    '<tbody>' + standingsRows + '</tbody>' +
+                '</table>' +
+                '</div>' +
+                '</div>' +
+
+                // ── Section: Participant Team Risk Analysis ──
+                '<div>' +
+                '<div class="ipl-analysis-section-title">&#128202; Participant Team Playoff Risk Analysis</div>' +
+                noTeamsMsg +
+                (participantTeams.length > 0 ? '<div class="participant-risk-grid">' + riskCards + '</div>' : '') +
+                '</div>';
         }
 
         var _matchTabsRenderedVersion = -1;
