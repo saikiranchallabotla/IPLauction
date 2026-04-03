@@ -313,16 +313,15 @@ function startNextMatchWatcher() {
     nextMatchWatcherTimer = setInterval(() => {
         if (!fantasyCache?.schedule?.length) return;
         if (liveMatchTimer) return; // already in live refresh mode
-        const IST_OFFSET = 5.5 * 60 * 60 * 1000;
-        const nowIST = new Date(Date.now() + IST_OFFSET);
+        const nowMs = Date.now(); // UTC ms — matchDate is stored as UTC ISO string, so compare directly
         const schedule = fantasyCache.schedule;
         // Check if any scheduled match's start time is within the last 4 hours and we have no live match
         const hasLive = (fantasyCache?.matches || []).some(m => m.status === 'live');
         if (hasLive) return;
         const recentlyStarted = schedule.some(s => {
             if (!s.matchDate) return false;
-            const matchTime = new Date(s.matchDate);
-            const diffMs = nowIST - matchTime;
+            const matchTimeMs = new Date(s.matchDate).getTime(); // UTC
+            const diffMs = nowMs - matchTimeMs; // both UTC — accurate difference
             // Match was supposed to start in the last 4 hours
             return diffMs > 0 && diffMs < 4 * 60 * 60 * 1000;
         });
@@ -1441,16 +1440,33 @@ async function fetchFromIPLFantasyPublic() {
                 if (entry.status === 'live') {
                     console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} is live but has 0 points (toss/match start) — including as live`);
                     // Fall through to add as 'live' below
-                } else {
-                    // Match has players but no points — it hasn't been played in the CURRENT season.
-                    // Stop probing immediately: IPL matches are sequential, so if match N is unplayed,
-                    // match N+1 can't have been played either. Any data returned for subsequent gameday
-                    // IDs would be stale from a prior IPL season (same IDs are reused across seasons).
-                    if (useProbing) {
+                } else if (useProbing) {
+                    // In probing mode, distinguish "match just started (0 pts so far)" from "match not yet played".
+                    // Check if any scheduled match should currently be in progress based on real-world time.
+                    // allFixturesForSchedule contains dates from tour-fixtures or IPL Stats fallback (always UTC ISO).
+                    const nowMs = Date.now();
+                    const scheduleToCheck = allFixturesForSchedule.length > 0
+                        ? allFixturesForSchedule
+                        : (fantasyCache?.schedule || []);
+                    const matchInProgress = scheduleToCheck.some(s => {
+                        if (!s.matchDate) return false;
+                        const startMs = new Date(s.matchDate).getTime();
+                        const elapsed = nowMs - startMs;
+                        // Match started within the last 5 hours (covers toss through end + delays)
+                        return elapsed > 0 && elapsed < 5 * 60 * 60 * 1000;
+                    });
+                    if (matchInProgress) {
+                        console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} has 0 points but a match is in progress now — including as live`);
+                        // Fall through to add as 'live' below (status set at line ~1496 for new probed matches)
+                    } else {
+                        // Match has players but no points and no current match window — it hasn't been played
+                        // in the CURRENT season. Stop probing: if match N is unplayed, match N+1 can't have
+                        // been played either. Any subsequent data would be stale from a prior IPL season.
                         hitUnplayedBoundary = true;
                         console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} has players but 0 points (unplayed in IPL ${IPL_SEASON_YEAR}) — stopping probe to avoid prior season data`);
                         break;
                     }
+                } else {
                     consecutiveNoPoints++;
                     continue;
                 }
