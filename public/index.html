@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --primary: #1a237e;
@@ -1868,6 +1869,7 @@
                     <button class="tab active" onclick="showFantasyTab('leaderboard', this)">Points Table</button>
                     <button class="tab" onclick="showFantasyTab('match-view', this)">Match-by-Match</button>
                     <button class="tab" onclick="showFantasyTab('today', this)">&#127951; Match Day Players</button>
+                    <button class="tab" onclick="showFantasyTab('growth-charts', this)">&#128200; Growth Charts</button>
                 </div>
 
                 <div id="fantasy-leaderboard-tab">
@@ -1889,6 +1891,12 @@
                     <div id="fantasy-today-match-banner" style="margin-bottom: 1rem;"></div>
                     <div id="fantasy-today-content">
                         <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading today's match data...</p>
+                    </div>
+                </div>
+
+                <div id="fantasy-growth-tab" style="display: none;">
+                    <div id="fantasy-growth-content">
+                        <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading growth charts...</p>
                     </div>
                 </div>
             </div>
@@ -3426,16 +3434,238 @@
         }
 
         var _todayTabRenderedVersion = -1;
+        var _growthTabRenderedVersion = -1;
         function showFantasyTab(tab, btn) {
             btn.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById('fantasy-leaderboard-tab').style.display = tab === 'leaderboard' ? 'block' : 'none';
             document.getElementById('fantasy-match-view-tab').style.display = tab === 'match-view' ? 'block' : 'none';
             document.getElementById('fantasy-today-tab').style.display = tab === 'today' ? 'block' : 'none';
+            document.getElementById('fantasy-growth-tab').style.display = tab === 'growth-charts' ? 'block' : 'none';
             if (tab === 'today' && _todayTabRenderedVersion !== _fantasyDataVersion) {
                 renderTodaysPlayers();
                 _todayTabRenderedVersion = _fantasyDataVersion;
             }
+            if (tab === 'growth-charts' && _growthTabRenderedVersion !== _fantasyDataVersion) {
+                renderGrowthCharts();
+                _growthTabRenderedVersion = _fantasyDataVersion;
+            }
+        }
+
+        var _growthChartInstances = [];
+        var GROWTH_CHART_COLORS = [
+            '#f5c518','#ef5350','#42a5f5','#66bb6a','#ab47bc',
+            '#ff7043','#26c6da','#ec407a','#ffca28','#78909c',
+            '#a5d6a7','#90caf9','#ce93d8','#ffab91','#80cbc4'
+        ];
+
+        function renderGrowthCharts() {
+            var content = document.getElementById('fantasy-growth-content');
+            if (!content) return;
+
+            // Destroy previous chart instances
+            _growthChartInstances.forEach(function(c) { try { c.destroy(); } catch(e) {} });
+            _growthChartInstances = [];
+
+            if (!fantasyData || !fantasyData.matches) {
+                content.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-secondary);"><p>No match data available yet.</p></div>';
+                return;
+            }
+
+            var matches = (fantasyData.matches || []).slice().sort(function(a, b) {
+                return new Date(a.matchDate) - new Date(b.matchDate);
+            });
+            var teams = fantasyData.teams || [];
+
+            if (matches.length === 0 || teams.length === 0) {
+                content.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-secondary);"><p>No match or team data available yet.</p></div>';
+                return;
+            }
+
+            var matchLabels = matches.map(function(m, i) { return 'M' + (i + 1); });
+            var matchFullLabels = matches.map(function(m) { return m.matchName || ''; });
+
+            // Pre-compute per-team, per-match Best XI points
+            var teamMatchPoints = teams.map(function(team) {
+                return matches.map(function(match) {
+                    var pts = (team.playerBreakdowns || [])
+                        .filter(function(p) { return p.isInBest11; })
+                        .reduce(function(sum, p) {
+                            var mp = (p.matchPoints || []).find(function(x) { return x.matchId === match.matchId; });
+                            return sum + (mp ? mp.points : 0);
+                        }, 0);
+                    return parseFloat(pts.toFixed(1));
+                });
+            });
+
+            // Build cumulative datasets
+            var cumulativeDatasets = teams.map(function(team, idx) {
+                var cum = 0;
+                return {
+                    label: team.teamName + (team.ownerName ? ' (' + team.ownerName + ')' : ''),
+                    data: teamMatchPoints[idx].map(function(p) { cum += p; return parseFloat(cum.toFixed(1)); }),
+                    borderColor: GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length],
+                    backgroundColor: GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length] + '22',
+                    borderWidth: 2.5,
+                    pointRadius: 4,
+                    pointHoverRadius: 7,
+                    tension: 0.35,
+                    fill: false
+                };
+            });
+
+            // Build per-match grouped bar datasets
+            var perMatchDatasets = teams.map(function(team, idx) {
+                return {
+                    label: team.teamName + (team.ownerName ? ' (' + team.ownerName + ')' : ''),
+                    data: teamMatchPoints[idx],
+                    backgroundColor: GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length] + 'bb',
+                    borderColor: GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length],
+                    borderWidth: 1,
+                    borderRadius: 4
+                };
+            });
+
+            var chartDefaults = {
+                legend: { position: 'bottom', labels: { color: '#c0c0c0', usePointStyle: true, padding: 14, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        title: function(items) {
+                            var i = items[0].dataIndex;
+                            return matchFullLabels[i] || matchLabels[i];
+                        }
+                    }
+                }
+            };
+            var scaleDefaults = {
+                x: { ticks: { color: '#9e9e9e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: '#9e9e9e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.08)' } }
+            };
+
+            // Build individual team card HTML
+            var teamCardsHtml = teams.map(function(team, idx) {
+                var color = GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length];
+                return '<div style="background:var(--glass);border-radius:12px;padding:1rem;border:1px solid var(--border);border-top:3px solid ' + color + ';">' +
+                    '<div style="font-weight:700;font-size:0.9rem;color:var(--text);margin-bottom:0.15rem;">' + team.teamName + '</div>' +
+                    (team.ownerName ? '<div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem;">' + team.ownerName + '</div>' : '<div style="margin-bottom:0.75rem;"></div>') +
+                    '<canvas id="growth-team-' + team.teamId + '-chart" style="max-height:150px;"></canvas>' +
+                    '</div>';
+            }).join('');
+
+            content.innerHTML =
+                '<div style="margin-bottom:2rem;">' +
+                    '<h4 style="color:var(--accent);margin-bottom:0.35rem;font-size:1rem;font-weight:700;">Cumulative Points Growth</h4>' +
+                    '<p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:1rem;">Total points accumulated by each team across matches (Best XI)</p>' +
+                    '<div style="position:relative;background:var(--glass);border-radius:12px;padding:1.25rem 1rem;border:1px solid var(--border);">' +
+                        '<canvas id="growth-cumulative-chart"></canvas>' +
+                    '</div>' +
+                '</div>' +
+                '<div style="margin-bottom:2rem;">' +
+                    '<h4 style="color:var(--accent);margin-bottom:0.35rem;font-size:1rem;font-weight:700;">Match-by-Match Points Comparison</h4>' +
+                    '<p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:1rem;">Points scored per match — all teams clubbed with colour-coded bars</p>' +
+                    '<div style="position:relative;background:var(--glass);border-radius:12px;padding:1.25rem 1rem;border:1px solid var(--border);">' +
+                        '<canvas id="growth-per-match-chart"></canvas>' +
+                    '</div>' +
+                '</div>' +
+                '<div>' +
+                    '<h4 style="color:var(--accent);margin-bottom:1rem;font-size:1rem;font-weight:700;">Individual Team Growth</h4>' +
+                    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:1rem;">' +
+                        teamCardsHtml +
+                    '</div>' +
+                '</div>';
+
+            // Render cumulative line chart
+            var ctx1 = document.getElementById('growth-cumulative-chart');
+            if (ctx1) {
+                var c1 = new Chart(ctx1.getContext('2d'), {
+                    type: 'line',
+                    data: { labels: matchLabels, datasets: cumulativeDatasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: chartDefaults,
+                        scales: Object.assign({}, scaleDefaults, {
+                            y: Object.assign({}, scaleDefaults.y, {
+                                title: { display: true, text: 'Cumulative Points', color: '#9e9e9e', font: { size: 11 } }
+                            })
+                        })
+                    }
+                });
+                _growthChartInstances.push(c1);
+            }
+
+            // Render per-match grouped bar chart
+            var ctx2 = document.getElementById('growth-per-match-chart');
+            if (ctx2) {
+                var c2 = new Chart(ctx2.getContext('2d'), {
+                    type: 'bar',
+                    data: { labels: matchLabels, datasets: perMatchDatasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: chartDefaults,
+                        scales: scaleDefaults
+                    }
+                });
+                _growthChartInstances.push(c2);
+            }
+
+            // Render individual team charts
+            teams.forEach(function(team, idx) {
+                var el = document.getElementById('growth-team-' + team.teamId + '-chart');
+                if (!el) return;
+                var color = GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length];
+                var cum = 0;
+                var cumData = teamMatchPoints[idx].map(function(p) { cum += p; return parseFloat(cum.toFixed(1)); });
+                var c = new Chart(el.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: matchLabels,
+                        datasets: [
+                            {
+                                label: 'Match Pts',
+                                data: teamMatchPoints[idx],
+                                backgroundColor: color + '99',
+                                borderColor: color,
+                                borderWidth: 1,
+                                borderRadius: 3,
+                                order: 2
+                            },
+                            {
+                                label: 'Cumulative',
+                                data: cumData,
+                                type: 'line',
+                                borderColor: color,
+                                backgroundColor: 'transparent',
+                                borderWidth: 2,
+                                pointRadius: 3,
+                                tension: 0.3,
+                                order: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: { labels: { color: '#c0c0c0', font: { size: 10 }, usePointStyle: true } },
+                            tooltip: {
+                                callbacks: {
+                                    title: function(items) {
+                                        var i = items[0].dataIndex;
+                                        return matchFullLabels[i] || matchLabels[i];
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { ticks: { color: '#9e9e9e', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                            y: { ticks: { color: '#9e9e9e', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' } }
+                        }
+                    }
+                });
+                _growthChartInstances.push(c);
+            });
         }
 
         var _matchTabsRenderedVersion = -1;
