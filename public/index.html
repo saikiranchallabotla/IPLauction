@@ -3453,11 +3453,32 @@
         }
 
         var _growthChartInstances = [];
+        // Vibrant IPL-inspired distinct colours — one per fantasy team
         var GROWTH_CHART_COLORS = [
-            '#f5c518','#ef5350','#42a5f5','#66bb6a','#ab47bc',
-            '#ff7043','#26c6da','#ec407a','#ffca28','#78909c',
-            '#a5d6a7','#90caf9','#ce93d8','#ffab91','#80cbc4'
+            '#FFD700', // Gold
+            '#00BFFF', // Deep Sky Blue
+            '#FF4560', // Vivid Red
+            '#BF5FFF', // Violet
+            '#00E5CC', // Teal
+            '#FF7043', // Deep Orange
+            '#FF1493', // Hot Pink
+            '#29B6F6', // Light Blue
+            '#69F0AE', // Mint Green
+            '#FF80AB', // Pink
+            '#FFCA28', // Amber
+            '#EF5350', // Red
+            '#40C4FF', // Sky Blue
+            '#B39DDB', // Lavender
+            '#CCFF90'  // Lime
         ];
+
+        function _makeGradient(ctx, color, height) {
+            var grad = ctx.createLinearGradient(0, 0, 0, height || 300);
+            grad.addColorStop(0, color + 'AA');
+            grad.addColorStop(0.6, color + '44');
+            grad.addColorStop(1, color + '00');
+            return grad;
+        }
 
         function renderGrowthCharts() {
             var content = document.getElementById('fantasy-growth-content');
@@ -3498,95 +3519,133 @@
                 });
             });
 
-            // Build cumulative datasets
-            var cumulativeDatasets = teams.map(function(team, idx) {
-                var cum = 0;
-                return {
-                    label: team.teamName + (team.ownerName ? ' (' + team.ownerName + ')' : ''),
-                    data: teamMatchPoints[idx].map(function(p) { cum += p; return parseFloat(cum.toFixed(1)); }),
-                    borderColor: GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length],
-                    backgroundColor: GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length] + '22',
-                    borderWidth: 2.5,
-                    pointRadius: 4,
-                    pointHoverRadius: 7,
-                    tension: 0.35,
-                    fill: false
-                };
-            });
-
-            // Build per-match grouped bar datasets
-            var perMatchDatasets = teams.map(function(team, idx) {
-                return {
-                    label: team.teamName + (team.ownerName ? ' (' + team.ownerName + ')' : ''),
-                    data: teamMatchPoints[idx],
-                    backgroundColor: GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length] + 'bb',
-                    borderColor: GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length],
-                    borderWidth: 1,
-                    borderRadius: 4
-                };
-            });
-
-            var chartDefaults = {
-                legend: { position: 'bottom', labels: { color: '#c0c0c0', usePointStyle: true, padding: 14, font: { size: 11 } } },
-                tooltip: {
-                    callbacks: {
-                        title: function(items) {
-                            var i = items[0].dataIndex;
-                            return matchFullLabels[i] || matchLabels[i];
-                        }
+            // ── Shared chart style helpers ──────────────────────────────────
+            var tooltipDefaults = {
+                backgroundColor: 'rgba(15,20,36,0.95)',
+                titleColor: '#ffffff',
+                bodyColor: '#d0d0d0',
+                borderColor: 'rgba(255,255,255,0.15)',
+                borderWidth: 1,
+                padding: 10,
+                cornerRadius: 8,
+                callbacks: {
+                    title: function(items) {
+                        var i = items[0].dataIndex;
+                        return matchFullLabels[i] || matchLabels[i];
                     }
                 }
             };
+            var legendDefaults = {
+                position: 'bottom',
+                labels: {
+                    color: '#d8d8d8',
+                    usePointStyle: true,
+                    pointStyleWidth: 10,
+                    padding: 18,
+                    font: { size: 11.5, weight: '600' }
+                }
+            };
             var scaleDefaults = {
-                x: { ticks: { color: '#9e9e9e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                y: { ticks: { color: '#9e9e9e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.08)' } }
+                x: {
+                    ticks: { color: '#b0b0b0', font: { size: 11 } },
+                    grid: { color: 'rgba(255,255,255,0.07)', lineWidth: 1 },
+                    border: { color: 'rgba(255,255,255,0.1)' }
+                },
+                y: {
+                    ticks: { color: '#b0b0b0', font: { size: 11 } },
+                    grid: { color: 'rgba(255,255,255,0.1)', lineWidth: 1 },
+                    border: { color: 'rgba(255,255,255,0.1)' }
+                }
             };
 
-            // Build individual team card HTML
+            var completedMatches = matches.filter(function(m) { return m.status === 'completed'; });
+            var analysisHtml = completedMatches.length >= 1 ? buildAnalysisHTML(teams, teamMatchPoints, matches) : '';
+
+            // ── Build individual team card HTML first (so canvases exist in DOM) ──
             var teamCardsHtml = teams.map(function(team, idx) {
                 var color = GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length];
-                return '<div style="background:var(--glass);border-radius:12px;padding:1rem;border:1px solid var(--border);border-top:3px solid ' + color + ';">' +
-                    '<div style="font-weight:700;font-size:0.9rem;color:var(--text);margin-bottom:0.15rem;">' + team.teamName + '</div>' +
-                    (team.ownerName ? '<div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem;">' + team.ownerName + '</div>' : '<div style="margin-bottom:0.75rem;"></div>') +
-                    '<canvas id="growth-team-' + team.teamId + '-chart" style="max-height:150px;"></canvas>' +
+                return '<div style="background:rgba(255,255,255,0.06);border-radius:14px;padding:1rem 1rem 0.75rem;border:1px solid rgba(255,255,255,0.12);box-shadow:0 4px 20px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.07);overflow:hidden;position:relative;">' +
+                    '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,' + color + ',' + color + '88);border-radius:14px 14px 0 0;"></div>' +
+                    '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.1rem;">' +
+                        '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + color + ';box-shadow:0 0 6px ' + color + ';flex-shrink:0;"></span>' +
+                        '<div style="font-weight:700;font-size:0.88rem;color:#f0f0f0;">' + team.teamName + '</div>' +
+                    '</div>' +
+                    (team.ownerName ? '<div style="font-size:0.72rem;color:#8a95aa;margin-bottom:0.65rem;padding-left:1.3rem;">' + team.ownerName + '</div>' : '<div style="margin-bottom:0.65rem;"></div>') +
+                    '<canvas id="growth-team-' + team.teamId + '-chart" style="max-height:160px;"></canvas>' +
                     '</div>';
             }).join('');
 
-            content.innerHTML =
-                '<div style="margin-bottom:2rem;">' +
-                    '<h4 style="color:var(--accent);margin-bottom:0.35rem;font-size:1rem;font-weight:700;">Cumulative Points Growth</h4>' +
-                    '<p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:1rem;">Total points accumulated by each team across matches (Best XI)</p>' +
-                    '<div style="position:relative;background:var(--glass);border-radius:12px;padding:1.25rem 1rem;border:1px solid var(--border);">' +
+            // Chart container style helper
+            var chartBox = 'position:relative;background:rgba(255,255,255,0.06);border-radius:16px;padding:1.5rem 1.25rem 1rem;border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.08);backdrop-filter:blur(4px);';
+
+            content.innerHTML = analysisHtml +
+                '<div style="margin-bottom:2.25rem;">' +
+                    '<div style="display:flex;align-items:baseline;gap:0.6rem;margin-bottom:0.3rem;">' +
+                        '<span style="font-size:1.1rem;">📈</span>' +
+                        '<h4 style="background:linear-gradient(135deg,#FFD700,#FFA500);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;font-size:1.05rem;font-weight:800;letter-spacing:0.01em;">Cumulative Points Growth</h4>' +
+                    '</div>' +
+                    '<p style="font-size:0.8rem;color:#8a95aa;margin-bottom:1rem;padding-left:1.7rem;">Total points accumulated by each team across matches (Best XI)</p>' +
+                    '<div style="' + chartBox + '">' +
                         '<canvas id="growth-cumulative-chart"></canvas>' +
                     '</div>' +
                 '</div>' +
-                '<div style="margin-bottom:2rem;">' +
-                    '<h4 style="color:var(--accent);margin-bottom:0.35rem;font-size:1rem;font-weight:700;">Match-by-Match Points Comparison</h4>' +
-                    '<p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:1rem;">Points scored per match — all teams clubbed with colour-coded bars</p>' +
-                    '<div style="position:relative;background:var(--glass);border-radius:12px;padding:1.25rem 1rem;border:1px solid var(--border);">' +
+                '<div style="margin-bottom:2.25rem;">' +
+                    '<div style="display:flex;align-items:baseline;gap:0.6rem;margin-bottom:0.3rem;">' +
+                        '<span style="font-size:1.1rem;">📊</span>' +
+                        '<h4 style="background:linear-gradient(135deg,#00BFFF,#00E5CC);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;font-size:1.05rem;font-weight:800;letter-spacing:0.01em;">Match-by-Match Points Comparison</h4>' +
+                    '</div>' +
+                    '<p style="font-size:0.8rem;color:#8a95aa;margin-bottom:1rem;padding-left:1.7rem;">Points scored per match — all teams with colour-coded bars</p>' +
+                    '<div style="' + chartBox + '">' +
                         '<canvas id="growth-per-match-chart"></canvas>' +
                     '</div>' +
                 '</div>' +
                 '<div>' +
-                    '<h4 style="color:var(--accent);margin-bottom:1rem;font-size:1rem;font-weight:700;">Individual Team Growth</h4>' +
+                    '<div style="display:flex;align-items:baseline;gap:0.6rem;margin-bottom:1rem;">' +
+                        '<span style="font-size:1.1rem;">🏆</span>' +
+                        '<h4 style="background:linear-gradient(135deg,#BF5FFF,#FF80AB);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;font-size:1.05rem;font-weight:800;letter-spacing:0.01em;">Individual Team Growth</h4>' +
+                    '</div>' +
                     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:1rem;">' +
                         teamCardsHtml +
                     '</div>' +
                 '</div>';
 
-            // Render cumulative line chart
+            // ── Cumulative line chart (with canvas gradients) ──────────────
             var ctx1 = document.getElementById('growth-cumulative-chart');
             if (ctx1) {
-                var c1 = new Chart(ctx1.getContext('2d'), {
+                var gradCtx1 = ctx1.getContext('2d');
+                var cumulativeDatasets = teams.map(function(team, idx) {
+                    var color = GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length];
+                    var cum = 0;
+                    return {
+                        label: team.teamName + (team.ownerName ? ' (' + team.ownerName + ')' : ''),
+                        data: teamMatchPoints[idx].map(function(p) { cum += p; return parseFloat(cum.toFixed(1)); }),
+                        borderColor: color,
+                        backgroundColor: _makeGradient(gradCtx1, color, 320),
+                        borderWidth: 2.5,
+                        pointRadius: 4,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: color,
+                        pointBorderColor: '#0f1420',
+                        pointBorderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    };
+                });
+                var c1 = new Chart(gradCtx1, {
                     type: 'line',
                     data: { labels: matchLabels, datasets: cumulativeDatasets },
                     options: {
                         responsive: true,
                         maintainAspectRatio: true,
-                        plugins: chartDefaults,
+                        interaction: { mode: 'index', intersect: false },
+                        animation: { duration: 800, easing: 'easeInOutQuart' },
+                        plugins: {
+                            legend: legendDefaults,
+                            tooltip: tooltipDefaults
+                        },
                         scales: Object.assign({}, scaleDefaults, {
                             y: Object.assign({}, scaleDefaults.y, {
-                                title: { display: true, text: 'Cumulative Points', color: '#9e9e9e', font: { size: 11 } }
+                                title: { display: true, text: 'Cumulative Points', color: '#b0b0b0', font: { size: 11 } }
                             })
                         })
                     }
@@ -3594,30 +3653,54 @@
                 _growthChartInstances.push(c1);
             }
 
-            // Render per-match grouped bar chart
+            // ── Per-match grouped bar chart ────────────────────────────────
             var ctx2 = document.getElementById('growth-per-match-chart');
             if (ctx2) {
+                var perMatchDatasets = teams.map(function(team, idx) {
+                    var color = GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length];
+                    return {
+                        label: team.teamName + (team.ownerName ? ' (' + team.ownerName + ')' : ''),
+                        data: teamMatchPoints[idx],
+                        backgroundColor: color + 'CC',
+                        borderColor: color,
+                        borderWidth: 1.5,
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        hoverBackgroundColor: color,
+                        hoverBorderColor: '#ffffff44',
+                        hoverBorderWidth: 2
+                    };
+                });
                 var c2 = new Chart(ctx2.getContext('2d'), {
                     type: 'bar',
                     data: { labels: matchLabels, datasets: perMatchDatasets },
                     options: {
                         responsive: true,
                         maintainAspectRatio: true,
-                        plugins: chartDefaults,
+                        interaction: { mode: 'index', intersect: false },
+                        animation: { duration: 700, easing: 'easeOutQuart' },
+                        plugins: {
+                            legend: legendDefaults,
+                            tooltip: tooltipDefaults
+                        },
                         scales: scaleDefaults
                     }
                 });
                 _growthChartInstances.push(c2);
             }
 
-            // Render individual team charts
+            // ── Individual team mini charts ────────────────────────────────
             teams.forEach(function(team, idx) {
                 var el = document.getElementById('growth-team-' + team.teamId + '-chart');
                 if (!el) return;
                 var color = GROWTH_CHART_COLORS[idx % GROWTH_CHART_COLORS.length];
+                var miniCtx = el.getContext('2d');
                 var cum = 0;
                 var cumData = teamMatchPoints[idx].map(function(p) { cum += p; return parseFloat(cum.toFixed(1)); });
-                var c = new Chart(el.getContext('2d'), {
+                var miniGrad = miniCtx.createLinearGradient(0, 0, 0, 160);
+                miniGrad.addColorStop(0, color + '88');
+                miniGrad.addColorStop(1, color + '11');
+                var c = new Chart(miniCtx, {
                     type: 'bar',
                     data: {
                         labels: matchLabels,
@@ -3625,10 +3708,11 @@
                             {
                                 label: 'Match Pts',
                                 data: teamMatchPoints[idx],
-                                backgroundColor: color + '99',
+                                backgroundColor: color + 'AA',
                                 borderColor: color,
-                                borderWidth: 1,
-                                borderRadius: 3,
+                                borderWidth: 1.5,
+                                borderRadius: 4,
+                                borderSkipped: false,
                                 order: 2
                             },
                             {
@@ -3636,10 +3720,14 @@
                                 data: cumData,
                                 type: 'line',
                                 borderColor: color,
-                                backgroundColor: 'transparent',
+                                backgroundColor: miniGrad,
                                 borderWidth: 2,
                                 pointRadius: 3,
-                                tension: 0.3,
+                                pointBackgroundColor: color,
+                                pointBorderColor: '#0f1420',
+                                pointBorderWidth: 1.5,
+                                tension: 0.35,
+                                fill: true,
                                 order: 1
                             }
                         ]
@@ -3647,9 +3735,15 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: true,
+                        animation: { duration: 600 },
+                        interaction: { mode: 'index', intersect: false },
                         plugins: {
-                            legend: { labels: { color: '#c0c0c0', font: { size: 10 }, usePointStyle: true } },
+                            legend: { labels: { color: '#d0d0d0', font: { size: 10, weight: '600' }, usePointStyle: true, padding: 10 } },
                             tooltip: {
+                                backgroundColor: 'rgba(15,20,36,0.95)',
+                                titleColor: '#fff',
+                                bodyColor: '#ccc',
+                                cornerRadius: 8,
                                 callbacks: {
                                     title: function(items) {
                                         var i = items[0].dataIndex;
@@ -3659,13 +3753,229 @@
                             }
                         },
                         scales: {
-                            x: { ticks: { color: '#9e9e9e', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                            y: { ticks: { color: '#9e9e9e', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' } }
+                            x: { ticks: { color: '#a0a0a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' }, border: { color: 'rgba(255,255,255,0.08)' } },
+                            y: { ticks: { color: '#a0a0a0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.08)' }, border: { color: 'rgba(255,255,255,0.08)' } }
                         }
                     }
                 });
                 _growthChartInstances.push(c);
             });
+        }
+
+        // ── Helper: convert hex colour to "r,g,b" for rgba() ──────────────────
+        function hexToRgb(hex) {
+            hex = hex.replace('#', '');
+            if (hex.length === 3) hex = hex.split('').map(function(c) { return c + c; }).join('');
+            return parseInt(hex.substring(0,2),16) + ',' + parseInt(hex.substring(2,4),16) + ',' + parseInt(hex.substring(4,6),16);
+        }
+
+        // ── Daily analysis report + winner prediction ───────────────────────
+        function buildAnalysisHTML(teams, teamMatchPoints, matches) {
+            if (!teams.length || !matches.length) return '';
+
+            var today = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            var completedMatches = matches.filter(function(m) { return m.status === 'completed'; });
+            var N = Math.min(3, completedMatches.length);
+
+            // Indices of completed matches in the sorted `matches` array
+            var completedIdx = [];
+            matches.forEach(function(m, i) { if (m.status === 'completed') completedIdx.push(i); });
+
+            // ── Per-team stats ──────────────────────────────────────────────
+            var teamStats = teams.map(function(team, idx) {
+                var pts = teamMatchPoints[idx];
+                var totalPts = team.totalPoints || 0;
+
+                var recentIdx = completedIdx.slice(-N);
+                var recentPts = recentIdx.map(function(i) { return pts[i] || 0; });
+                var recentAvg = recentPts.length ? recentPts.reduce(function(s,p){return s+p;},0)/recentPts.length : 0;
+
+                var allPts = completedIdx.map(function(i) { return pts[i] || 0; });
+                var overallAvg = allPts.length ? allPts.reduce(function(s,p){return s+p;},0)/allPts.length : 0;
+
+                var variance = allPts.length > 1
+                    ? allPts.reduce(function(s,p){return s+Math.pow(p-overallAvg,2);},0)/allPts.length : 0;
+                var stddev = Math.sqrt(variance);
+
+                var trend = recentAvg > overallAvg + 5 ? 'up' : recentAvg < overallAvg - 5 ? 'down' : 'stable';
+
+                var bestPlayer = null, bestPts = -1;
+                (team.playerBreakdowns||[]).forEach(function(p) {
+                    if (p.totalPoints > bestPts) { bestPts = p.totalPoints; bestPlayer = p; }
+                });
+
+                return { team:team, idx:idx, totalPts:totalPts, recentPts:recentPts,
+                         recentAvg:recentAvg, overallAvg:overallAvg, stddev:stddev,
+                         trend:trend, bestPlayer:bestPlayer, bestPts:bestPts };
+            });
+
+            // ── Prediction scores ───────────────────────────────────────────
+            var maxTotal  = Math.max.apply(null, teamStats.map(function(s){return s.totalPts;}))||1;
+            var maxRecent = Math.max.apply(null, teamStats.map(function(s){return s.recentAvg;}))||1;
+            var maxStd    = Math.max.apply(null, teamStats.map(function(s){return s.stddev;}))||1;
+
+            teamStats.forEach(function(s) {
+                s.predScore = (s.totalPts/maxTotal)*0.45 + (s.recentAvg/maxRecent)*0.35 + (1-(s.stddev/maxStd))*0.20;
+            });
+
+            var ranked = teamStats.slice().sort(function(a,b){return b.predScore-a.predScore;});
+            var scoreSum = ranked.reduce(function(s,r){return s+r.predScore;},0)||1;
+            ranked.forEach(function(r){ r.predPct = Math.max(1, Math.round((r.predScore/scoreSum)*100)); });
+
+            var winner = ranked[0];
+            var winnerColor = GROWTH_CHART_COLORS[winner.idx % GROWTH_CHART_COLORS.length];
+
+            // ── Utility helpers ─────────────────────────────────────────────
+            function ti(t){ return t==='up'?'▲':t==='down'?'▼':'●'; }
+            function tc(t){ return t==='up'?'#69F0AE':t==='down'?'#FF4560':'#FFD700'; }
+
+            // ── Key insights ────────────────────────────────────────────────
+            var mostConsistent = teamStats.slice().sort(function(a,b){return a.stddev-b.stddev;})[0];
+            var mostImproved   = teamStats.slice().sort(function(a,b){return (b.recentAvg-b.overallAvg)-(a.recentAvg-a.overallAvg);})[0];
+            var declining      = teamStats.slice().sort(function(a,b){return (a.recentAvg-a.overallAvg)-(b.recentAvg-b.overallAvg);})[0];
+            var mvpStat        = teamStats.slice().sort(function(a,b){return b.bestPts-a.bestPts;})[0];
+
+            var insights = [];
+            insights.push({ icon:'🎯', text:'<strong>'+mostConsistent.team.teamName+'</strong> is the most consistent side — lowest scoring variance across all matches.' });
+            if (mostImproved.recentAvg > mostImproved.overallAvg + 3)
+                insights.push({ icon:'🚀', text:'<strong>'+mostImproved.team.teamName+'</strong> is surging — recent avg of <strong>'+mostImproved.recentAvg.toFixed(1)+'</strong> pts vs overall avg of '+mostImproved.overallAvg.toFixed(1)+'. Best team in current form!' });
+            if (declining !== mostImproved && declining.recentAvg < declining.overallAvg - 5 && declining.recentAvg > 0)
+                insights.push({ icon:'⚠️', text:'<strong>'+declining.team.teamName+'</strong> has been under-performing recently ('+declining.recentAvg.toFixed(1)+' vs '+declining.overallAvg.toFixed(1)+' overall). Needs a strong bounce-back.' });
+            var gap = ranked[0].totalPts - ((ranked[1]||{}).totalPts||0);
+            if (gap > 0) insights.push({ icon:'👑', text:'<strong>'+ranked[0].team.teamName+'</strong> leads by <strong>'+gap.toFixed(1)+'&nbsp;pts</strong> over '+((ranked[1]||{team:{teamName:'the rest'}}).team.teamName)+'. '+(gap>50?'A commanding lead — the race may be over.':'Still within catching range — every match counts!') });
+            if (mvpStat.bestPlayer) insights.push({ icon:'⭐', text:'Fantasy MVP: <strong>'+mvpStat.bestPlayer.playerName+'</strong> ('+mvpStat.bestPlayer.role+') from <em>'+mvpStat.team.teamName+'</em> — <strong>'+mvpStat.bestPts.toFixed(1)+'&nbsp;pts</strong> total. The standout performer of the season.' });
+
+            // Cricket analysis insights
+            var highestSingle = -1, highestSingleTeam = '', highestSingleMatch = '';
+            teams.forEach(function(team, idx) {
+                completedIdx.forEach(function(ci) {
+                    var p = teamMatchPoints[idx][ci] || 0;
+                    if (p > highestSingle) { highestSingle = p; highestSingleTeam = team.teamName; highestSingleMatch = matches[ci].matchName || ('M'+(ci+1)); }
+                });
+            });
+            if (highestSingle > 0) insights.push({ icon:'💥', text:'Best single-match haul: <strong>'+highestSingleTeam+'</strong> with <strong>'+highestSingle.toFixed(1)+'&nbsp;pts</strong> in '+highestSingleMatch+'.' });
+
+            // ── Form guide cards ────────────────────────────────────────────
+            var globalMax = Math.max.apply(null, teamStats.map(function(s){return Math.max.apply(null,s.recentPts.concat([1]));}));
+            var formCards = teamStats.map(function(s) {
+                var col = GROWTH_CHART_COLORS[s.idx % GROWTH_CHART_COLORS.length];
+                var bars = s.recentPts.map(function(p,i) {
+                    var h = Math.max(4, Math.round((p/globalMax)*40));
+                    return '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">' +
+                        '<span style="font-size:0.58rem;color:#9a9a9a;">'+p.toFixed(0)+'</span>' +
+                        '<div style="width:10px;height:'+h+'px;background:'+col+';border-radius:3px 3px 0 0;opacity:0.9;"></div>' +
+                        '<span style="font-size:0.55rem;color:#666;">M'+(completedIdx[completedIdx.length-N+i]+1)+'</span>' +
+                    '</div>';
+                }).join('');
+                var predR = ranked.find(function(r){return r.idx===s.idx;})||{predPct:0};
+                return '<div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:0.75rem;border:1px solid rgba(255,255,255,0.1);border-left:3px solid '+col+';display:flex;flex-direction:column;gap:0.35rem;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                        '<span style="font-size:0.8rem;font-weight:700;color:#f0f0f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:9rem;">'+s.team.teamName+'</span>' +
+                        '<span style="font-size:0.95rem;font-weight:800;color:'+tc(s.trend)+';">'+ti(s.trend)+'</span>' +
+                    '</div>' +
+                    '<div style="font-size:0.67rem;color:#8a95aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(s.team.ownerName||'')+'</div>' +
+                    '<div style="display:flex;align-items:flex-end;gap:5px;height:48px;margin:0.15rem 0;">'+(bars||'<span style="font-size:0.7rem;color:#555;">No data</span>')+'</div>' +
+                    '<div style="display:flex;justify-content:space-between;font-size:0.68rem;color:#b0b0b0;">' +
+                        '<span>Avg <strong style="color:'+col+';">'+s.recentAvg.toFixed(1)+'</strong></span>' +
+                        '<span>Total <strong>'+s.totalPts.toFixed(1)+'</strong></span>' +
+                        '<span>Odds <strong style="color:'+col+';">'+predR.predPct+'%</strong></span>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+
+            // ── Championship race bars ───────────────────────────────────────
+            var raceHtml = ranked.map(function(r, rank) {
+                var col = GROWTH_CHART_COLORS[r.idx % GROWTH_CHART_COLORS.length];
+                var medal = rank===0?'🥇':rank===1?'🥈':rank===2?'🥉':(rank+1)+'.';
+                return '<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.55rem;">' +
+                    '<div style="width:1.6rem;text-align:center;font-size:0.85rem;flex-shrink:0;">'+medal+'</div>' +
+                    '<div style="width:7.5rem;font-size:0.78rem;font-weight:600;color:#f0f0f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;">'+r.team.teamName+'</div>' +
+                    '<div style="flex:1;height:9px;background:rgba(255,255,255,0.08);border-radius:5px;overflow:hidden;">' +
+                        '<div style="width:'+Math.max(4,r.predPct)+'%;height:100%;background:linear-gradient(90deg,'+col+','+col+'88);border-radius:5px;"></div>' +
+                    '</div>' +
+                    '<div style="width:2.8rem;text-align:right;font-size:0.75rem;font-weight:700;color:'+col+';flex-shrink:0;">'+r.predPct+'%</div>' +
+                    '<div style="width:4rem;text-align:right;font-size:0.72rem;color:#9a9a9a;flex-shrink:0;">'+r.totalPts.toFixed(1)+' pts</div>' +
+                '</div>';
+            }).join('');
+
+            // ── Winner reasoning ────────────────────────────────────────────
+            var reasons = [];
+            if (winner.trend === 'up') reasons.push('surging recent form');
+            if (winner.stddev < maxStd * 0.4) reasons.push('excellent consistency');
+            reasons.push('leading with '+winner.totalPts.toFixed(1)+' points');
+            if (winner.recentAvg > winner.overallAvg) reasons.push('improving avg ('+winner.recentAvg.toFixed(1)+' vs '+winner.overallAvg.toFixed(1)+' overall)');
+            var reasonStr = reasons.join(' · ');
+
+            var rgb = hexToRgb(winnerColor);
+
+            return '' +
+            '<div style="margin-bottom:2.5rem;">' +
+
+                // ── Section header ──
+                '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.5rem;">' +
+                    '<div>' +
+                        '<h3 style="background:linear-gradient(135deg,#FFD700,#FF8C00,#FF4560);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1.2rem;font-weight:900;letter-spacing:0.02em;margin:0;">&#127381; Daily Analysis &amp; Winner Prediction</h3>' +
+                        '<div style="font-size:0.72rem;color:#8a95aa;margin-top:0.25rem;">&#128197; '+today+' &nbsp;·&nbsp; '+completedMatches.length+' match'+(completedMatches.length!==1?'es':'')+' completed &nbsp;·&nbsp; Algorithm: Form 35% + Points 45% + Consistency 20%</div>' +
+                    '</div>' +
+                '</div>' +
+
+                // ── Predicted champion hero card ──
+                '<div style="background:linear-gradient(135deg,rgba('+rgb+',0.18) 0%,rgba(15,20,36,0.97) 65%);border:1px solid '+winnerColor+'44;border-radius:20px;padding:1.6rem;margin-bottom:1.5rem;position:relative;overflow:hidden;box-shadow:0 12px 48px rgba('+rgb+',0.2),0 2px 8px rgba(0,0,0,0.4);">' +
+                    '<div style="position:absolute;top:-60px;right:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,'+winnerColor+'28 0%,transparent 70%);pointer-events:none;"></div>' +
+                    '<div style="position:absolute;bottom:-30px;left:40%;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,'+winnerColor+'12 0%,transparent 70%);pointer-events:none;"></div>' +
+                    '<div style="font-size:0.68rem;font-weight:800;color:'+winnerColor+';text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.4rem;">&#127942; Predicted Champion</div>' +
+                    '<div style="font-size:1.8rem;font-weight:900;color:#fff;margin-bottom:0.15rem;line-height:1.1;">'+winner.team.teamName+'</div>' +
+                    (winner.team.ownerName?'<div style="font-size:0.78rem;color:#a0a8b8;margin-bottom:1rem;">Managed by '+winner.team.ownerName+'</div>':'<div style="margin-bottom:1rem;"></div>') +
+                    '<div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;margin-bottom:1.1rem;padding-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.08);">' +
+                        '<div style="text-align:center;">' +
+                            '<div style="font-size:2.2rem;font-weight:900;color:'+winnerColor+';line-height:1;text-shadow:0 0 20px '+winnerColor+'88;">'+winner.predPct+'%</div>' +
+                            '<div style="font-size:0.62rem;color:#8a95aa;margin-top:0.25rem;text-transform:uppercase;letter-spacing:0.05em;">Win Probability</div>' +
+                        '</div>' +
+                        '<div style="width:1px;height:2.8rem;background:rgba(255,255,255,0.12);"></div>' +
+                        '<div style="text-align:center;">' +
+                            '<div style="font-size:1.4rem;font-weight:800;color:#f0f0f0;line-height:1;">'+winner.totalPts.toFixed(1)+'</div>' +
+                            '<div style="font-size:0.62rem;color:#8a95aa;margin-top:0.25rem;text-transform:uppercase;letter-spacing:0.05em;">Total Points</div>' +
+                        '</div>' +
+                        '<div style="width:1px;height:2.8rem;background:rgba(255,255,255,0.12);"></div>' +
+                        '<div style="text-align:center;">' +
+                            '<div style="font-size:1.4rem;font-weight:800;color:'+tc(winner.trend)+';line-height:1;">'+ti(winner.trend)+' '+winner.recentAvg.toFixed(1)+'</div>' +
+                            '<div style="font-size:0.62rem;color:#8a95aa;margin-top:0.25rem;text-transform:uppercase;letter-spacing:0.05em;">Recent Avg (L'+N+')</div>' +
+                        '</div>' +
+                        '<div style="width:1px;height:2.8rem;background:rgba(255,255,255,0.12);"></div>' +
+                        '<div style="text-align:center;">' +
+                            '<div style="font-size:1.4rem;font-weight:800;color:#b0b0b0;line-height:1;">'+(winner.bestPlayer?winner.bestPlayer.playerName.split(' ').slice(-1)[0]:'-')+'</div>' +
+                            '<div style="font-size:0.62rem;color:#8a95aa;margin-top:0.25rem;text-transform:uppercase;letter-spacing:0.05em;">Key Player</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="font-size:0.8rem;color:#c8ccd4;line-height:1.6;">' +
+                        '<span style="color:'+winnerColor+';font-weight:700;">Why? </span>' + reasonStr +
+                    '</div>' +
+                '</div>' +
+
+                // ── Championship race ──
+                '<div style="background:rgba(255,255,255,0.05);border-radius:14px;padding:1.25rem 1.4rem;border:1px solid rgba(255,255,255,0.1);margin-bottom:1.5rem;">' +
+                    '<div style="font-size:0.82rem;font-weight:700;color:#d8d8d8;margin-bottom:1rem;">&#127941; Championship Race &amp; Win Probability</div>' +
+                    raceHtml +
+                '</div>' +
+
+                // ── Form guide ──
+                '<div style="margin-bottom:1.5rem;">' +
+                    '<div style="font-size:0.82rem;font-weight:700;color:#d8d8d8;margin-bottom:0.75rem;">&#128200; Form Guide <span style="font-size:0.68rem;font-weight:400;color:#8a95aa;">(Last '+N+' matches &nbsp;·&nbsp; ▲ hot &nbsp;▼ cold &nbsp;● steady)</span></div>' +
+                    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:0.7rem;">'+formCards+'</div>' +
+                '</div>' +
+
+                // ── Key insights ──
+                '<div style="background:rgba(255,255,255,0.05);border-radius:14px;padding:1.25rem 1.4rem;border:1px solid rgba(255,255,255,0.1);">' +
+                    '<div style="font-size:0.82rem;font-weight:700;color:#d8d8d8;margin-bottom:0.9rem;">&#128161; Cricket Intelligence — Key Insights</div>' +
+                    insights.map(function(ins){
+                        return '<div style="display:flex;gap:0.6rem;margin-bottom:0.65rem;font-size:0.81rem;color:#c0c4cc;line-height:1.55;">' +
+                            '<span style="flex-shrink:0;font-size:0.95rem;">'+ins.icon+'</span>' +
+                            '<span>'+ins.text+'</span>' +
+                        '</div>';
+                    }).join('') +
+                '</div>' +
+
+            '</div>';
         }
 
         var _matchTabsRenderedVersion = -1;
