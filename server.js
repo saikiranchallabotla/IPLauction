@@ -2544,6 +2544,12 @@ const PLAYER_NAME_ALIASES = {
     'vyshak vk': 'Vyshak Vijaykumar',
     'vijaykumar v': 'Vyshak Vijaykumar',
     'v vijaykumar': 'Vyshak Vijaykumar',
+    // "Blessing Muzarabani" — APIs may use shortened or alternate spellings
+    'blessing muzarabani': 'Blessing Muzarabani',
+    'b muzarabani': 'Blessing Muzarabani',
+    'muzarabani': 'Blessing Muzarabani',
+    'blessing muzurbhani': 'Blessing Muzarabani',
+    'b muzurbhani': 'Blessing Muzarabani',
 };
 
 function buildNameMapping(matches) {

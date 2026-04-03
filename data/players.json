@@ -231,6 +231,7 @@
   {"name": "Naman Tiwari", "role": "Bowler", "basePrice": 0.2, "previousTeam": "LSG", "country": "India"},
   {"name": "Mayank Yadav", "role": "Bowler", "basePrice": 2, "previousTeam": "LSG", "country": "India"},
   {"name": "Mohsin Khan", "role": "Bowler", "basePrice": 0.5, "previousTeam": "LSG", "country": "India"},
+  {"name": "Blessing Muzarabani", "role": "Bowler", "basePrice": 0.5, "previousTeam": "LSG", "country": "Zimbabwe"},
 
   {"name": "Shubman Gill", "role": "Batsman", "basePrice": 2, "previousTeam": "GT", "country": "India"},
   {"name": "Jos Buttler", "role": "Wicketkeeper", "basePrice": 2, "previousTeam": "GT", "country": "England"},
