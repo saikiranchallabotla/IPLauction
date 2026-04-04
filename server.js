@@ -181,6 +181,35 @@ let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
 
+// ============ IPL STANDINGS CACHE ============
+let standingsCache = null; // { standings: [...], lastFetched: timestamp, source: string }
+let standingsFetchTimer = null;
+const STANDINGS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const STANDINGS_REFRESH_INTERVAL = 30; // minutes
+
+const IPL_TEAM_NAME_TO_CODE_SERVER = {
+    'csk': 'CSK', 'chennai super kings': 'CSK', 'chennai': 'CSK',
+    'mi': 'MI', 'mumbai indians': 'MI', 'mumbai': 'MI',
+    'rcb': 'RCB', 'royal challengers bengaluru': 'RCB', 'royal challengers bangalore': 'RCB', 'bengaluru': 'RCB', 'bangalore': 'RCB',
+    'kkr': 'KKR', 'kolkata knight riders': 'KKR', 'kolkata': 'KKR',
+    'dc': 'DC', 'delhi capitals': 'DC', 'delhi': 'DC',
+    'srh': 'SRH', 'sunrisers hyderabad': 'SRH', 'hyderabad': 'SRH', 'sunrisers': 'SRH',
+    'rr': 'RR', 'rajasthan royals': 'RR', 'rajasthan': 'RR',
+    'lsg': 'LSG', 'lucknow super giants': 'LSG', 'lucknow': 'LSG',
+    'gt': 'GT', 'gujarat titans': 'GT', 'gujarat': 'GT',
+    'pbks': 'PBKS', 'punjab kings': 'PBKS', 'punjab': 'PBKS'
+};
+
+function resolveTeamCode(name) {
+    if (!name) return null;
+    const lower = name.toLowerCase().trim();
+    if (IPL_TEAM_NAME_TO_CODE_SERVER[lower]) return IPL_TEAM_NAME_TO_CODE_SERVER[lower];
+    for (const key of Object.keys(IPL_TEAM_NAME_TO_CODE_SERVER)) {
+        if (lower.includes(key) && key.length > 2) return IPL_TEAM_NAME_TO_CODE_SERVER[key];
+    }
+    return null;
+}
+
 function isFantasyConfigured() {
     // Public IPL stats API is always available — no credentials required.
     // Manual overrides (IPL Fantasy cookies or CricAPI) are optional.
@@ -2550,6 +2579,12 @@ const PLAYER_NAME_ALIASES = {
     'muzarabani': 'Blessing Muzarabani',
     'blessing muzurbhani': 'Blessing Muzarabani',
     'b muzurbhani': 'Blessing Muzarabani',
+    // "Lungisani Ngidi" in players.json — widely known as "Lungi Ngidi" on APIs
+    'lungi ngidi': 'Lungisani Ngidi',
+    'l ngidi': 'Lungisani Ngidi',
+    'ls ngidi': 'Lungisani Ngidi',
+    'lungisani ngidi': 'Lungisani Ngidi',
+    'ngidi': 'Lungisani Ngidi',
 };
 
 function buildNameMapping(matches) {
@@ -3703,6 +3738,236 @@ app.get('/api/match-scorecards', async (req, res) => {
     }
 });
 
+// ============ IPL STANDINGS AUTO-SYNC ============
+
+async function fetchStandingsFromCricbuzz() {
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.105 Mobile Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-IN,en;q=0.9',
+        'Referer': 'https://www.cricbuzz.com/',
+        'Origin': 'https://www.cricbuzz.com',
+        'x-requested-with': 'com.cricbuzz.android'
+    };
+
+    // Find IPL series ID
+    let seriesId = null;
+    const liveRes = await fetch('https://www.cricbuzz.com/api/cricket-match/live', { headers });
+    if (liveRes.ok) {
+        const data = await liveRes.json();
+        for (const tg of (data.typeMatches || [])) {
+            for (const sg of (tg.seriesMatches || [])) {
+                const w = sg.seriesAdWrapper || sg;
+                const name = (w.seriesName || '').toLowerCase();
+                if ((name.includes('ipl') || name.includes('indian premier')) && w.seriesId) {
+                    seriesId = String(w.seriesId);
+                    break;
+                }
+            }
+            if (seriesId) break;
+        }
+    }
+    if (!seriesId) {
+        const recentRes = await fetch('https://www.cricbuzz.com/api/cricket-match/recent', { headers });
+        if (recentRes.ok) {
+            const data = await recentRes.json();
+            for (const tg of (data.typeMatches || [])) {
+                for (const sg of (tg.seriesMatches || [])) {
+                    const w = sg.seriesAdWrapper || sg;
+                    const name = (w.seriesName || '').toLowerCase();
+                    if ((name.includes('ipl') || name.includes('indian premier')) && w.seriesId) {
+                        seriesId = String(w.seriesId);
+                        break;
+                    }
+                }
+                if (seriesId) break;
+            }
+        }
+    }
+    if (!seriesId) throw new Error('Cricbuzz: IPL series ID not found');
+
+    const ptRes = await fetch(`https://www.cricbuzz.com/api/series/${seriesId}/points-table`, { headers });
+    if (!ptRes.ok) throw new Error(`Cricbuzz points-table HTTP ${ptRes.status}`);
+    const ptData = await ptRes.json();
+
+    const standings = [];
+    const rows = (ptData.pointsTable || []).flatMap(g => g.pointsTableInfo || []);
+    for (const row of rows) {
+        const code = resolveTeamCode(row.shortName || row.teamName || '');
+        if (!code) continue;
+        const nrrRaw = parseFloat(row.nrrText || row.nrr || 0) || 0;
+        standings.push({
+            code,
+            played: parseInt(row.matchesPlayed || row.played || 0) || 0,
+            won:    parseInt(row.matchesWon   || row.won    || 0) || 0,
+            lost:   parseInt(row.matchesLost  || row.lost   || 0) || 0,
+            nr:     parseInt(row.noResult     || row.nr     || 0) || 0,
+            points: parseInt(row.points || 0) || 0,
+            nrr:    nrrRaw
+        });
+    }
+    if (standings.length < 5) throw new Error(`Cricbuzz: only ${standings.length} teams in points table`);
+    console.log(`Cricbuzz standings: ${standings.length} teams fetched`);
+    return standings;
+}
+
+async function fetchStandingsFromESPN() {
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.espncricinfo.com/',
+        'Origin': 'https://www.espncricinfo.com'
+    };
+    const year = IPL_SEASON_YEAR;
+
+    let seriesId = null;
+    const searchUrls = [
+        `https://hs-consumer-api.espncricinfo.com/v1/search?lang=en&query=Indian+Premier+League+${year}&type=series&size=10`,
+        `https://hs-consumer-api.espncricinfo.com/v1/search?lang=en&query=IPL+${year}&type=series&size=10`,
+    ];
+    for (const url of searchUrls) {
+        try {
+            const res = await fetch(url, { headers });
+            if (!res.ok) continue;
+            const data = await res.json();
+            const results = data?.results || data?.searchResults || [];
+            const found = results.find(r => {
+                const h = (r?.headline || r?.title || r?.name || '').toLowerCase();
+                return (h.includes('indian premier league') || h.includes(' ipl ') || h.startsWith('ipl ')) && h.includes(String(year));
+            });
+            if (found?.id) { seriesId = found.id; break; }
+        } catch (_) {}
+    }
+    if (!seriesId) throw new Error(`ESPN: IPL ${year} series not found`);
+
+    const standRes = await fetch(
+        `https://hs-consumer-api.espncricinfo.com/v1/pages/series/standings?lang=en&seriesId=${seriesId}`,
+        { headers }
+    );
+    if (!standRes.ok) throw new Error(`ESPN standings HTTP ${standRes.status}`);
+    const standData = await standRes.json();
+
+    const groups = standData?.content?.groups || standData?.content?.standing?.groups ||
+                   standData?.groups || standData?.standings?.groups || [];
+    const standings = [];
+    for (const group of groups) {
+        for (const entry of (group.teams || group.entries || [])) {
+            const teamName = entry?.team?.shortName || entry?.team?.name || entry?.shortName || '';
+            const code = resolveTeamCode(teamName);
+            if (!code) continue;
+            const stats = entry?.stats || entry;
+            const nrrRaw = parseFloat(stats?.netRunRate || stats?.nrr || stats?.nrrText || 0) || 0;
+            standings.push({
+                code,
+                played: parseInt(stats?.played || stats?.matchesPlayed || 0) || 0,
+                won:    parseInt(stats?.won    || stats?.matchesWon    || 0) || 0,
+                lost:   parseInt(stats?.lost   || stats?.matchesLost   || 0) || 0,
+                nr:     parseInt(stats?.noResult || stats?.nr           || 0) || 0,
+                points: parseInt(stats?.points  || 0) || 0,
+                nrr:    nrrRaw
+            });
+        }
+    }
+    if (standings.length < 5) throw new Error(`ESPN: only ${standings.length} teams in standings`);
+    console.log(`ESPN standings: ${standings.length} teams fetched`);
+    return standings;
+}
+
+async function fetchStandingsFromIPLStats() {
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://www.iplt20.com/',
+        'Origin': 'https://www.iplt20.com',
+        'Cache-Control': 'no-cache'
+    };
+    const urls = [
+        'https://ipl-stats.iplt20.com/ipl/json/Standings.json',
+        'https://ipl-stats.iplt20.com/ipl/json/PointsTable.json',
+        'https://ipl-stats.iplt20.com/ipl/json/pointstable.json',
+    ];
+    for (const url of urls) {
+        try {
+            const res = await fetch(url, { headers });
+            if (!res.ok) { console.log(`IPL Stats standings HTTP ${res.status}: ${url}`); continue; }
+            const data = await res.json();
+            const rows = data?.Standings || data?.PointsTable || data?.pointsTable ||
+                         data?.standings || data?.data || data?.teams || [];
+            if (!Array.isArray(rows) || rows.length < 5) continue;
+            const standings = [];
+            for (const row of rows) {
+                const code = resolveTeamCode(row?.TeamShortName || row?.shortName || row?.team || row?.TeamName || '');
+                if (!code) continue;
+                const nrrRaw = parseFloat(row?.NRR || row?.nrr || row?.NetRunRate || row?.nrrText || 0) || 0;
+                standings.push({
+                    code,
+                    played: parseInt(row?.Played || row?.played || row?.MatchesPlayed || 0) || 0,
+                    won:    parseInt(row?.Won    || row?.won    || row?.MatchesWon    || 0) || 0,
+                    lost:   parseInt(row?.Lost   || row?.lost   || row?.MatchesLost   || 0) || 0,
+                    nr:     parseInt(row?.NR     || row?.nr     || row?.NoResult      || 0) || 0,
+                    points: parseInt(row?.Pts    || row?.points || row?.Points        || 0) || 0,
+                    nrr:    nrrRaw
+                });
+            }
+            if (standings.length >= 5) {
+                console.log(`IPL Stats standings (${url}): ${standings.length} teams fetched`);
+                return standings;
+            }
+        } catch (e) { console.log(`IPL Stats standings error (${url}): ${e.message}`); }
+    }
+    throw new Error('IPL Stats: standings not available');
+}
+
+async function fetchIPLStandings() {
+    const sources = [
+        { name: 'Cricbuzz',  fn: fetchStandingsFromCricbuzz },
+        { name: 'ESPN',      fn: fetchStandingsFromESPN },
+        { name: 'IPL Stats', fn: fetchStandingsFromIPLStats },
+    ];
+    for (const src of sources) {
+        try {
+            console.log(`Standings sync: trying ${src.name}...`);
+            const standings = await src.fn();
+            standingsCache = { standings, lastFetched: Date.now(), source: src.name };
+            console.log(`Standings synced from ${src.name}`);
+            // Broadcast to all connected clients
+            io.emit('standingsUpdate', standingsCache);
+            return standingsCache;
+        } catch (e) {
+            console.warn(`Standings sync ${src.name} failed: ${e.message}`);
+        }
+    }
+    console.warn('Standings sync: all sources failed, keeping existing cache');
+    return standingsCache;
+}
+
+function startStandingsRefreshTimer() {
+    if (standingsFetchTimer) clearInterval(standingsFetchTimer);
+    standingsFetchTimer = setInterval(() => {
+        fetchIPLStandings().catch(err => console.error('Standings auto-refresh failed:', err.message));
+    }, STANDINGS_REFRESH_INTERVAL * 60 * 1000);
+    console.log(`IPL standings auto-refresh every ${STANDINGS_REFRESH_INTERVAL} minutes`);
+}
+
+// GET /api/ipl-standings — returns cached standings (refreshes if stale)
+app.get('/api/ipl-standings', async (req, res) => {
+    try {
+        const isStale = !standingsCache || (Date.now() - standingsCache.lastFetched > STANDINGS_CACHE_TTL);
+        if (isStale) {
+            await fetchIPLStandings();
+        }
+        if (standingsCache && standingsCache.standings && standingsCache.standings.length > 0) {
+            res.json({ standings: standingsCache.standings, source: standingsCache.source, lastFetched: standingsCache.lastFetched });
+        } else {
+            res.json({ standings: [], source: null, lastFetched: null });
+        }
+    } catch (err) {
+        console.error('Standings API error:', err.message);
+        res.json({ standings: standingsCache?.standings || [], source: standingsCache?.source || null, lastFetched: standingsCache?.lastFetched || null });
+    }
+});
+
 // ============ SOCKET.IO EVENTS ============
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -4177,6 +4442,9 @@ const PORT = process.env.PORT || 3000;
 
 initPersistence().then(async () => {
     await initFantasyPoints();
+    // Start standings auto-sync (non-blocking)
+    fetchIPLStandings().catch(err => console.warn('Initial standings fetch failed:', err.message));
+    startStandingsRefreshTimer();
     httpServer.listen(PORT, () => {
         console.log(`
     ╔═══════════════════════════════════════╗
