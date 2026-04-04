@@ -2221,14 +2221,16 @@
         const IPL_TEAM_COLORS = {
             'CSK': '#FDBE00', 'MI': '#004BA0', 'RCB': '#EC1C24', 'DC': '#0078BC',
             'PBKS': '#ED1B24', 'RR': '#E83D84', 'SRH': '#F26522',
-            'GT': '#D4AF37', 'KKR': '#3A225D', 'LSG': '#A72056'
+            'GT': '#D4AF37', 'KKR': '#3A225D', 'LSG': '#A72056',
+            'DCH': '#1C1C1C'
         };
         const IPL_TEAM_FULL_NAMES = {
             'CSK': 'Chennai Super Kings', 'MI': 'Mumbai Indians',
             'RCB': 'Royal Challengers Bengaluru', 'DC': 'Delhi Capitals',
             'PBKS': 'Punjab Kings', 'RR': 'Rajasthan Royals',
             'SRH': 'Sunrisers Hyderabad', 'GT': 'Gujarat Titans',
-            'KKR': 'Kolkata Knight Riders', 'LSG': 'Lucknow Super Giants'
+            'KKR': 'Kolkata Knight Riders', 'LSG': 'Lucknow Super Giants',
+            'DCH': 'Deccan Chargers'
         };
         const IPL_2026_DEFAULT_STANDINGS = [
             { code: 'MI',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
@@ -2309,20 +2311,20 @@
         // ═══════════════════════════════════════════════════════════════════
 
         const IPL_TITLE_WINNERS = {
-            2008: 'RR', 2009: 'DC', 2010: 'CSK', 2011: 'CSK', 2012: 'KKR',
+            2008: 'RR', 2009: 'DCH', 2010: 'CSK', 2011: 'CSK', 2012: 'KKR',
             2013: 'MI', 2014: 'KKR', 2015: 'MI', 2016: 'SRH', 2017: 'MI',
             2018: 'CSK', 2019: 'MI', 2020: 'MI', 2021: 'CSK', 2022: 'GT',
-            2023: 'CSK', 2024: 'KKR', 2025: 'MI', 2026: 'RCB'
+            2023: 'CSK', 2024: 'KKR', 2025: 'RCB'
         };
 
         // Overall team stats (IPL 2008-2026) — matches played, won, win%
         const IPL_TEAM_HISTORY = {
-            'MI':   { totalMatches: 281, wins: 155, losses: 121, titles: 6, firstSeason: 2008, winPct: 55.2 },
+            'MI':   { totalMatches: 281, wins: 155, losses: 121, titles: 5, firstSeason: 2008, winPct: 55.2 },
             'CSK':  { totalMatches: 264, wins: 152, losses: 105, titles: 5, firstSeason: 2008, winPct: 57.6 },
             'KKR':  { totalMatches: 266, wins: 139, losses: 122, titles: 3, firstSeason: 2008, winPct: 52.3 },
             'RCB':  { totalMatches: 268, wins: 128, losses: 135, titles: 1, firstSeason: 2008, winPct: 47.8 },
             'RR':   { totalMatches: 236, wins: 119, losses: 112, titles: 1, firstSeason: 2008, winPct: 50.4 },
-            'DC':   { totalMatches: 259, wins: 120, losses: 134, titles: 1, firstSeason: 2008, winPct: 46.3 },
+            'DC':   { totalMatches: 259, wins: 120, losses: 134, titles: 0, firstSeason: 2008, winPct: 46.3 },
             'SRH':  { totalMatches: 209, wins: 110, losses: 95,  titles: 1, firstSeason: 2013, winPct: 52.6 },
             'PBKS': { totalMatches: 257, wins: 112, losses: 140, titles: 0, firstSeason: 2008, winPct: 43.6 },
             'GT':   { totalMatches: 65,  wins: 38,  losses: 26,  titles: 1, firstSeason: 2022, winPct: 58.5 },
@@ -2982,6 +2984,7 @@
         // Track URL-based deep link parameters for post-connect navigation
         var _urlDeepLinkView = null;
         var _urlDeepLinkTab = null;
+        var _isSharedView = false; // true when accessed via shared URL link
 
         (function restoreSession() {
             // Check for URL parameters (shareable link)
@@ -2992,6 +2995,8 @@
 
             if (urlView) _urlDeepLinkView = urlView;
             if (urlTab) _urlDeepLinkTab = urlTab;
+            // If accessed via shared URL params (has room + view), mark as shared view
+            if (urlRoom && urlView) _isSharedView = true;
 
             var codeToJoin = urlRoom || sessionStorage.getItem('ipl_roomCode');
             var savedName = sessionStorage.getItem('ipl_roomName');
@@ -3008,27 +3013,10 @@
                             roomCode = data.code;
                             roomName = data.roomName || savedName || 'Auction Room';
                             roomPinned = !!data.pinned;
-                            pendingAdminPassword = localStorage.getItem('adminPass_' + roomCode) || null;
+                            pendingAdminPassword = _isSharedView ? null : (localStorage.getItem('adminPass_' + roomCode) || null);
                             enterAuction();
-                            // Navigate to the deep-linked view/tab after connecting
-                            if (_urlDeepLinkView) {
-                                setTimeout(function() {
-                                    showView(_urlDeepLinkView);
-                                    // Activate the correct nav button
-                                    document.querySelectorAll('.nav-btn').forEach(function(b) {
-                                        b.classList.toggle('active', b.getAttribute('onclick') && b.getAttribute('onclick').indexOf("'" + _urlDeepLinkView + "'") > -1);
-                                    });
-                                    if (_urlDeepLinkView === 'fantasy' && _urlDeepLinkTab) {
-                                        setTimeout(function() { showFantasyTab(_urlDeepLinkTab); }, 300);
-                                    }
-                                    _urlDeepLinkView = null;
-                                    _urlDeepLinkTab = null;
-                                    // Clean up URL without reloading
-                                    if (window.history.replaceState) {
-                                        window.history.replaceState({}, document.title, window.location.pathname);
-                                    }
-                                }, 500);
-                            }
+                            // Deep link navigation is now handled in the fullUpdate handler
+                            // to ensure data is available before rendering
                         });
                     } else {
                         // Room no longer exists — clear saved state
@@ -3093,7 +3081,32 @@
             });
 
             var firstFullUpdate = true;
-            socket.on('fullUpdate', (data) => { try { state = data; renderAll(); if (firstFullUpdate) { showView('fantasy'); firstFullUpdate = false; } } catch(e) { console.error('fullUpdate render error:', e); } });
+            socket.on('fullUpdate', (data) => { try { state = data; renderAll(); if (firstFullUpdate) { showView('fantasy'); firstFullUpdate = false;
+                // Handle deep link navigation after data is ready
+                if (_urlDeepLinkView) {
+                    showView(_urlDeepLinkView);
+                    document.querySelectorAll('.nav-btn').forEach(function(b) {
+                        b.classList.toggle('active', b.getAttribute('onclick') && b.getAttribute('onclick').indexOf("'" + _urlDeepLinkView + "'") > -1);
+                    });
+                    if (_urlDeepLinkView === 'fantasy' && _urlDeepLinkTab) {
+                        setTimeout(function() { showFantasyTab(_urlDeepLinkTab); }, 300);
+                    }
+                    _urlDeepLinkView = null;
+                    _urlDeepLinkTab = null;
+                    if (window.history.replaceState) {
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }
+                }
+                // For shared view, restrict UI to points table only
+                if (_isSharedView) {
+                    document.querySelectorAll('.nav-btns .btn').forEach(function(btn) {
+                        var onclick = btn.getAttribute('onclick') || '';
+                        if (onclick.indexOf("'fantasy'") === -1) {
+                            btn.style.display = 'none';
+                        }
+                    });
+                }
+            } } catch(e) { console.error('fullUpdate render error:', e); } });
             socket.on('auctionUpdate', (auctionState) => { try { state.auctionState = auctionState; renderAuction(); renderTeams(); renderBidLog(); renderLiveCategories(); } catch(e) { console.error('auctionUpdate render error:', e); } });
             socket.on('teamsUpdated', (teams) => { try { state.teams = teams; renderTeams(); } catch(e) { console.error('teamsUpdated render error:', e); } });
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
