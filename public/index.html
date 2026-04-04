@@ -1563,6 +1563,67 @@
         .team-expand-hint { font-size: 0.7rem; color: var(--text-secondary); transition: transform 0.2s ease; }
         .team-item.expanded .team-expand-hint { transform: rotate(180deg); }
 
+        /* ============ IPL WIN PREDICTION TAB ============ */
+        .pred-section { margin-bottom: 1.8rem; }
+        .pred-section-title { font-size: 1rem; font-weight: 800; color: #e8e8e8; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .pred-hero { background: linear-gradient(135deg, rgba(245,197,24,0.15) 0%, rgba(15,20,36,0.97) 60%); border: 1px solid rgba(245,197,24,0.25); border-radius: 20px; padding: 1.8rem; margin-bottom: 2rem; position: relative; overflow: hidden; box-shadow: 0 12px 48px rgba(245,197,24,0.12), 0 2px 8px rgba(0,0,0,0.4); }
+        .pred-hero::before { content: ''; position: absolute; top: -80px; right: -80px; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(circle, rgba(245,197,24,0.15) 0%, transparent 70%); pointer-events: none; }
+        .pred-ranking-card { background: rgba(255,255,255,0.04); border-radius: 14px; padding: 0.85rem 1rem; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.8rem; transition: all 0.2s ease; cursor: pointer; }
+        .pred-ranking-card:hover { background: rgba(255,255,255,0.08); transform: translateY(-1px); }
+        .pred-ranking-card.expanded .pred-card-details { display: block; }
+        .pred-ranking-card.expanded .pred-expand-arrow { transform: rotate(180deg); }
+        .pred-rank-badge { width: 2.2rem; height: 2.2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 0.9rem; flex-shrink: 0; }
+        .pred-rank-1 { background: linear-gradient(135deg, #FFD700, #FFA000); color: #000; box-shadow: 0 0 12px rgba(255,215,0,0.4); }
+        .pred-rank-2 { background: linear-gradient(135deg, #C0C0C0, #9E9E9E); color: #000; }
+        .pred-rank-3 { background: linear-gradient(135deg, #CD7F32, #A0522D); color: #fff; }
+        .pred-rank-other { background: rgba(255,255,255,0.1); color: #aaa; }
+        .pred-team-info { flex: 1; min-width: 0; }
+        .pred-team-name { font-size: 0.92rem; font-weight: 700; color: #f0f0f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pred-team-meta { font-size: 0.7rem; color: #8a95aa; margin-top: 0.15rem; }
+        .pred-pct { font-size: 1.3rem; font-weight: 900; min-width: 3.5rem; text-align: right; flex-shrink: 0; }
+        .pred-bar-wrap { flex: 1; min-width: 80px; max-width: 200px; }
+        .pred-bar-track { height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+        .pred-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+        .pred-expand-arrow { font-size: 0.7rem; color: #666; transition: transform 0.2s ease; flex-shrink: 0; }
+        .pred-card-details { display: none; width: 100%; margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.06); }
+        .pred-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.5rem; }
+        .pred-detail-item { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 0.5rem 0.65rem; text-align: center; }
+        .pred-detail-val { font-size: 0.95rem; font-weight: 800; color: #f0f0f0; }
+        .pred-detail-label { font-size: 0.62rem; color: #8a95aa; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.15rem; }
+        .pred-h2h-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.6rem; margin-top: 0.8rem; }
+        .pred-h2h-card { background: rgba(255,255,255,0.04); border-radius: 10px; padding: 0.7rem 0.85rem; border: 1px solid rgba(255,255,255,0.06); }
+        .pred-h2h-teams { font-size: 0.78rem; font-weight: 700; color: #d0d0d0; margin-bottom: 0.3rem; }
+        .pred-h2h-record { font-size: 0.72rem; color: #8a95aa; }
+        .pred-h2h-bar { height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; display: flex; margin-top: 0.4rem; }
+        .pred-venue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.7rem; }
+        .pred-venue-card { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 0.85rem 1rem; border: 1px solid rgba(255,255,255,0.06); }
+        .pred-venue-name { font-size: 0.82rem; font-weight: 700; color: #e0e0e0; }
+        .pred-venue-city { font-size: 0.68rem; color: #8a95aa; margin-bottom: 0.4rem; }
+        .pred-venue-stat { display: flex; justify-content: space-between; font-size: 0.72rem; color: #b0b0b0; margin-bottom: 0.2rem; }
+        .pred-venue-stat strong { color: #f0f0f0; }
+        .pred-matchup-container { margin-top: 1rem; }
+        .pred-matchup-selector { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+        .pred-matchup-selector select { background: var(--dark-elevated); color: var(--text); border: 1px solid var(--border-light); border-radius: 8px; padding: 0.45rem 0.7rem; font-size: 0.85rem; font-family: 'Outfit', sans-serif; }
+        .pred-matchup-result { background: rgba(255,255,255,0.04); border-radius: 16px; padding: 1.2rem 1.5rem; border: 1px solid rgba(255,255,255,0.08); }
+        .pred-matchup-vs { display: flex; align-items: center; justify-content: center; gap: 1.5rem; flex-wrap: wrap; }
+        .pred-matchup-team { text-align: center; flex: 1; min-width: 100px; }
+        .pred-matchup-team-name { font-size: 1.1rem; font-weight: 800; margin-bottom: 0.2rem; }
+        .pred-matchup-team-pct { font-size: 2rem; font-weight: 900; line-height: 1; }
+        .pred-matchup-vs-label { font-size: 1.2rem; font-weight: 900; color: #555; }
+        .pred-season-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; }
+        .pred-season-card { background: rgba(255,255,255,0.04); border-radius: 10px; padding: 0.6rem 0.75rem; border: 1px solid rgba(255,255,255,0.06); text-align: center; }
+        .pred-season-year { font-size: 0.72rem; color: #8a95aa; font-weight: 600; }
+        .pred-season-pos { font-size: 1.1rem; font-weight: 900; }
+        .pred-season-record { font-size: 0.65rem; color: #8a95aa; }
+        .pred-title-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+        .pred-title-badge { background: linear-gradient(135deg, #FFD700, #FFA000); color: #000; font-size: 0.65rem; font-weight: 800; padding: 0.2rem 0.5rem; border-radius: 6px; }
+        .pred-strength-radar { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.4rem; margin-top: 0.5rem; }
+        .pred-str-item { text-align: center; }
+        .pred-str-bar { height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; margin: 0.2rem auto; width: 80%; }
+        .pred-str-fill { height: 100%; border-radius: 2px; }
+        .pred-str-label { font-size: 0.58rem; color: #8a95aa; }
+        .pred-str-val { font-size: 0.7rem; font-weight: 700; }
+
         /* ============ SCROLLBAR ============ */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -1997,6 +2058,7 @@
                     <button class="tab" onclick="showFantasyTab('today', this)">&#127951; Match Day Players</button>
                     <button class="tab" onclick="showFantasyTab('growth-charts', this)">&#128200; Growth Charts</button>
                     <button class="tab" onclick="showFantasyTab('ipl-analysis', this)">&#127942; IPL Team Analysis</button>
+                    <button class="tab" onclick="showFantasyTab('win-prediction', this)">&#127793; IPL Win Prediction</button>
                 </div>
 
                 <div id="fantasy-leaderboard-tab">
@@ -2030,6 +2092,12 @@
                 <div id="fantasy-ipl-analysis-tab" style="display: none;">
                     <div id="fantasy-ipl-analysis-content">
                         <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading IPL team analysis...</p>
+                    </div>
+                </div>
+
+                <div id="fantasy-win-prediction-tab" style="display: none;">
+                    <div id="fantasy-win-prediction-content">
+                        <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading IPL win prediction...</p>
                     </div>
                 </div>
             </div>
@@ -2231,6 +2299,269 @@
             'gt': 'GT', 'gujarat titans': 'GT', 'gujarat': 'GT',
             'pbks': 'PBKS', 'punjab kings': 'PBKS', 'punjab': 'PBKS'
         };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // IPL HISTORICAL DATA — Head-to-Head, Venues, Win Rates, Titles
+        // Data compiled from IPL seasons 2008-2025
+        // ═══════════════════════════════════════════════════════════════════
+
+        const IPL_TITLE_WINNERS = {
+            2008: 'RR', 2009: 'DC', 2010: 'CSK', 2011: 'CSK', 2012: 'KKR',
+            2013: 'MI', 2014: 'KKR', 2015: 'MI', 2016: 'SRH', 2017: 'MI',
+            2018: 'CSK', 2019: 'MI', 2020: 'MI', 2021: 'CSK', 2022: 'GT',
+            2023: 'CSK', 2024: 'KKR', 2025: 'MI'
+        };
+
+        // Overall team stats (IPL 2008-2025) — matches played, won, win%
+        const IPL_TEAM_HISTORY = {
+            'MI':   { totalMatches: 267, wins: 148, losses: 114, titles: 6, firstSeason: 2008, winPct: 55.4 },
+            'CSK':  { totalMatches: 250, wins: 145, losses: 98,  titles: 5, firstSeason: 2008, winPct: 58.0 },
+            'KKR':  { totalMatches: 252, wins: 133, losses: 115, titles: 3, firstSeason: 2008, winPct: 52.8 },
+            'RCB':  { totalMatches: 254, wins: 118, losses: 131, titles: 0, firstSeason: 2008, winPct: 46.5 },
+            'RR':   { totalMatches: 222, wins: 112, losses: 105, titles: 1, firstSeason: 2008, winPct: 50.5 },
+            'DC':   { totalMatches: 245, wins: 113, losses: 127, titles: 1, firstSeason: 2008, winPct: 46.1 },
+            'SRH':  { totalMatches: 195, wins: 103, losses: 88,  titles: 1, firstSeason: 2013, winPct: 52.8 },
+            'PBKS': { totalMatches: 243, wins: 107, losses: 131, titles: 0, firstSeason: 2008, winPct: 44.0 },
+            'GT':   { totalMatches: 51,  wins: 33,  losses: 17,  titles: 1, firstSeason: 2022, winPct: 64.7 },
+            'LSG':  { totalMatches: 51,  wins: 28,  losses: 22,  titles: 0, firstSeason: 2022, winPct: 54.9 }
+        };
+
+        // Head-to-head records: H2H[teamA][teamB] = { wins: teamA's wins, total: total matches }
+        const IPL_H2H = {
+            'CSK': { 'MI': {wins:15,total:37}, 'RCB': {wins:20,total:34}, 'KKR': {wins:18,total:30}, 'DC': {wins:16,total:27}, 'PBKS': {wins:16,total:28}, 'RR': {wins:16,total:28}, 'SRH': {wins:15,total:25}, 'GT': {wins:3,total:7}, 'LSG': {wins:4,total:7} },
+            'MI':  { 'CSK': {wins:22,total:37}, 'RCB': {wins:19,total:33}, 'KKR': {wins:23,total:33}, 'DC': {wins:18,total:33}, 'PBKS': {wins:18,total:33}, 'RR': {wins:14,total:27}, 'SRH': {wins:12,total:22}, 'GT': {wins:3,total:7}, 'LSG': {wins:4,total:6} },
+            'RCB': { 'CSK': {wins:14,total:34}, 'MI': {wins:14,total:33}, 'KKR': {wins:13,total:31}, 'DC': {wins:14,total:30}, 'PBKS': {wins:14,total:31}, 'RR': {wins:12,total:27}, 'SRH': {wins:11,total:24}, 'GT': {wins:2,total:6}, 'LSG': {wins:3,total:6} },
+            'KKR': { 'CSK': {wins:12,total:30}, 'MI': {wins:10,total:33}, 'RCB': {wins:18,total:31}, 'DC': {wins:16,total:30}, 'PBKS': {wins:18,total:31}, 'RR': {wins:13,total:27}, 'SRH': {wins:12,total:23}, 'GT': {wins:5,total:7}, 'LSG': {wins:3,total:6} },
+            'DC':  { 'CSK': {wins:11,total:27}, 'MI': {wins:15,total:33}, 'RCB': {wins:16,total:30}, 'KKR': {wins:14,total:30}, 'PBKS': {wins:16,total:30}, 'RR': {wins:10,total:25}, 'SRH': {wins:12,total:23}, 'GT': {wins:3,total:6}, 'LSG': {wins:4,total:7} },
+            'PBKS':{ 'CSK': {wins:12,total:28}, 'MI': {wins:15,total:33}, 'RCB': {wins:17,total:31}, 'KKR': {wins:13,total:31}, 'DC': {wins:14,total:30}, 'RR': {wins:13,total:27}, 'SRH': {wins:10,total:21}, 'GT': {wins:2,total:6}, 'LSG': {wins:2,total:6} },
+            'RR':  { 'CSK': {wins:12,total:28}, 'MI': {wins:13,total:27}, 'RCB': {wins:15,total:27}, 'KKR': {wins:14,total:27}, 'DC': {wins:15,total:25}, 'PBKS': {wins:14,total:27}, 'SRH': {wins:10,total:20}, 'GT': {wins:3,total:6}, 'LSG': {wins:4,total:7} },
+            'SRH': { 'CSK': {wins:10,total:25}, 'MI': {wins:10,total:22}, 'RCB': {wins:13,total:24}, 'KKR': {wins:11,total:23}, 'DC': {wins:11,total:23}, 'PBKS': {wins:11,total:21}, 'RR': {wins:10,total:20}, 'GT': {wins:3,total:6}, 'LSG': {wins:3,total:6} },
+            'GT':  { 'CSK': {wins:4,total:7}, 'MI': {wins:4,total:7}, 'RCB': {wins:4,total:6}, 'KKR': {wins:2,total:7}, 'DC': {wins:3,total:6}, 'PBKS': {wins:4,total:6}, 'RR': {wins:3,total:6}, 'SRH': {wins:3,total:6}, 'LSG': {wins:3,total:5} },
+            'LSG': { 'CSK': {wins:3,total:7}, 'MI': {wins:2,total:6}, 'RCB': {wins:3,total:6}, 'KKR': {wins:3,total:6}, 'DC': {wins:3,total:7}, 'PBKS': {wins:4,total:6}, 'RR': {wins:3,total:7}, 'SRH': {wins:3,total:6}, 'GT': {wins:2,total:5} }
+        };
+
+        // Venue statistics: venue → { name, city, totalMatches, battingFirst%, chasingWin%, avgScore, teams with best record }
+        const IPL_VENUE_STATS = {
+            'wankhede':     { name: 'Wankhede Stadium', city: 'Mumbai',     totalMatches: 112, batFirstWinPct: 42.0, chaseWinPct: 58.0, avgFirstInnings: 170, avgSecondInnings: 158, homeTeam: 'MI',   homeWinPct: 62.5 },
+            'chepauk':      { name: 'MA Chidambaram Stadium', city: 'Chennai',   totalMatches: 99,  batFirstWinPct: 55.5, chaseWinPct: 44.5, avgFirstInnings: 162, avgSecondInnings: 150, homeTeam: 'CSK',  homeWinPct: 67.3 },
+            'chinnaswamy':  { name: 'M Chinnaswamy Stadium', city: 'Bengaluru', totalMatches: 88,  batFirstWinPct: 38.6, chaseWinPct: 61.4, avgFirstInnings: 179, avgSecondInnings: 168, homeTeam: 'RCB',  homeWinPct: 51.2 },
+            'eden':         { name: 'Eden Gardens', city: 'Kolkata',    totalMatches: 87,  batFirstWinPct: 48.3, chaseWinPct: 51.7, avgFirstInnings: 167, avgSecondInnings: 159, homeTeam: 'KKR',  homeWinPct: 59.8 },
+            'arun_jaitley':  { name: 'Arun Jaitley Stadium', city: 'Delhi',     totalMatches: 73,  batFirstWinPct: 44.0, chaseWinPct: 56.0, avgFirstInnings: 172, avgSecondInnings: 161, homeTeam: 'DC',   homeWinPct: 52.4 },
+            'rajiv_gandhi':  { name: 'Rajiv Gandhi Intl Stadium', city: 'Hyderabad', totalMatches: 72,  batFirstWinPct: 47.2, chaseWinPct: 52.8, avgFirstInnings: 165, avgSecondInnings: 156, homeTeam: 'SRH',  homeWinPct: 58.6 },
+            'sawai':        { name: 'Sawai Mansingh Stadium', city: 'Jaipur',    totalMatches: 58,  batFirstWinPct: 51.7, chaseWinPct: 48.3, avgFirstInnings: 164, avgSecondInnings: 155, homeTeam: 'RR',   homeWinPct: 56.9 },
+            'mohali':       { name: 'IS Bindra PCA Stadium', city: 'Mohali',    totalMatches: 54,  batFirstWinPct: 43.5, chaseWinPct: 56.5, avgFirstInnings: 171, avgSecondInnings: 162, homeTeam: 'PBKS', homeWinPct: 48.1 },
+            'narendra_modi': { name: 'Narendra Modi Stadium', city: 'Ahmedabad', totalMatches: 42,  batFirstWinPct: 50.0, chaseWinPct: 50.0, avgFirstInnings: 168, avgSecondInnings: 160, homeTeam: 'GT',   homeWinPct: 70.6 },
+            'ekana':        { name: 'BRSABV Ekana Stadium', city: 'Lucknow',   totalMatches: 22,  batFirstWinPct: 45.5, chaseWinPct: 54.5, avgFirstInnings: 166, avgSecondInnings: 158, homeTeam: 'LSG',  homeWinPct: 59.1 },
+            'dharamsala':   { name: 'HPCA Stadium', city: 'Dharamsala',  totalMatches: 15,  batFirstWinPct: 40.0, chaseWinPct: 60.0, avgFirstInnings: 175, avgSecondInnings: 164, homeTeam: 'PBKS', homeWinPct: 53.3 }
+        };
+
+        // Season-by-season performance (last 5 seasons, 2021-2025)
+        const IPL_RECENT_SEASONS = {
+            'CSK':  { 2021: {pos:1,won:9,lost:5},  2022: {pos:9,won:4,lost:10}, 2023: {pos:1,won:9,lost:5},  2024: {pos:5,won:7,lost:7},  2025: {pos:5,won:7,lost:7} },
+            'MI':   { 2021: {pos:7,won:4,lost:10}, 2022: {pos:10,won:4,lost:10}, 2023: {pos:8,won:5,lost:9}, 2024: {pos:10,won:4,lost:10}, 2025: {pos:1,won:10,lost:4} },
+            'RCB':  { 2021: {pos:4,won:7,lost:7},  2022: {pos:4,won:8,lost:6},  2023: {pos:7,won:5,lost:9},  2024: {pos:4,won:7,lost:7},  2025: {pos:6,won:7,lost:7} },
+            'KKR':  { 2021: {pos:7,won:6,lost:8},  2022: {pos:7,won:6,lost:8},  2023: {pos:5,won:7,lost:7},  2024: {pos:1,won:9,lost:5},  2025: {pos:8,won:5,lost:9} },
+            'DC':   { 2021: {pos:1,won:10,lost:4}, 2022: {pos:5,won:7,lost:7},  2023: {pos:9,won:5,lost:9},  2024: {pos:6,won:7,lost:7},  2025: {pos:4,won:8,lost:6} },
+            'PBKS': { 2021: {pos:6,won:6,lost:8},  2022: {pos:6,won:7,lost:7},  2023: {pos:10,won:4,lost:10}, 2024: {pos:8,won:5,lost:9}, 2025: {pos:9,won:5,lost:9} },
+            'RR':   { 2021: {pos:5,won:7,lost:7},  2022: {pos:2,won:9,lost:5},  2023: {pos:6,won:7,lost:7},  2024: {pos:3,won:8,lost:6},  2025: {pos:3,won:8,lost:6} },
+            'SRH':  { 2021: {pos:8,won:3,lost:11}, 2022: {pos:8,won:6,lost:8},  2023: {pos:4,won:8,lost:6},  2024: {pos:2,won:9,lost:5},  2025: {pos:7,won:6,lost:8} },
+            'GT':   { 2022: {pos:1,won:10,lost:4}, 2023: {pos:2,won:10,lost:4}, 2024: {pos:9,won:5,lost:9},  2025: {pos:10,won:3,lost:11} },
+            'LSG':  { 2022: {pos:3,won:9,lost:5},  2023: {pos:3,won:8,lost:6},  2024: {pos:7,won:7,lost:7},  2025: {pos:2,won:9,lost:5} }
+        };
+
+        // Team strengths (qualitative ratings 1-10) based on 2025 squad analysis
+        const IPL_TEAM_STRENGTHS = {
+            'CSK':  { batting: 8.5, bowling: 7.5, allRounders: 8, experience: 9.5, captaincy: 9, deathBowling: 7, powerplay: 8, spinOptions: 8.5 },
+            'MI':   { batting: 9,   bowling: 8.5, allRounders: 8.5, experience: 9, captaincy: 8.5, deathBowling: 9, powerplay: 9, spinOptions: 7.5 },
+            'RCB':  { batting: 9,   bowling: 6.5, allRounders: 7, experience: 8, captaincy: 7.5, deathBowling: 6, powerplay: 8.5, spinOptions: 7 },
+            'KKR':  { batting: 8,   bowling: 8,   allRounders: 9, experience: 8, captaincy: 8.5, deathBowling: 8, powerplay: 8, spinOptions: 9 },
+            'DC':   { batting: 8,   bowling: 7.5, allRounders: 8, experience: 7.5, captaincy: 7.5, deathBowling: 7.5, powerplay: 8, spinOptions: 8 },
+            'PBKS': { batting: 7.5, bowling: 6.5, allRounders: 7, experience: 6.5, captaincy: 7, deathBowling: 6, powerplay: 7.5, spinOptions: 6.5 },
+            'RR':   { batting: 8.5, bowling: 8,   allRounders: 8, experience: 8, captaincy: 8.5, deathBowling: 8, powerplay: 8, spinOptions: 8.5 },
+            'SRH':  { batting: 9,   bowling: 7,   allRounders: 7.5, experience: 7.5, captaincy: 7.5, deathBowling: 7, powerplay: 9, spinOptions: 6.5 },
+            'GT':   { batting: 7.5, bowling: 7.5, allRounders: 8, experience: 7, captaincy: 8, deathBowling: 8, powerplay: 7.5, spinOptions: 7.5 },
+            'LSG':  { batting: 8,   bowling: 7.5, allRounders: 8, experience: 7, captaincy: 8, deathBowling: 7.5, powerplay: 8, spinOptions: 7 }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // IPL WIN PREDICTION ENGINE
+        // ═══════════════════════════════════════════════════════════════════
+
+        function computeIPLWinPrediction() {
+            var standings = getIPL2026Standings();
+            var sorted = standings.slice().sort(function(a, b) {
+                if (b.points !== a.points) return b.points - a.points;
+                return (b.nrr || 0) - (a.nrr || 0);
+            });
+            var hasLiveData = sorted.some(function(t) { return t.played > 0; });
+
+            var predictions = sorted.map(function(team, currentRank) {
+                var code = team.code;
+                var hist = IPL_TEAM_HISTORY[code] || {};
+                var strengths = IPL_TEAM_STRENGTHS[code] || {};
+                var recent = IPL_RECENT_SEASONS[code] || {};
+
+                // 1. Historical Win Rate (15%)
+                var histWinPct = (hist.winPct || 45) / 100;
+
+                // 2. Title Pedigree (10%) — teams with titles get a boost
+                var titleCount = hist.titles || 0;
+                var titleScore = Math.min(1, titleCount / 6); // normalize to MI's 6
+
+                // 3. Recent Form — last 3 seasons weighted average (20%)
+                var recentSeasons = [2025, 2024, 2023];
+                var recentWeights = [0.50, 0.30, 0.20];
+                var recentScore = 0;
+                var recentTotal = 0;
+                recentSeasons.forEach(function(yr, i) {
+                    if (recent[yr]) {
+                        var seasonWinRate = recent[yr].won / (recent[yr].won + recent[yr].lost);
+                        recentScore += seasonWinRate * recentWeights[i];
+                        recentTotal += recentWeights[i];
+                    }
+                });
+                recentScore = recentTotal > 0 ? recentScore / recentTotal : 0.45;
+
+                // 4. Squad Strength Index (20%) — average of all strength ratings
+                var strengthKeys = Object.keys(strengths);
+                var strengthAvg = strengthKeys.length > 0
+                    ? strengthKeys.reduce(function(s, k) { return s + strengths[k]; }, 0) / strengthKeys.length / 10
+                    : 0.7;
+
+                // 5. Current Season Performance (25%) — from live standings
+                var currentSeasonScore = 0.5; // default
+                if (hasLiveData && team.played > 0) {
+                    currentSeasonScore = team.won / team.played;
+                    // NRR bonus/penalty
+                    currentSeasonScore += Math.max(-0.1, Math.min(0.1, (team.nrr || 0) / 10));
+                }
+
+                // 6. Home Ground Advantage (5%)
+                var homeAdvantage = 0.5;
+                Object.keys(IPL_VENUE_STATS).forEach(function(v) {
+                    if (IPL_VENUE_STATS[v].homeTeam === code) {
+                        homeAdvantage = (IPL_VENUE_STATS[v].homeWinPct || 50) / 100;
+                    }
+                });
+
+                // 7. H2H Dominance (5%) — avg win% vs all other teams
+                var h2hTotal = 0, h2hWins = 0;
+                if (IPL_H2H[code]) {
+                    Object.keys(IPL_H2H[code]).forEach(function(opp) {
+                        h2hTotal += IPL_H2H[code][opp].total;
+                        h2hWins += IPL_H2H[code][opp].wins;
+                    });
+                }
+                var h2hScore = h2hTotal > 0 ? h2hWins / h2hTotal : 0.5;
+
+                // Weighted composite score
+                var weights, composite;
+                if (hasLiveData && team.played >= 3) {
+                    // Mid-season: current form matters most
+                    weights = { current: 0.35, recent: 0.15, strength: 0.18, hist: 0.10, title: 0.07, home: 0.08, h2h: 0.07 };
+                    composite = currentSeasonScore * weights.current +
+                                recentScore * weights.recent +
+                                strengthAvg * weights.strength +
+                                histWinPct * weights.hist +
+                                titleScore * weights.title +
+                                homeAdvantage * weights.home +
+                                h2hScore * weights.h2h;
+                } else {
+                    // Pre-season or early season
+                    weights = { recent: 0.25, strength: 0.25, hist: 0.15, title: 0.10, home: 0.10, h2h: 0.10, current: 0.05 };
+                    composite = recentScore * weights.recent +
+                                strengthAvg * weights.strength +
+                                histWinPct * weights.hist +
+                                titleScore * weights.title +
+                                homeAdvantage * weights.home +
+                                h2hScore * weights.h2h +
+                                currentSeasonScore * weights.current;
+                }
+
+                return {
+                    code: code,
+                    composite: composite,
+                    histWinPct: histWinPct,
+                    titleScore: titleScore,
+                    recentScore: recentScore,
+                    strengthAvg: strengthAvg,
+                    currentSeasonScore: currentSeasonScore,
+                    homeAdvantage: homeAdvantage,
+                    h2hScore: h2hScore,
+                    currentRank: currentRank + 1,
+                    played: team.played,
+                    won: team.won,
+                    lost: team.lost,
+                    nrr: team.nrr || 0,
+                    points: team.points
+                };
+            });
+
+            // Sort by composite score
+            predictions.sort(function(a, b) { return b.composite - a.composite; });
+
+            // Convert to win percentages (normalized)
+            var totalComposite = predictions.reduce(function(s, p) { return s + p.composite; }, 0) || 1;
+            predictions.forEach(function(p, i) {
+                p.winPct = Math.max(1, Math.round((p.composite / totalComposite) * 100));
+                p.predRank = i + 1;
+            });
+
+            // Adjust to sum to 100
+            var pctSum = predictions.reduce(function(s, p) { return s + p.winPct; }, 0);
+            if (pctSum !== 100 && predictions.length > 0) {
+                predictions[0].winPct += (100 - pctSum);
+            }
+
+            return predictions;
+        }
+
+        function getH2HRecord(teamA, teamB) {
+            if (!IPL_H2H[teamA] || !IPL_H2H[teamA][teamB]) return { wins: 0, losses: 0, total: 0 };
+            var record = IPL_H2H[teamA][teamB];
+            return { wins: record.wins, losses: record.total - record.wins, total: record.total };
+        }
+
+        function predictMatchWinner(teamA, teamB, venue) {
+            var predictions = computeIPLWinPrediction();
+            var predA = predictions.find(function(p) { return p.code === teamA; });
+            var predB = predictions.find(function(p) { return p.code === teamB; });
+            if (!predA || !predB) return null;
+
+            var scoreA = predA.composite;
+            var scoreB = predB.composite;
+
+            // H2H adjustment
+            var h2h = getH2HRecord(teamA, teamB);
+            if (h2h.total >= 5) {
+                var h2hAdv = (h2h.wins / h2h.total - 0.5) * 0.15;
+                scoreA += h2hAdv;
+                scoreB -= h2hAdv;
+            }
+
+            // Venue adjustment
+            if (venue) {
+                var venueKey = Object.keys(IPL_VENUE_STATS).find(function(k) {
+                    return IPL_VENUE_STATS[k].city.toLowerCase().includes(venue.toLowerCase()) ||
+                           k.toLowerCase().includes(venue.toLowerCase());
+                });
+                if (venueKey) {
+                    var vs = IPL_VENUE_STATS[venueKey];
+                    if (vs.homeTeam === teamA) { scoreA += 0.05; }
+                    else if (vs.homeTeam === teamB) { scoreB += 0.05; }
+                }
+            }
+
+            var total = scoreA + scoreB;
+            return {
+                teamA: teamA, teamB: teamB,
+                teamAWinPct: Math.round((scoreA / total) * 100),
+                teamBWinPct: Math.round((scoreB / total) * 100),
+                h2h: h2h,
+                venue: venue || null,
+                favorite: scoreA >= scoreB ? teamA : teamB
+            };
+        }
 
         // Extract IPL team codes from a match name like "CSK vs MI" or "Chennai Super Kings vs Mumbai Indians"
         function extractTeamCodesFromMatchName(matchName) {
@@ -3516,7 +3847,20 @@
                 '</div>';
             }).join('');
 
+            // Preserve expanded team rows across re-renders
+            var expandedTeams = {};
+            leaderboard.querySelectorAll('.fantasy-team-row.expanded').forEach(function(row) {
+                expandedTeams[row.id] = true;
+            });
+
             leaderboard.innerHTML = colHeader + teamRows;
+
+            // Restore expanded state
+            Object.keys(expandedTeams).forEach(function(rowId) {
+                var row = document.getElementById(rowId);
+                if (row) row.classList.add('expanded');
+            });
+
             renderFantasyMatchTabs();
         }
 
@@ -3646,6 +3990,7 @@
 
         var _todayTabRenderedVersion = -1;
         var _growthTabRenderedVersion = -1;
+        var _winPredTabRenderedVersion = -1;
         function showFantasyTab(tab, btn) {
             btn.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
@@ -3654,6 +3999,11 @@
             document.getElementById('fantasy-today-tab').style.display = tab === 'today' ? 'block' : 'none';
             document.getElementById('fantasy-growth-tab').style.display = tab === 'growth-charts' ? 'block' : 'none';
             document.getElementById('fantasy-ipl-analysis-tab').style.display = tab === 'ipl-analysis' ? 'block' : 'none';
+            document.getElementById('fantasy-win-prediction-tab').style.display = tab === 'win-prediction' ? 'block' : 'none';
+            if (tab === 'win-prediction' && _winPredTabRenderedVersion !== _fantasyDataVersion) {
+                renderIPLWinPrediction();
+                _winPredTabRenderedVersion = _fantasyDataVersion;
+            }
             if (tab === 'today' && _todayTabRenderedVersion !== _fantasyDataVersion) {
                 renderTodaysPlayers();
                 _todayTabRenderedVersion = _fantasyDataVersion;
@@ -4256,6 +4606,316 @@
                 '</div>' +
 
             '</div>';
+        }
+
+        // ============ IPL WIN PREDICTION RENDER ============
+        function togglePredCard(code) {
+            var card = document.getElementById('pred-card-' + code);
+            if (card) card.classList.toggle('expanded');
+        }
+
+        function renderIPLWinPrediction() {
+            var content = document.getElementById('fantasy-win-prediction-content');
+            if (!content) return;
+            _winPredTabRenderedVersion = _fantasyDataVersion;
+
+            var predictions = computeIPLWinPrediction();
+            var hasLiveData = predictions.length > 0 && predictions[0].played > 0;
+            var winner = predictions[0];
+            var winnerColor = IPL_TEAM_COLORS[winner.code] || '#f5c518';
+            var winnerRgb = hexToRgb(winnerColor);
+
+            // ── Algorithm description
+            var algoText = hasLiveData && winner.played >= 3
+                ? 'Current Form 35% + Squad Strength 18% + Recent Seasons 15% + History 10% + Titles 7% + Home 8% + H2H 7%'
+                : 'Recent Seasons 25% + Squad Strength 25% + History 15% + Titles 10% + Home 10% + H2H 10% + Current 5%';
+
+            // ── Hero Card
+            var titleYears = [];
+            Object.keys(IPL_TITLE_WINNERS).forEach(function(yr) { if (IPL_TITLE_WINNERS[yr] === winner.code) titleYears.push(yr); });
+            var heroHTML =
+                '<div class="pred-hero">' +
+                    '<div style="font-size:0.65rem;font-weight:800;color:' + winnerColor + ';text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.4rem;">&#127942; Predicted IPL 2026 Champion</div>' +
+                    '<div style="font-size:1.8rem;font-weight:900;color:#fff;margin-bottom:0.1rem;">' + (IPL_TEAM_FULL_NAMES[winner.code] || winner.code) + '</div>' +
+                    '<div style="font-size:0.78rem;color:#a0a8b8;margin-bottom:1.2rem;">' + winner.code + (titleYears.length > 0 ? ' · ' + titleYears.length + 'x Champions (' + titleYears.join(', ') + ')' : '') + '</div>' +
+                    '<div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.08);">' +
+                        '<div style="text-align:center;">' +
+                            '<div style="font-size:2.4rem;font-weight:900;color:' + winnerColor + ';line-height:1;text-shadow:0 0 20px ' + winnerColor + '66;">' + winner.winPct + '%</div>' +
+                            '<div style="font-size:0.6rem;color:#8a95aa;margin-top:0.2rem;text-transform:uppercase;letter-spacing:0.05em;">Win Probability</div>' +
+                        '</div>' +
+                        '<div style="width:1px;height:2.5rem;background:rgba(255,255,255,0.1);"></div>' +
+                        '<div style="text-align:center;">' +
+                            '<div style="font-size:1.4rem;font-weight:800;color:#f0f0f0;">' + ((IPL_TEAM_HISTORY[winner.code] || {}).winPct || 0).toFixed(1) + '%</div>' +
+                            '<div style="font-size:0.6rem;color:#8a95aa;margin-top:0.2rem;text-transform:uppercase;">Historical Win Rate</div>' +
+                        '</div>' +
+                        '<div style="width:1px;height:2.5rem;background:rgba(255,255,255,0.1);"></div>' +
+                        '<div style="text-align:center;">' +
+                            '<div style="font-size:1.4rem;font-weight:800;color:#f0f0f0;">' + (winner.strengthAvg * 10).toFixed(1) + '/10</div>' +
+                            '<div style="font-size:0.6rem;color:#8a95aa;margin-top:0.2rem;text-transform:uppercase;">Squad Rating</div>' +
+                        '</div>' +
+                        (hasLiveData ? '<div style="width:1px;height:2.5rem;background:rgba(255,255,255,0.1);"></div>' +
+                        '<div style="text-align:center;">' +
+                            '<div style="font-size:1.4rem;font-weight:800;color:#f0f0f0;">' + winner.won + 'W/' + winner.lost + 'L</div>' +
+                            '<div style="font-size:0.6rem;color:#8a95aa;margin-top:0.2rem;text-transform:uppercase;">2026 Record</div>' +
+                        '</div>' : '') +
+                    '</div>' +
+                    '<div style="font-size:0.72rem;color:#8a95aa;">&#9881; Model: ' + algoText + '</div>' +
+                '</div>';
+
+            // ── Championship Race Rankings
+            var rankingsHTML = '<div class="pred-section">' +
+                '<div class="pred-section-title">&#127941; IPL 2026 Championship Race — All Teams</div>';
+
+            predictions.forEach(function(p) {
+                var color = IPL_TEAM_COLORS[p.code] || '#888';
+                var fullName = IPL_TEAM_FULL_NAMES[p.code] || p.code;
+                var hist = IPL_TEAM_HISTORY[p.code] || {};
+                var strengths = IPL_TEAM_STRENGTHS[p.code] || {};
+                var rankClass = p.predRank <= 3 ? 'pred-rank-' + p.predRank : 'pred-rank-other';
+                var medal = p.predRank === 1 ? '🥇' : p.predRank === 2 ? '🥈' : p.predRank === 3 ? '🥉' : p.predRank;
+
+                // Title years
+                var titles = [];
+                Object.keys(IPL_TITLE_WINNERS).forEach(function(yr) { if (IPL_TITLE_WINNERS[yr] === p.code) titles.push(yr); });
+
+                // Season history
+                var recent = IPL_RECENT_SEASONS[p.code] || {};
+                var seasonCards = [2025, 2024, 2023, 2022, 2021].map(function(yr) {
+                    var s = recent[yr];
+                    if (!s) return '';
+                    var posColor = s.pos <= 2 ? '#69F0AE' : s.pos <= 4 ? '#FFD700' : s.pos <= 6 ? '#FFA726' : '#FF4560';
+                    return '<div class="pred-season-card">' +
+                        '<div class="pred-season-year">' + yr + '</div>' +
+                        '<div class="pred-season-pos" style="color:' + posColor + ';">#' + s.pos + '</div>' +
+                        '<div class="pred-season-record">' + s.won + 'W / ' + s.lost + 'L</div>' +
+                    '</div>';
+                }).join('');
+
+                // Strength bars
+                var strBars = '';
+                var strKeys = { batting: 'BAT', bowling: 'BOWL', allRounders: 'A/R', deathBowling: 'DEATH', powerplay: 'PP', spinOptions: 'SPIN', captaincy: 'CAP', experience: 'EXP' };
+                Object.keys(strKeys).forEach(function(k) {
+                    var val = strengths[k] || 5;
+                    var barColor = val >= 8.5 ? '#69F0AE' : val >= 7 ? '#FFD700' : val >= 5.5 ? '#FFA726' : '#FF4560';
+                    strBars += '<div class="pred-str-item">' +
+                        '<div class="pred-str-val" style="color:' + barColor + ';">' + val.toFixed(1) + '</div>' +
+                        '<div class="pred-str-bar"><div class="pred-str-fill" style="width:' + (val * 10) + '%;background:' + barColor + ';"></div></div>' +
+                        '<div class="pred-str-label">' + strKeys[k] + '</div>' +
+                    '</div>';
+                });
+
+                // H2H against each team (top 3 best records)
+                var h2hRecords = [];
+                if (IPL_H2H[p.code]) {
+                    Object.keys(IPL_H2H[p.code]).forEach(function(opp) {
+                        var rec = IPL_H2H[p.code][opp];
+                        h2hRecords.push({ opp: opp, wins: rec.wins, total: rec.total, pct: rec.total > 0 ? Math.round(rec.wins / rec.total * 100) : 0 });
+                    });
+                    h2hRecords.sort(function(a, b) { return b.pct - a.pct; });
+                }
+
+                var h2hHTML = h2hRecords.slice(0, 4).map(function(r) {
+                    var oppColor = IPL_TEAM_COLORS[r.opp] || '#888';
+                    return '<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.72rem;margin-bottom:0.25rem;">' +
+                        '<span style="width:3rem;font-weight:600;color:' + oppColor + ';">' + r.opp + '</span>' +
+                        '<div style="flex:1;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">' +
+                            '<div style="width:' + r.pct + '%;height:100%;background:' + color + ';border-radius:3px;"></div>' +
+                        '</div>' +
+                        '<span style="color:#b0b0b0;width:5.5rem;text-align:right;">' + r.wins + '/' + r.total + ' (' + r.pct + '%)</span>' +
+                    '</div>';
+                }).join('');
+
+                rankingsHTML +=
+                    '<div class="pred-ranking-card" id="pred-card-' + p.code + '" onclick="togglePredCard(\'' + p.code + '\')">' +
+                        '<div class="pred-rank-badge ' + rankClass + '">' + medal + '</div>' +
+                        '<div style="width:0.5rem;height:2rem;border-radius:2px;background:' + color + ';flex-shrink:0;"></div>' +
+                        '<div class="pred-team-info">' +
+                            '<div class="pred-team-name">' + fullName + '</div>' +
+                            '<div class="pred-team-meta">' + (hist.titles || 0) + 'x titles · ' + (hist.totalMatches || 0) + ' matches · ' + (hist.winPct || 0).toFixed(1) + '% win rate' +
+                                (hasLiveData && p.played > 0 ? ' · 2026: ' + p.won + 'W/' + p.lost + 'L' : '') +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="pred-bar-wrap">' +
+                            '<div class="pred-bar-track"><div class="pred-bar-fill" style="width:' + Math.max(4, p.winPct) + '%;background:linear-gradient(90deg,' + color + ',' + color + '88);"></div></div>' +
+                        '</div>' +
+                        '<div class="pred-pct" style="color:' + color + ';">' + p.winPct + '%</div>' +
+                        '<div class="pred-expand-arrow">&#9660;</div>' +
+
+                        // Expandable details
+                        '<div class="pred-card-details" onclick="event.stopPropagation();">' +
+                            // Factor breakdown
+                            '<div class="pred-detail-grid">' +
+                                '<div class="pred-detail-item"><div class="pred-detail-val">' + (p.histWinPct * 100).toFixed(1) + '%</div><div class="pred-detail-label">Historical Win%</div></div>' +
+                                '<div class="pred-detail-item"><div class="pred-detail-val">' + (p.recentScore * 100).toFixed(1) + '%</div><div class="pred-detail-label">Recent Form</div></div>' +
+                                '<div class="pred-detail-item"><div class="pred-detail-val">' + (p.strengthAvg * 10).toFixed(1) + '/10</div><div class="pred-detail-label">Squad Rating</div></div>' +
+                                '<div class="pred-detail-item"><div class="pred-detail-val">' + (p.homeAdvantage * 100).toFixed(0) + '%</div><div class="pred-detail-label">Home Win%</div></div>' +
+                                '<div class="pred-detail-item"><div class="pred-detail-val">' + (p.h2hScore * 100).toFixed(1) + '%</div><div class="pred-detail-label">H2H Score</div></div>' +
+                                '<div class="pred-detail-item"><div class="pred-detail-val">' + (p.titleScore * 100).toFixed(0) + '%</div><div class="pred-detail-label">Title Pedigree</div></div>' +
+                            '</div>' +
+
+                            // Titles
+                            (titles.length > 0 ? '<div style="margin-top:0.7rem;"><div style="font-size:0.7rem;font-weight:700;color:#8a95aa;margin-bottom:0.3rem;">&#127942; IPL TITLES</div><div class="pred-title-row">' + titles.map(function(yr) { return '<span class="pred-title-badge">' + yr + '</span>'; }).join('') + '</div></div>' : '') +
+
+                            // Squad Strengths
+                            '<div style="margin-top:0.7rem;"><div style="font-size:0.7rem;font-weight:700;color:#8a95aa;margin-bottom:0.3rem;">&#128170; SQUAD STRENGTH BREAKDOWN</div><div class="pred-strength-radar">' + strBars + '</div></div>' +
+
+                            // H2H
+                            '<div style="margin-top:0.7rem;"><div style="font-size:0.7rem;font-weight:700;color:#8a95aa;margin-bottom:0.3rem;">&#129354; TOP HEAD-TO-HEAD RECORDS</div>' + h2hHTML + '</div>' +
+
+                            // Season History
+                            '<div style="margin-top:0.7rem;"><div style="font-size:0.7rem;font-weight:700;color:#8a95aa;margin-bottom:0.3rem;">&#128200; RECENT SEASON FINISHES</div><div class="pred-season-grid">' + seasonCards + '</div></div>' +
+                        '</div>' +
+                    '</div>';
+            });
+            rankingsHTML += '</div>';
+
+            // ── Match Predictor (head-to-head simulator)
+            var teamOptions = '<option value="">Pick team...</option>';
+            predictions.forEach(function(p) {
+                teamOptions += '<option value="' + p.code + '">' + p.code + ' — ' + (IPL_TEAM_FULL_NAMES[p.code] || p.code) + '</option>';
+            });
+            var venueOptions = '<option value="">Any venue</option>';
+            Object.keys(IPL_VENUE_STATS).forEach(function(k) {
+                var v = IPL_VENUE_STATS[k];
+                venueOptions += '<option value="' + k + '">' + v.name + ', ' + v.city + '</option>';
+            });
+
+            var matchPredictorHTML =
+                '<div class="pred-section">' +
+                    '<div class="pred-section-title">&#9917; Match-Up Predictor — Head to Head</div>' +
+                    '<p style="font-size:0.78rem;color:#8a95aa;margin-bottom:0.8rem;">Select two teams and an optional venue to see the predicted outcome, powered by historical H2H records, venue stats, current form, and squad strength.</p>' +
+                    '<div class="pred-matchup-selector">' +
+                        '<select id="pred-team-a" onchange="updateMatchPrediction()">' + teamOptions + '</select>' +
+                        '<span style="font-weight:900;color:#555;font-size:1rem;">VS</span>' +
+                        '<select id="pred-team-b" onchange="updateMatchPrediction()">' + teamOptions + '</select>' +
+                        '<select id="pred-venue" onchange="updateMatchPrediction()">' + venueOptions + '</select>' +
+                    '</div>' +
+                    '<div id="pred-matchup-result"></div>' +
+                '</div>';
+
+            // ── Venue Stats
+            var venueHTML = '<div class="pred-section">' +
+                '<div class="pred-section-title">&#127967; Venue Intelligence — Ground Statistics</div>' +
+                '<div class="pred-venue-grid">';
+            Object.keys(IPL_VENUE_STATS).forEach(function(k) {
+                var v = IPL_VENUE_STATS[k];
+                var homeColor = IPL_TEAM_COLORS[v.homeTeam] || '#888';
+                venueHTML += '<div class="pred-venue-card" style="border-left:3px solid ' + homeColor + ';">' +
+                    '<div class="pred-venue-name">' + v.name + '</div>' +
+                    '<div class="pred-venue-city">' + v.city + ' · Home: <strong style="color:' + homeColor + ';">' + v.homeTeam + '</strong></div>' +
+                    '<div class="pred-venue-stat"><span>Total Matches</span><strong>' + v.totalMatches + '</strong></div>' +
+                    '<div class="pred-venue-stat"><span>Bat First Win%</span><strong style="color:' + (v.batFirstWinPct > 50 ? '#69F0AE' : '#FFA726') + ';">' + v.batFirstWinPct + '%</strong></div>' +
+                    '<div class="pred-venue-stat"><span>Chase Win%</span><strong style="color:' + (v.chaseWinPct > 50 ? '#69F0AE' : '#FFA726') + ';">' + v.chaseWinPct + '%</strong></div>' +
+                    '<div class="pred-venue-stat"><span>Avg 1st Innings</span><strong>' + v.avgFirstInnings + '</strong></div>' +
+                    '<div class="pred-venue-stat"><span>Avg 2nd Innings</span><strong>' + v.avgSecondInnings + '</strong></div>' +
+                    '<div class="pred-venue-stat"><span>Home Win%</span><strong style="color:' + homeColor + ';">' + v.homeWinPct + '%</strong></div>' +
+                '</div>';
+            });
+            venueHTML += '</div></div>';
+
+            // ── H2H Matrix
+            var teamCodes = predictions.map(function(p) { return p.code; });
+            var matrixHTML = '<div class="pred-section">' +
+                '<div class="pred-section-title">&#129354; Head-to-Head Matrix — All Teams</div>' +
+                '<div style="overflow-x:auto;">' +
+                '<table style="width:100%;border-collapse:collapse;font-size:0.7rem;min-width:600px;">' +
+                '<thead><tr><th style="padding:0.4rem;text-align:left;color:#8a95aa;border-bottom:1px solid rgba(255,255,255,0.1);"></th>';
+            teamCodes.forEach(function(code) {
+                matrixHTML += '<th style="padding:0.4rem;text-align:center;color:' + (IPL_TEAM_COLORS[code] || '#888') + ';font-weight:700;border-bottom:1px solid rgba(255,255,255,0.1);">' + code + '</th>';
+            });
+            matrixHTML += '</tr></thead><tbody>';
+            teamCodes.forEach(function(rowCode) {
+                matrixHTML += '<tr><td style="padding:0.4rem;font-weight:700;color:' + (IPL_TEAM_COLORS[rowCode] || '#888') + ';border-bottom:1px solid rgba(255,255,255,0.04);">' + rowCode + '</td>';
+                teamCodes.forEach(function(colCode) {
+                    if (rowCode === colCode) {
+                        matrixHTML += '<td style="padding:0.4rem;text-align:center;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.04);color:#555;">—</td>';
+                    } else {
+                        var rec = (IPL_H2H[rowCode] && IPL_H2H[rowCode][colCode]) ? IPL_H2H[rowCode][colCode] : { wins: 0, total: 0 };
+                        var pct = rec.total > 0 ? Math.round(rec.wins / rec.total * 100) : 0;
+                        var cellColor = pct > 55 ? '#69F0AE' : pct > 45 ? '#FFD700' : '#FF4560';
+                        matrixHTML += '<td style="padding:0.4rem;text-align:center;border-bottom:1px solid rgba(255,255,255,0.04);color:' + cellColor + ';font-weight:600;" title="' + rowCode + ' vs ' + colCode + ': ' + rec.wins + '/' + rec.total + '">' + rec.wins + '/' + rec.total + '</td>';
+                    }
+                });
+                matrixHTML += '</tr>';
+            });
+            matrixHTML += '</tbody></table></div></div>';
+
+            // ── IPL Title History
+            var titleHTML = '<div class="pred-section">' +
+                '<div class="pred-section-title">&#127942; IPL Title Winners — 2008 to 2025</div>' +
+                '<div style="display:flex;flex-wrap:wrap;gap:0.5rem;">';
+            Object.keys(IPL_TITLE_WINNERS).sort().forEach(function(yr) {
+                var code = IPL_TITLE_WINNERS[yr];
+                var color = IPL_TEAM_COLORS[code] || '#888';
+                titleHTML += '<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:0.5rem 0.75rem;border:1px solid rgba(255,255,255,0.06);border-left:3px solid ' + color + ';text-align:center;min-width:80px;">' +
+                    '<div style="font-size:0.68rem;color:#8a95aa;">' + yr + '</div>' +
+                    '<div style="font-size:0.92rem;font-weight:800;color:' + color + ';">' + code + '</div>' +
+                '</div>';
+            });
+            titleHTML += '</div></div>';
+
+            content.innerHTML = heroHTML + rankingsHTML + matchPredictorHTML + matrixHTML + venueHTML + titleHTML;
+        }
+
+        function updateMatchPrediction() {
+            var teamA = document.getElementById('pred-team-a').value;
+            var teamB = document.getElementById('pred-team-b').value;
+            var venue = document.getElementById('pred-venue').value;
+            var resultEl = document.getElementById('pred-matchup-result');
+            if (!resultEl) return;
+
+            if (!teamA || !teamB || teamA === teamB) {
+                resultEl.innerHTML = teamA && teamB && teamA === teamB
+                    ? '<p style="color:#FF4560;text-align:center;padding:1rem;">Please select two different teams.</p>'
+                    : '';
+                return;
+            }
+
+            var result = predictMatchWinner(teamA, teamB, venue || null);
+            if (!result) { resultEl.innerHTML = ''; return; }
+
+            var colorA = IPL_TEAM_COLORS[teamA] || '#888';
+            var colorB = IPL_TEAM_COLORS[teamB] || '#888';
+            var favTeam = result.favorite;
+            var favColor = IPL_TEAM_COLORS[favTeam] || '#888';
+
+            var venueInfo = '';
+            if (venue && IPL_VENUE_STATS[venue]) {
+                var vs = IPL_VENUE_STATS[venue];
+                venueInfo = '<div style="text-align:center;margin-top:0.8rem;padding-top:0.6rem;border-top:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:#8a95aa;">' +
+                    '&#127967; ' + vs.name + ', ' + vs.city + ' · Avg Score: ' + vs.avgFirstInnings + '/' + vs.avgSecondInnings +
+                    ' · Bat First: ' + vs.batFirstWinPct + '% · Chase: ' + vs.chaseWinPct + '%' +
+                    (vs.homeTeam === teamA || vs.homeTeam === teamB ? ' · <strong style="color:' + IPL_TEAM_COLORS[vs.homeTeam] + ';">Home: ' + vs.homeTeam + '</strong>' : '') +
+                '</div>';
+            }
+
+            resultEl.innerHTML =
+                '<div class="pred-matchup-result">' +
+                    '<div class="pred-matchup-vs">' +
+                        '<div class="pred-matchup-team">' +
+                            '<div class="pred-matchup-team-name" style="color:' + colorA + ';">' + (IPL_TEAM_FULL_NAMES[teamA] || teamA) + '</div>' +
+                            '<div class="pred-matchup-team-pct" style="color:' + colorA + ';">' + result.teamAWinPct + '%</div>' +
+                        '</div>' +
+                        '<div class="pred-matchup-vs-label">VS</div>' +
+                        '<div class="pred-matchup-team">' +
+                            '<div class="pred-matchup-team-name" style="color:' + colorB + ';">' + (IPL_TEAM_FULL_NAMES[teamB] || teamB) + '</div>' +
+                            '<div class="pred-matchup-team-pct" style="color:' + colorB + ';">' + result.teamBWinPct + '%</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="text-align:center;margin-top:0.8rem;">' +
+                        '<div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;display:flex;">' +
+                            '<div style="width:' + result.teamAWinPct + '%;background:' + colorA + ';border-radius:4px 0 0 4px;"></div>' +
+                            '<div style="width:' + result.teamBWinPct + '%;background:' + colorB + ';border-radius:0 4px 4px 0;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="text-align:center;margin-top:0.8rem;font-size:0.82rem;color:#d0d0d0;">' +
+                        '&#10004; <strong style="color:' + favColor + ';">' + (IPL_TEAM_FULL_NAMES[favTeam] || favTeam) + '</strong> predicted to win' +
+                    '</div>' +
+                    '<div style="display:flex;justify-content:center;gap:1.5rem;margin-top:0.8rem;padding-top:0.6rem;border-top:1px solid rgba(255,255,255,0.06);font-size:0.78rem;color:#8a95aa;">' +
+                        '<span>&#129354; H2H: <strong style="color:' + colorA + ';">' + result.h2h.wins + '</strong> - <strong style="color:' + colorB + ';">' + result.h2h.losses + '</strong> (' + result.h2h.total + ' matches)</span>' +
+                    '</div>' +
+                    venueInfo +
+                '</div>';
         }
 
         // ============ IPL TEAM ANALYSIS RENDER ============
