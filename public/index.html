@@ -2277,6 +2277,9 @@
             // Re-render if the IPL analysis tab is visible
             var iplTab = document.getElementById('fantasy-ipl-analysis-tab');
             if (iplTab && iplTab.style.display !== 'none') renderIPLTeamAnalysis();
+            // Re-render win prediction if visible (standings affect predictions)
+            var wpTab = document.getElementById('fantasy-win-prediction-tab');
+            if (wpTab && wpTab.style.display !== 'none') renderIPLWinPrediction();
         }
 
         function fetchStandingsFromServer() {
@@ -2302,7 +2305,11 @@
             'rr': 'RR', 'rajasthan royals': 'RR', 'rajasthan': 'RR',
             'lsg': 'LSG', 'lucknow super giants': 'LSG', 'lucknow': 'LSG',
             'gt': 'GT', 'gujarat titans': 'GT', 'gujarat': 'GT',
-            'pbks': 'PBKS', 'punjab kings': 'PBKS', 'punjab': 'PBKS'
+            'pbks': 'PBKS', 'punjab kings': 'PBKS', 'punjab': 'PBKS',
+            // Historical team names
+            'delhi daredevils': 'DC', 'daredevils': 'DC',
+            'deccan chargers': 'SRH', 'deccan': 'SRH',
+            'kings xi punjab': 'PBKS', 'kings xi': 'PBKS', 'kxip': 'PBKS'
         };
 
         // ═══════════════════════════════════════════════════════════════════
@@ -2311,7 +2318,7 @@
         // ═══════════════════════════════════════════════════════════════════
 
         const IPL_TITLE_WINNERS = {
-            2008: 'RR', 2009: 'DCH', 2010: 'CSK', 2011: 'CSK', 2012: 'KKR',
+            2008: 'RR', 2009: 'SRH', 2010: 'CSK', 2011: 'CSK', 2012: 'KKR',
             2013: 'MI', 2014: 'KKR', 2015: 'MI', 2016: 'SRH', 2017: 'MI',
             2018: 'CSK', 2019: 'MI', 2020: 'MI', 2021: 'CSK', 2022: 'GT',
             2023: 'CSK', 2024: 'KKR', 2025: 'RCB'
@@ -2362,17 +2369,37 @@
 
         // Season-by-season performance (last 5 seasons, 2022-2026)
         const IPL_RECENT_SEASONS = {
-            'CSK':  { 2022: {pos:9,won:4,lost:10}, 2023: {pos:1,won:9,lost:5},  2024: {pos:5,won:7,lost:7},  2025: {pos:5,won:7,lost:7},  2026: {pos:5,won:7,lost:7} },
-            'MI':   { 2022: {pos:10,won:4,lost:10}, 2023: {pos:8,won:5,lost:9}, 2024: {pos:10,won:4,lost:10}, 2025: {pos:1,won:10,lost:4}, 2026: {pos:4,won:8,lost:6} },
-            'RCB':  { 2022: {pos:4,won:8,lost:6},  2023: {pos:7,won:5,lost:9},  2024: {pos:4,won:7,lost:7},  2025: {pos:6,won:7,lost:7},  2026: {pos:1,won:10,lost:4} },
-            'KKR':  { 2022: {pos:7,won:6,lost:8},  2023: {pos:5,won:7,lost:7},  2024: {pos:1,won:9,lost:5},  2025: {pos:8,won:5,lost:9},  2026: {pos:6,won:6,lost:8} },
-            'DC':   { 2022: {pos:5,won:7,lost:7},  2023: {pos:9,won:5,lost:9},  2024: {pos:6,won:7,lost:7},  2025: {pos:4,won:8,lost:6},  2026: {pos:7,won:7,lost:7} },
-            'PBKS': { 2022: {pos:6,won:7,lost:7},  2023: {pos:10,won:4,lost:10}, 2024: {pos:8,won:5,lost:9}, 2025: {pos:9,won:5,lost:9},  2026: {pos:9,won:5,lost:9} },
-            'RR':   { 2022: {pos:2,won:9,lost:5},  2023: {pos:6,won:7,lost:7},  2024: {pos:3,won:8,lost:6},  2025: {pos:3,won:8,lost:6},  2026: {pos:3,won:8,lost:6} },
-            'SRH':  { 2022: {pos:8,won:6,lost:8},  2023: {pos:4,won:8,lost:6},  2024: {pos:2,won:9,lost:5},  2025: {pos:7,won:6,lost:8},  2026: {pos:8,won:7,lost:7} },
-            'GT':   { 2022: {pos:1,won:10,lost:4}, 2023: {pos:2,won:10,lost:4}, 2024: {pos:9,won:5,lost:9},  2025: {pos:10,won:3,lost:11}, 2026: {pos:10,won:5,lost:9} },
-            'LSG':  { 2022: {pos:3,won:9,lost:5},  2023: {pos:3,won:8,lost:6},  2024: {pos:7,won:7,lost:7},  2025: {pos:2,won:9,lost:5},  2026: {pos:2,won:6,lost:8} }
+            'CSK':  { 2022: {pos:9,won:4,lost:10}, 2023: {pos:1,won:9,lost:5},  2024: {pos:5,won:7,lost:7},  2025: {pos:5,won:7,lost:7} },
+            'MI':   { 2022: {pos:10,won:4,lost:10}, 2023: {pos:8,won:5,lost:9}, 2024: {pos:10,won:4,lost:10}, 2025: {pos:1,won:10,lost:4} },
+            'RCB':  { 2022: {pos:4,won:8,lost:6},  2023: {pos:7,won:5,lost:9},  2024: {pos:4,won:7,lost:7},  2025: {pos:6,won:7,lost:7} },
+            'KKR':  { 2022: {pos:7,won:6,lost:8},  2023: {pos:5,won:7,lost:7},  2024: {pos:1,won:9,lost:5},  2025: {pos:8,won:5,lost:9} },
+            'DC':   { 2022: {pos:5,won:7,lost:7},  2023: {pos:9,won:5,lost:9},  2024: {pos:6,won:7,lost:7},  2025: {pos:4,won:8,lost:6} },
+            'PBKS': { 2022: {pos:6,won:7,lost:7},  2023: {pos:10,won:4,lost:10}, 2024: {pos:8,won:5,lost:9}, 2025: {pos:9,won:5,lost:9} },
+            'RR':   { 2022: {pos:2,won:9,lost:5},  2023: {pos:6,won:7,lost:7},  2024: {pos:3,won:8,lost:6},  2025: {pos:3,won:8,lost:6} },
+            'SRH':  { 2022: {pos:8,won:6,lost:8},  2023: {pos:4,won:8,lost:6},  2024: {pos:2,won:9,lost:5},  2025: {pos:7,won:6,lost:8} },
+            'GT':   { 2022: {pos:1,won:10,lost:4}, 2023: {pos:2,won:10,lost:4}, 2024: {pos:9,won:5,lost:9},  2025: {pos:10,won:3,lost:11} },
+            'LSG':  { 2022: {pos:3,won:9,lost:5},  2023: {pos:3,won:8,lost:6},  2024: {pos:7,won:7,lost:7},  2025: {pos:2,won:9,lost:5} }
         };
+
+        // Merge hardcoded 2022-2025 data with live 2026 standings
+        function getLiveRecentSeasons() {
+            var live = {};
+            var standings = getIPL2026Standings();
+            var sorted = standings.slice().sort(function(a, b) {
+                if (b.points !== a.points) return b.points - a.points;
+                return (b.nrr || 0) - (a.nrr || 0);
+            });
+            Object.keys(IPL_RECENT_SEASONS).forEach(function(code) {
+                live[code] = Object.assign({}, IPL_RECENT_SEASONS[code]);
+            });
+            sorted.forEach(function(t, i) {
+                if (t.played > 0) {
+                    if (!live[t.code]) live[t.code] = {};
+                    live[t.code][2026] = { pos: i + 1, won: t.won, lost: t.lost };
+                }
+            });
+            return live;
+        }
 
         // Team strengths (qualitative ratings 1-10) based on IPL 2026 mega auction squads
         // Ratings factor in: squad composition, form of key players, batting depth, bowling variety, and current season performance
@@ -2400,12 +2427,24 @@
                 return (b.nrr || 0) - (a.nrr || 0);
             });
             var hasLiveData = sorted.some(function(t) { return t.played > 0; });
+            var maxPlayed = Math.max.apply(null, sorted.map(function(t) { return t.played; }));
+
+            // Dynamically update form ratings from live standings
+            sorted.forEach(function(t) {
+                if (t.played >= 2 && IPL_TEAM_STRENGTHS[t.code]) {
+                    var winRate = t.won / t.played;
+                    IPL_TEAM_STRENGTHS[t.code].form = Math.max(4, Math.min(10, 4 + winRate * 6));
+                }
+            });
+
+            // Get live recent seasons (2022-2025 hardcoded + 2026 from live standings)
+            var liveRecent = getLiveRecentSeasons();
 
             var predictions = sorted.map(function(team, currentRank) {
                 var code = team.code;
                 var hist = IPL_TEAM_HISTORY[code] || {};
                 var strengths = IPL_TEAM_STRENGTHS[code] || {};
-                var recent = IPL_RECENT_SEASONS[code] || {};
+                var recent = liveRecent[code] || {};
 
                 // 1. Historical Win Rate (15%)
                 var histWinPct = (hist.winPct || 45) / 100;
@@ -2460,29 +2499,25 @@
                 }
                 var h2hScore = h2hTotal > 0 ? h2hWins / h2hTotal : 0.5;
 
-                // Weighted composite score
+                // Weighted composite score — progressive weights based on season progress
                 var weights, composite;
-                if (hasLiveData && team.played >= 3) {
+                if (hasLiveData && maxPlayed >= 7) {
+                    // Deep into season: current form dominates
+                    weights = { current: 0.40, recent: 0.10, strength: 0.15, hist: 0.08, title: 0.07, home: 0.10, h2h: 0.10 };
+                } else if (hasLiveData && maxPlayed >= 3) {
                     // Mid-season: current form matters most
                     weights = { current: 0.35, recent: 0.15, strength: 0.18, hist: 0.10, title: 0.07, home: 0.08, h2h: 0.07 };
-                    composite = currentSeasonScore * weights.current +
+                } else {
+                    // Pre-season or early season
+                    weights = { recent: 0.25, strength: 0.25, hist: 0.15, title: 0.10, home: 0.10, h2h: 0.10, current: 0.05 };
+                }
+                composite = (currentSeasonScore * (weights.current || 0)) +
                                 recentScore * weights.recent +
                                 strengthAvg * weights.strength +
                                 histWinPct * weights.hist +
                                 titleScore * weights.title +
                                 homeAdvantage * weights.home +
                                 h2hScore * weights.h2h;
-                } else {
-                    // Pre-season or early season
-                    weights = { recent: 0.25, strength: 0.25, hist: 0.15, title: 0.10, home: 0.10, h2h: 0.10, current: 0.05 };
-                    composite = recentScore * weights.recent +
-                                strengthAvg * weights.strength +
-                                histWinPct * weights.hist +
-                                titleScore * weights.title +
-                                homeAdvantage * weights.home +
-                                h2hScore * weights.h2h +
-                                currentSeasonScore * weights.current;
-                }
 
                 return {
                     code: code,
@@ -2519,6 +2554,8 @@
                 predictions[0].winPct += (100 - pctSum);
             }
 
+            predictions._liveRecent = liveRecent;
+            predictions._maxPlayed = maxPlayed;
             return predictions;
         }
 
@@ -4050,7 +4087,7 @@
             document.getElementById('fantasy-growth-tab').style.display = tab === 'growth-charts' ? 'block' : 'none';
             document.getElementById('fantasy-ipl-analysis-tab').style.display = tab === 'ipl-analysis' ? 'block' : 'none';
             document.getElementById('fantasy-win-prediction-tab').style.display = tab === 'win-prediction' ? 'block' : 'none';
-            if (tab === 'win-prediction' && _winPredTabRenderedVersion !== _fantasyDataVersion) {
+            if (tab === 'win-prediction') {
                 renderIPLWinPrediction();
                 _winPredTabRenderedVersion = _fantasyDataVersion;
             }
@@ -4062,7 +4099,7 @@
                 renderGrowthCharts();
                 _growthTabRenderedVersion = _fantasyDataVersion;
             }
-            if (tab === 'ipl-analysis' && _iplAnalysisTabRenderedVersion !== _fantasyDataVersion) {
+            if (tab === 'ipl-analysis') {
                 renderIPLTeamAnalysis();
             }
             // Highlight the correct tab button when called programmatically (without btn)
@@ -4201,6 +4238,29 @@
             };
 
             var completedMatches = matches.filter(function(m) { return m.status === 'completed'; });
+
+            // Store growth analysis summary for cross-tab interlinking
+            var completedIdx = [];
+            matches.forEach(function(m, i) { if (m.status === 'completed') completedIdx.push(i); });
+            window._growthAnalysisSummary = {
+                teamTrends: teams.map(function(team, idx) {
+                    var pts = teamMatchPoints[idx];
+                    var completedPts = completedIdx.map(function(ci) { return pts[ci] || 0; });
+                    var avg = completedPts.length ? completedPts.reduce(function(s,p){return s+p;},0)/completedPts.length : 0;
+                    var recentPts = completedPts.slice(-3);
+                    var recentAvg = recentPts.length ? recentPts.reduce(function(s,p){return s+p;},0)/recentPts.length : 0;
+                    return {
+                        teamId: team.teamId,
+                        teamName: team.teamName,
+                        trend: recentAvg > avg + 5 ? 'up' : recentAvg < avg - 5 ? 'down' : 'stable',
+                        recentAvg: Math.round(recentAvg * 10) / 10,
+                        overallAvg: Math.round(avg * 10) / 10,
+                        momentum: Math.round((recentAvg - avg) * 10) / 10
+                    };
+                }),
+                lastUpdated: Date.now()
+            };
+
             var analysisHtml = completedMatches.length >= 1 ? buildAnalysisHTML(teams, teamMatchPoints, matches) : '';
 
             // ── Build individual team card HTML first (so canvases exist in DOM) ──
@@ -4697,6 +4757,33 @@
                     }).join('') +
                 '</div>' +
 
+                // ── IPL Standings Connection ──
+                (hasStandingsData ? (function() {
+                    var top4 = sortedStandings.slice(0, 4);
+                    var top4Codes = top4.map(function(t) { return t.code; });
+                    var connectionRows = ranked.map(function(r) {
+                        var best11 = (r.team.playerBreakdowns || []).filter(function(p) { return p.isInBest11; });
+                        var fromTop4 = best11.filter(function(p) {
+                            var iplTeam = playerIPLTeamLookup[p.playerName] || '';
+                            return top4Codes.indexOf(iplTeam) >= 0;
+                        });
+                        var pct = best11.length > 0 ? Math.round((fromTop4.length / best11.length) * 100) : 0;
+                        var trendIcon = r.trend === 'up' ? '&#9650;' : r.trend === 'down' ? '&#9660;' : '&#9679;';
+                        var trendColor = r.trend === 'up' ? '#69F0AE' : r.trend === 'down' ? '#FF4560' : '#FFD700';
+                        return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;font-size:0.78rem;">' +
+                            '<span style="color:' + trendColor + ';">' + trendIcon + '</span>' +
+                            '<span style="width:7rem;color:#e0e0e0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + r.team.teamName + '</span>' +
+                            '<span style="color:#8a95aa;">' + fromTop4.length + '/' + best11.length + ' Best XI from Top 4</span>' +
+                            '<span style="margin-left:auto;color:' + (pct >= 50 ? '#69F0AE' : '#FFA726') + ';font-weight:700;">' + pct + '%</span>' +
+                        '</div>';
+                    });
+                    return '<div style="background:rgba(255,255,255,0.05);border-radius:14px;padding:1.25rem 1.4rem;border:1px solid rgba(255,255,255,0.1);margin-top:1.5rem;">' +
+                        '<div style="font-size:0.82rem;font-weight:700;color:#d8d8d8;margin-bottom:0.5rem;">&#128279; IPL Standings Impact</div>' +
+                        '<div style="font-size:0.7rem;color:#8a95aa;margin-bottom:0.75rem;">Teams with more players from IPL Top 4 (' + top4Codes.join(', ') + ') benefit as the season progresses</div>' +
+                        connectionRows.join('') +
+                    '</div>';
+                })() : '') +
+
             '</div>';
         }
 
@@ -4712,15 +4799,25 @@
             _winPredTabRenderedVersion = _fantasyDataVersion;
 
             var predictions = computeIPLWinPrediction();
+            var liveRecent = predictions._liveRecent || {};
+            var maxPlayed = predictions._maxPlayed || 0;
             var hasLiveData = predictions.length > 0 && predictions[0].played > 0;
             var winner = predictions[0];
             var winnerColor = IPL_TEAM_COLORS[winner.code] || '#f5c518';
             var winnerRgb = hexToRgb(winnerColor);
 
             // ── Algorithm description
-            var algoText = hasLiveData && winner.played >= 3
-                ? 'Current Form 35% + Squad Strength (Bat/Bowl/Form) 18% + Recent Seasons 15% + History 10% + Titles 7% + Home 8% + H2H 7%'
-                : 'Recent Seasons 25% + Squad Strength (Bat/Bowl/Form) 25% + History 15% + Titles 10% + Home 10% + H2H 10% + Current 5%';
+            var algoText;
+            if (hasLiveData && maxPlayed >= 7) {
+                algoText = 'Current Form 40% + Squad Strength 15% + H2H 10% + Home 10% + Recent Seasons 10% + History 8% + Titles 7%';
+            } else if (hasLiveData && maxPlayed >= 3) {
+                algoText = 'Current Form 35% + Squad Strength 18% + Recent Seasons 15% + History 10% + Home 8% + Titles 7% + H2H 7%';
+            } else {
+                algoText = 'Recent Seasons 25% + Squad Strength 25% + History 15% + Titles 10% + Home 10% + H2H 10% + Current 5%';
+            }
+            if (hasLiveData) {
+                algoText += ' · Based on ' + maxPlayed + ' matches played';
+            }
 
             // ── Hero Card
             var titleYears = [];
@@ -4771,7 +4868,7 @@
                 Object.keys(IPL_TITLE_WINNERS).forEach(function(yr) { if (IPL_TITLE_WINNERS[yr] === p.code) titles.push(yr); });
 
                 // Season history
-                var recent = IPL_RECENT_SEASONS[p.code] || {};
+                var recent = liveRecent[p.code] || {};
                 var seasonCards = [2026, 2025, 2024, 2023, 2022].map(function(yr) {
                     var s = recent[yr];
                     if (!s) return '';
@@ -4946,7 +5043,48 @@
             });
             titleHTML += '</div></div>';
 
-            content.innerHTML = heroHTML + rankingsHTML + matchPredictorHTML + matrixHTML + venueHTML + titleHTML;
+            // ── Fantasy League Impact — how IPL predictions affect fantasy teams
+            var fantasyImpactHTML = '';
+            var ft = (fantasyData && fantasyData.teams) || [];
+            if (ft.length > 0 && hasLiveData) {
+                var standings = getIPL2026Standings();
+                var sortedSt = standings.slice().sort(function(a, b) {
+                    if (b.points !== a.points) return b.points - a.points;
+                    return (b.nrr || 0) - (a.nrr || 0);
+                });
+                var top4Codes = sortedSt.slice(0, 4).map(function(t) { return t.code; });
+                var playerIPLLookup = {};
+                ((state && state.players) || []).forEach(function(p) {
+                    if (p.name && p.previousTeam) playerIPLLookup[p.name] = p.previousTeam;
+                });
+
+                var impactRows = ft.map(function(team) {
+                    var players = team.playerBreakdowns || [];
+                    var top4Players = players.filter(function(p) {
+                        var iplTeam = playerIPLLookup[p.playerName] || '';
+                        return top4Codes.indexOf(iplTeam) >= 0;
+                    });
+                    var totalPlayers = players.filter(function(p) { return p.isInBest11; }).length;
+                    var top4InBest11 = top4Players.filter(function(p) { return p.isInBest11; }).length;
+                    var pct = totalPlayers > 0 ? Math.round((top4InBest11 / totalPlayers) * 100) : 0;
+                    var barColor = pct >= 60 ? '#69F0AE' : pct >= 40 ? '#FFD700' : '#FF4560';
+                    return '<div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid rgba(255,255,255,0.05);">' +
+                        '<div style="width:8rem;font-weight:600;font-size:0.8rem;color:#e0e0e0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + team.teamName + '</div>' +
+                        '<div style="flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">' +
+                            '<div style="width:' + pct + '%;height:100%;background:' + barColor + ';border-radius:3px;transition:width 0.5s;"></div>' +
+                        '</div>' +
+                        '<div style="width:5rem;text-align:right;font-size:0.75rem;color:' + barColor + ';font-weight:700;">' + top4InBest11 + '/' + totalPlayers + ' (' + pct + '%)</div>' +
+                    '</div>';
+                });
+
+                fantasyImpactHTML = '<div class="pred-section">' +
+                    '<div class="pred-section-title">&#127919; Fantasy League Impact</div>' +
+                    '<div style="font-size:0.72rem;color:#8a95aa;margin-bottom:0.75rem;">Best XI players from current IPL Top 4 teams (' + top4Codes.join(', ') + ')</div>' +
+                    impactRows.join('') +
+                '</div>';
+            }
+
+            content.innerHTML = heroHTML + rankingsHTML + fantasyImpactHTML + matchPredictorHTML + matrixHTML + venueHTML + titleHTML;
         }
 
         function updateMatchPrediction() {

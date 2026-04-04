@@ -193,7 +193,11 @@ const IPL_TEAM_NAME_TO_CODE_SERVER = {
     'rr': 'RR', 'rajasthan royals': 'RR', 'rajasthan': 'RR',
     'lsg': 'LSG', 'lucknow super giants': 'LSG', 'lucknow': 'LSG',
     'gt': 'GT', 'gujarat titans': 'GT', 'gujarat': 'GT',
-    'pbks': 'PBKS', 'punjab kings': 'PBKS', 'punjab': 'PBKS'
+    'pbks': 'PBKS', 'punjab kings': 'PBKS', 'punjab': 'PBKS',
+    // Historical team names
+    'delhi daredevils': 'DC', 'daredevils': 'DC',
+    'deccan chargers': 'SRH', 'deccan': 'SRH',
+    'kings xi punjab': 'PBKS', 'kings xi': 'PBKS', 'kxip': 'PBKS'
 };
 
 function resolveTeamCode(name) {
