@@ -214,6 +214,9 @@
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
 
         .room-code-value {
             font-size: 2.5rem;
@@ -3857,7 +3860,26 @@
                 leaderboard.innerHTML = '';
                 if (emptyMsg) {
                     emptyMsg.style.display = 'block';
-                    emptyMsg.innerHTML = '<h3>No Teams Yet</h3><p>Add teams to the room to see the points table. Fantasy points are fetched automatically from the official IPL Fantasy API.</p>';
+                    if (!fantasyData.lastUpdated && !fantasyData.configured) {
+                        // Data not fetched yet — show loading indicator
+                        emptyMsg.innerHTML = '<div style="text-align:center;padding:2rem;"><div style="display:inline-block;width:32px;height:32px;border:3px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;"></div><p style="margin-top:1rem;color:var(--text-secondary);">Loading fantasy points...</p></div>';
+                        // Trigger a fetch if we have a room code
+                        if (roomCode && !_fantasyFetchInProgress) {
+                            _fantasyFetchInProgress = true;
+                            fetch('/api/room/' + roomCode + '/fantasy-points')
+                                .then(function(r) { return r.json(); })
+                                .then(function(data) {
+                                    fantasyData = data;
+                                    _fantasyDataVersion++;
+                                    _matchContentCache = {};
+                                    renderPointsTable();
+                                })
+                                .catch(function(e) { console.error('Failed to fetch fantasy points:', e); })
+                                .finally(function() { _fantasyFetchInProgress = false; });
+                        }
+                    } else {
+                        emptyMsg.innerHTML = '<h3>No Teams Yet</h3><p>Add teams to the room to see the points table. Fantasy points are fetched automatically from the official IPL Fantasy API.</p>';
+                    }
                 }
                 return;
             }
@@ -5545,6 +5567,7 @@
 
         var _matchContentCache = {};
         var _fantasyDataVersion = 0;
+        var _fantasyFetchInProgress = false;
         var _matchCacheVersion = 0;
 
         function selectFantasyMatch(matchId) {
