@@ -16,10 +16,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 const INITIAL_BUDGET = 100;
 const ROOMS_FILE = path.join(__dirname, 'data', 'rooms.json');
 const MONGODB_URI = process.env.MONGODB_URI;
-const CRICAPI_KEY = process.env.CRICAPI_KEY || '';
-const CRICAPI_SERIES_ID = process.env.CRICAPI_SERIES_ID || '';
-const IPL_FANTASY_UID = process.env.IPL_FANTASY_UID || '';
-const IPL_FANTASY_AUTH_TOKEN = process.env.IPL_FANTASY_AUTH_TOKEN || '';
 const FANTASY_REFRESH_INTERVAL = parseInt(process.env.FANTASY_REFRESH_INTERVAL) || 5; // minutes
 
 // IPL Season configuration — determines which season's data to fetch
@@ -211,59 +207,41 @@ function resolveTeamCode(name) {
 }
 
 function isFantasyConfigured() {
-    // Public IPL stats API is always available — no credentials required.
-    // Manual overrides (IPL Fantasy cookies or CricAPI) are optional.
+    // Official IPL Fantasy public API is always available — no credentials required.
     return true;
 }
 
 function getFantasySource() {
-    const iplUid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
-    const iplToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
-    if (iplUid && iplToken) return 'ipl_cookie';
-    // Always use official IPL Fantasy public API — no CricAPI or other sources
+    // Always use official IPL Fantasy public API — no API key needed
     return 'ipl_public';
 }
 
 async function initFantasyPoints() {
     if (db) {
-        // Load best available cached data on startup
-        // Priority: IPL Fantasy cookies > IPL public > ESPN > IPL public stats > CricAPI
-        const year = new Date().getFullYear();
-        const preferred = [
-            'ipl_fantasy_official',
-            'ipl_fantasy_public',
-            'cricbuzz_ipl',
-            `espn_ipl_${year}`,
-            'ipl_public_stats',
-            CRICAPI_SERIES_ID,
-        ].filter(Boolean);
-        for (const sid of preferred) {
-            const doc = await db.collection('fantasy_points').findOne({ seriesId: sid });
-            if (doc?.matches?.length) {
-                fantasyCache = doc;
-                // Rebuild nameMapping with current aliases in case cache predates alias additions
-                fantasyCache.nameMapping = buildNameMapping(fantasyCache.matches);
-                console.log(`Loaded ${doc.matches.length} matches from cache (${sid}), nameMapping rebuilt`);
-                break;
-            }
+        // Load cached IPL Fantasy public data on startup
+        const doc = await db.collection('fantasy_points').findOne({ seriesId: 'ipl_fantasy_public' });
+        if (doc?.matches?.length) {
+            fantasyCache = doc;
+            fantasyCache.nameMapping = buildNameMapping(fantasyCache.matches);
+            console.log(`Loaded ${doc.matches.length} matches from cache (ipl_fantasy_public), nameMapping rebuilt`);
         }
+
+        // Clear any stale caches from other sources or previous seasons
+        await db.collection('fantasy_points').deleteMany({
+            seriesId: { $nin: ['ipl_fantasy_public'] }
+        });
     }
 
     // Clear stale cache from a previous IPL season
     if (fantasyCache && isStaleSeasonCache(fantasyCache)) {
         console.log(`Clearing stale IPL ${fantasyCache.seasonYear || 'unknown'} cache — current season is IPL ${IPL_SEASON_YEAR}`);
         if (db) {
-            await db.collection('fantasy_points').deleteMany({
-                $or: [
-                    { seasonYear: { $lt: IPL_SEASON_YEAR } },
-                    { seasonYear: { $exists: false } }
-                ]
-            });
+            await db.collection('fantasy_points').deleteMany({});
         }
         fantasyCache = null;
     }
 
-    // Always start — public IPL stats requires no credentials
+    // Always start — official IPL Fantasy API requires no credentials
     startFantasyRefreshTimer();
     startNextMatchWatcher();
     fetchAllFantasyPoints().catch(err =>
@@ -378,14 +356,7 @@ async function fetchAllFantasyPoints() {
     }
     isRefreshing = true;
     try {
-        const source = getFantasySource();
-        if (source === 'ipl_cookie') return await fetchFromIPLFantasy();
-        if (source === 'cricapi')    return await fetchFromCricAPI();
-        // Always use official IPL Fantasy public API — no fallback to Cricbuzz/ESPN/IPL Stats
-        if (source === 'ipl_public') {
-            return await fetchFromIPLFantasyPublic();
-        }
-        throw new Error('No valid fantasy data source configured');
+        return await fetchFromIPLFantasyPublic();
     } finally {
         isRefreshing = false;
     }
@@ -1092,8 +1063,8 @@ function computeESPNMatchPoints(scData) {
 }
 
 async function fetchFromIPLFantasy() {
-    const uid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
-    const authToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
+    const uid = process.env.IPL_FANTASY_UID || '';
+    const authToken = process.env.IPL_FANTASY_AUTH_TOKEN || '';
     if (!uid || !authToken) throw new Error('IPL_FANTASY_UID and IPL_FANTASY_AUTH_TOKEN must be set');
 
     const headers = {
@@ -1509,10 +1480,12 @@ async function fetchFromIPLFantasyPublic() {
                     }
                     // If fixture API says not live and points haven't changed for long enough → completed.
                 }
-                // Newly discovered match in probing — could be live; correct on next refresh if unchanged.
+                // Newly discovered match in probing — only the most recent match could be live.
+                // All earlier matches in a fresh probe are definitely completed since IPL
+                // matches are sequential and we stop probing at the first unplayed match.
                 if (!prevMatch && useProbing) {
-                    matchStatus = 'live';
-                    consecutiveUnchanged = 0;
+                    // Default to completed; the loop will correct the last match below
+                    matchStatus = 'completed';
                 }
             }
 
@@ -1530,6 +1503,16 @@ async function fetchFromIPLFantasyPublic() {
             console.error(`IPL Fantasy Public: error fetching tourgamedayId ${entry.tourgamedayId}:`, err.message);
             consecutiveNoPoints++;
             if (useProbing && consecutiveNoPoints >= 3) break;
+        }
+    }
+
+    // On a fresh probe (no existing cache), mark the last match as possibly live
+    // since it could still be in progress. All earlier matches are completed.
+    if (useProbing && newMatches.length > 0 && existingMatches.length === 0) {
+        const lastMatch = newMatches[newMatches.length - 1];
+        if (lastMatch.status === 'completed') {
+            lastMatch.status = 'live';
+            lastMatch.consecutiveUnchanged = 0;
         }
     }
 
@@ -1821,10 +1804,10 @@ async function findCricAPISeriesId(apiKey) {
 }
 
 async function fetchFromCricAPI() {
-    const apiKey = process.env.CRICAPI_KEY || CRICAPI_KEY;
+    const apiKey = process.env.CRICAPI_KEY || '';
     if (!apiKey) throw new Error('CRICAPI_KEY must be set');
 
-    let seriesId = process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID;
+    let seriesId = process.env.CRICAPI_SERIES_ID || '';
     if (!seriesId) {
         // Auto-discover current IPL series — user only needs to provide the API key
         seriesId = await findCricAPISeriesId(apiKey);
@@ -3399,30 +3382,13 @@ app.post('/api/room/:code/fantasy-points/refresh', async (req, res) => {
 });
 
 // Admin: Update fantasy data source at runtime
+// Fantasy config endpoint — no configuration needed (IPL Official API is automatic)
+// Kept for backward compatibility; triggers a re-fetch
 app.post('/api/room/:code/fantasy-config', (req, res) => {
-    const { apiKey, seriesId, iplFantasyUid, iplFantasyToken, source } = req.body;
-
-    if (source === 'auto') {
-        // Reset to default: public IPL stats (no credentials)
-        process.env.IPL_FANTASY_UID = '';
-        process.env.IPL_FANTASY_AUTH_TOKEN = '';
-        process.env.CRICAPI_KEY = '';
-        process.env.CRICAPI_SERIES_ID = '';
-    } else {
-        // IPL Fantasy cookies (most accurate)
-        if (iplFantasyUid !== undefined)   process.env.IPL_FANTASY_UID = iplFantasyUid;
-        if (iplFantasyToken !== undefined)  process.env.IPL_FANTASY_AUTH_TOKEN = iplFantasyToken;
-        // CricAPI
-        if (apiKey !== undefined)  process.env.CRICAPI_KEY = apiKey;
-        if (seriesId !== undefined) process.env.CRICAPI_SERIES_ID = seriesId;
-    }
-
-    startFantasyRefreshTimer();
     fetchAllFantasyPoints().catch(err =>
-        console.error('Fantasy fetch after config save failed:', err.message)
+        console.error('Fantasy fetch after config request failed:', err.message)
     );
-
-    res.json({ success: true, source: getFantasySource() });
+    res.json({ success: true, source: 'ipl_public' });
 });
 
 // ============ MATCH SCORECARD API ============
@@ -3491,10 +3457,10 @@ function extractCricAPIScorecardData(scData) {
 
 // Fetch scorecards from CricAPI — proper API with key, no scraping restrictions
 async function fetchScorecardFromCricAPI() {
-    const apiKey = process.env.CRICAPI_KEY || CRICAPI_KEY;
+    const apiKey = process.env.CRICAPI_KEY || '';
     if (!apiKey) throw new Error('CricAPI: no API key configured');
 
-    let seriesId = process.env.CRICAPI_SERIES_ID || CRICAPI_SERIES_ID;
+    let seriesId = process.env.CRICAPI_SERIES_ID || '';
     if (!seriesId) {
         seriesId = await findCricAPISeriesId(apiKey);
         process.env.CRICAPI_SERIES_ID = seriesId;

@@ -3820,11 +3820,7 @@
                 leaderboard.innerHTML = '';
                 if (emptyMsg) {
                     emptyMsg.style.display = 'block';
-                    if (!fantasyData.configured) {
-                        emptyMsg.innerHTML = '<h3>Fantasy Points Not Configured</h3><p>Set the CricAPI key and IPL Series ID below to start tracking official IPL fantasy points.</p>';
-                    } else {
-                        emptyMsg.innerHTML = '<h3>No Teams Yet</h3><p>Add teams to the room to see the points table.</p>';
-                    }
+                    emptyMsg.innerHTML = '<h3>No Teams Yet</h3><p>Add teams to the room to see the points table. Fantasy points are fetched automatically from the official IPL Fantasy API.</p>';
                 }
                 return;
             }
