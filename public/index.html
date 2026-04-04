@@ -3995,6 +3995,22 @@
             var completedIdx = [];
             matches.forEach(function(m, i) { if (m.status === 'completed') completedIdx.push(i); });
 
+            // ── IPL Standings & Playoff Risk ────────────────────────────────
+            var standings = getIPL2026Standings();
+            var sortedStandings = standings.slice().sort(function(a, b) {
+                if (b.points !== a.points) return b.points - a.points;
+                return (b.nrr || 0) - (a.nrr || 0);
+            });
+            var iplRankMap = {}; // code -> rank (1-based)
+            sortedStandings.forEach(function(t, i) { iplRankMap[t.code] = i + 1; });
+            var hasStandingsData = sortedStandings.some(function(t) { return t.played > 0; });
+
+            // Build player → IPL team lookup from auction state
+            var playerIPLTeamLookup = {};
+            ((state && state.players) || []).forEach(function(p) {
+                if (p.name && p.previousTeam) playerIPLTeamLookup[p.name] = p.previousTeam;
+            });
+
             // ── Per-team stats ──────────────────────────────────────────────
             var teamStats = teams.map(function(team, idx) {
                 var pts = teamMatchPoints[idx];
@@ -4018,18 +4034,52 @@
                     if (p.totalPoints > bestPts) { bestPts = p.totalPoints; bestPlayer = p; }
                 });
 
+                // ── Playoff risk score ──────────────────────────────────────
+                // For each Best XI player, score based on their IPL team's playoff chances:
+                //   Top 4 (playoff zone) = 1.0, Rank 5-6 (borderline) = 0.5, Rank 7-10 (at risk) = 0.15
+                // Higher score = more players from playoff-bound teams = lower risk
+                var best11Players = (team.playerBreakdowns||[]).filter(function(p) { return p.isInBest11; });
+                var playoffScore = 0;
+                var playoffCount = 0;
+                var iplTeamBreakdown = { playoff: [], borderline: [], atRisk: [] };
+                best11Players.forEach(function(p) {
+                    var iplTeam = playerIPLTeamLookup[p.playerName];
+                    if (!iplTeam) return;
+                    var rank = iplRankMap[iplTeam] || 10;
+                    playoffCount++;
+                    if (rank <= 4) {
+                        playoffScore += 1.0;
+                        iplTeamBreakdown.playoff.push(p.playerName);
+                    } else if (rank <= 6) {
+                        playoffScore += 0.5;
+                        iplTeamBreakdown.borderline.push(p.playerName);
+                    } else {
+                        playoffScore += 0.15;
+                        iplTeamBreakdown.atRisk.push(p.playerName);
+                    }
+                });
+                var playoffRiskScore = playoffCount > 0 ? playoffScore / playoffCount : 0.5;
+
                 return { team:team, idx:idx, totalPts:totalPts, recentPts:recentPts,
                          recentAvg:recentAvg, overallAvg:overallAvg, stddev:stddev,
-                         trend:trend, bestPlayer:bestPlayer, bestPts:bestPts };
+                         trend:trend, bestPlayer:bestPlayer, bestPts:bestPts,
+                         playoffRiskScore:playoffRiskScore, iplTeamBreakdown:iplTeamBreakdown };
             });
 
             // ── Prediction scores ───────────────────────────────────────────
             var maxTotal  = Math.max.apply(null, teamStats.map(function(s){return s.totalPts;}))||1;
             var maxRecent = Math.max.apply(null, teamStats.map(function(s){return s.recentAvg;}))||1;
             var maxStd    = Math.max.apply(null, teamStats.map(function(s){return s.stddev;}))||1;
+            var maxPlayoff = Math.max.apply(null, teamStats.map(function(s){return s.playoffRiskScore;}))||1;
 
             teamStats.forEach(function(s) {
-                s.predScore = (s.totalPts/maxTotal)*0.45 + (s.recentAvg/maxRecent)*0.35 + (1-(s.stddev/maxStd))*0.20;
+                if (hasStandingsData) {
+                    // With standings data: Form 30% + Points 40% + Consistency 15% + Playoff Risk 15%
+                    s.predScore = (s.totalPts/maxTotal)*0.40 + (s.recentAvg/maxRecent)*0.30 + (1-(s.stddev/maxStd))*0.15 + (s.playoffRiskScore/maxPlayoff)*0.15;
+                } else {
+                    // Without standings data: original formula
+                    s.predScore = (s.totalPts/maxTotal)*0.45 + (s.recentAvg/maxRecent)*0.35 + (1-(s.stddev/maxStd))*0.20;
+                }
             });
 
             var ranked = teamStats.slice().sort(function(a,b){return b.predScore-a.predScore;});
@@ -4069,6 +4119,16 @@
             });
             if (highestSingle > 0) insights.push({ icon:'💥', text:'Best single-match haul: <strong>'+highestSingleTeam+'</strong> with <strong>'+highestSingle.toFixed(1)+'&nbsp;pts</strong> in '+highestSingleMatch+'.' });
 
+            // ── Playoff risk insights ────────────────────────────────────────
+            if (hasStandingsData) {
+                var bestPlayoff = teamStats.slice().sort(function(a,b){return b.playoffRiskScore-a.playoffRiskScore;})[0];
+                var worstPlayoff = teamStats.slice().sort(function(a,b){return a.playoffRiskScore-b.playoffRiskScore;})[0];
+                if (bestPlayoff.playoffRiskScore > 0.7)
+                    insights.push({ icon:'🛡️', text:'<strong>'+bestPlayoff.team.teamName+'</strong> has the safest playoff exposure — '+bestPlayoff.iplTeamBreakdown.playoff.length+' Best XI players from top-4 IPL teams. More matches guaranteed!' });
+                if (worstPlayoff.playoffRiskScore < 0.5 && worstPlayoff !== bestPlayoff)
+                    insights.push({ icon:'🚨', text:'<strong>'+worstPlayoff.team.teamName+'</strong> carries high playoff risk — '+worstPlayoff.iplTeamBreakdown.atRisk.length+' Best XI player'+(worstPlayoff.iplTeamBreakdown.atRisk.length!==1?'s':'')+' from bottom-table IPL teams that may miss playoffs.' });
+            }
+
             // ── Form guide cards ────────────────────────────────────────────
             var globalMax = Math.max.apply(null, teamStats.map(function(s){return Math.max.apply(null,s.recentPts.concat([1]));}));
             var formCards = teamStats.map(function(s) {
@@ -4094,6 +4154,10 @@
                         '<span>Total <strong>'+s.totalPts.toFixed(1)+'</strong></span>' +
                         '<span>Odds <strong style="color:'+col+';">'+predR.predPct+'%</strong></span>' +
                     '</div>' +
+                    (hasStandingsData ? '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.62rem;color:#8a95aa;margin-top:0.2rem;padding-top:0.25rem;border-top:1px solid rgba(255,255,255,0.06);">' +
+                        '<span>Playoff Risk</span>' +
+                        '<span style="font-weight:700;color:'+(s.playoffRiskScore >= 0.7 ? '#69F0AE' : s.playoffRiskScore >= 0.4 ? '#FFD700' : '#FF4560')+';">'+(s.playoffRiskScore >= 0.7 ? 'Low' : s.playoffRiskScore >= 0.4 ? 'Medium' : 'High')+'</span>' +
+                    '</div>' : '') +
                 '</div>';
             }).join('');
 
@@ -4109,6 +4173,7 @@
                     '</div>' +
                     '<div style="width:2.8rem;text-align:right;font-size:0.75rem;font-weight:700;color:'+col+';flex-shrink:0;">'+r.predPct+'%</div>' +
                     '<div style="width:4rem;text-align:right;font-size:0.72rem;color:#9a9a9a;flex-shrink:0;">'+r.totalPts.toFixed(1)+' pts</div>' +
+                    (hasStandingsData ? '<div style="width:1.4rem;text-align:center;font-size:0.7rem;flex-shrink:0;" title="Playoff Risk: '+(r.playoffRiskScore >= 0.7 ? 'Low' : r.playoffRiskScore >= 0.4 ? 'Medium' : 'High')+'">'+(r.playoffRiskScore >= 0.7 ? '🛡️' : r.playoffRiskScore >= 0.4 ? '⚠️' : '🚨')+'</div>' : '') +
                 '</div>';
             }).join('');
 
@@ -4118,6 +4183,7 @@
             if (winner.stddev < maxStd * 0.4) reasons.push('excellent consistency');
             reasons.push('leading with '+winner.totalPts.toFixed(1)+' points');
             if (winner.recentAvg > winner.overallAvg) reasons.push('improving avg ('+winner.recentAvg.toFixed(1)+' vs '+winner.overallAvg.toFixed(1)+' overall)');
+            if (hasStandingsData && winner.playoffRiskScore >= 0.7) reasons.push('low playoff risk ('+winner.iplTeamBreakdown.playoff.length+' players from top-4 IPL teams)');
             var reasonStr = reasons.join(' · ');
 
             var rgb = hexToRgb(winnerColor);
@@ -4129,7 +4195,7 @@
                 '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.5rem;">' +
                     '<div>' +
                         '<h3 style="background:linear-gradient(135deg,#FFD700,#FF8C00,#FF4560);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1.2rem;font-weight:900;letter-spacing:0.02em;margin:0;">&#127381; Daily Analysis &amp; Winner Prediction</h3>' +
-                        '<div style="font-size:0.72rem;color:#8a95aa;margin-top:0.25rem;">&#128197; '+today+' &nbsp;·&nbsp; '+completedMatches.length+' match'+(completedMatches.length!==1?'es':'')+' completed &nbsp;·&nbsp; Algorithm: Form 35% + Points 45% + Consistency 20%</div>' +
+                        '<div style="font-size:0.72rem;color:#8a95aa;margin-top:0.25rem;">&#128197; '+today+' &nbsp;·&nbsp; '+completedMatches.length+' match'+(completedMatches.length!==1?'es':'')+' completed &nbsp;·&nbsp; Algorithm: '+(hasStandingsData ? 'Points 40% + Form 30% + Consistency 15% + Playoff Risk 15%' : 'Form 35% + Points 45% + Consistency 20%')+'</div>' +
                     '</div>' +
                 '</div>' +
 
