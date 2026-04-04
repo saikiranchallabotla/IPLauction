@@ -218,35 +218,46 @@ function getFantasySource() {
 
 async function initFantasyPoints() {
     if (db) {
-        // Load cached IPL Fantasy public data on startup
-        const doc = await db.collection('fantasy_points').findOne({ seriesId: 'ipl_fantasy_public' });
-        if (doc?.matches?.length) {
-            fantasyCache = doc;
-            fantasyCache.nameMapping = buildNameMapping(fantasyCache.matches);
-            console.log(`Loaded ${doc.matches.length} matches from cache (ipl_fantasy_public), nameMapping rebuilt`);
-        }
-
-        // Clear any stale caches from other sources or previous seasons
+        // FIRST: nuke ALL stale fantasy caches from any source (CricAPI, Cricbuzz, ESPN, etc.)
+        // Only keep ipl_fantasy_public with valid current-season data
         await db.collection('fantasy_points').deleteMany({
             seriesId: { $nin: ['ipl_fantasy_public'] }
         });
-    }
 
-    // Clear stale cache from a previous IPL season
-    if (fantasyCache && isStaleSeasonCache(fantasyCache)) {
-        console.log(`Clearing stale IPL ${fantasyCache.seasonYear || 'unknown'} cache — current season is IPL ${IPL_SEASON_YEAR}`);
-        if (db) {
-            await db.collection('fantasy_points').deleteMany({});
+        // Load cached IPL Fantasy public data
+        const doc = await db.collection('fantasy_points').findOne({ seriesId: 'ipl_fantasy_public' });
+        if (doc?.matches?.length) {
+            // Validate: match count must be reasonable for current season
+            const seasonStart = new Date(IPL_SEASON_START_DATE);
+            const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
+            const maxExpected = Math.max(4, daysSinceStart * 2);
+
+            if (doc.matches.length > maxExpected) {
+                // Stale data (e.g. 54 matches from IPL 2025) — nuke it
+                console.log(`Purging stale cache: ${doc.matches.length} matches exceeds max ${maxExpected} for ${daysSinceStart} days into IPL ${IPL_SEASON_YEAR}`);
+                await db.collection('fantasy_points').deleteMany({});
+                fantasyCache = null;
+            } else if (isStaleSeasonCache(doc)) {
+                console.log(`Clearing stale IPL ${doc.seasonYear || 'unknown'} cache — current season is IPL ${IPL_SEASON_YEAR}`);
+                await db.collection('fantasy_points').deleteMany({});
+                fantasyCache = null;
+            } else {
+                fantasyCache = doc;
+                fantasyCache.nameMapping = buildNameMapping(fantasyCache.matches);
+                console.log(`Loaded ${doc.matches.length} matches from cache (ipl_fantasy_public), nameMapping rebuilt`);
+            }
         }
-        fantasyCache = null;
     }
 
     // Always start — official IPL Fantasy API requires no credentials
     startFantasyRefreshTimer();
     startNextMatchWatcher();
-    fetchAllFantasyPoints().catch(err =>
-        console.error('Initial fantasy fetch failed:', err.message)
-    );
+    // Fetch fresh data immediately (don't serve stale cache to users)
+    try {
+        await fetchAllFantasyPoints();
+    } catch (err) {
+        console.error('Initial fantasy fetch failed:', err.message);
+    }
 }
 
 // Detect if cached fantasy data belongs to a previous IPL season
@@ -3389,6 +3400,38 @@ app.post('/api/room/:code/fantasy-config', (req, res) => {
         console.error('Fantasy fetch after config request failed:', err.message)
     );
     res.json({ success: true, source: 'ipl_public' });
+});
+
+// Admin: Clear all fantasy cache and re-fetch from scratch
+app.post('/api/fantasy-points/clear', async (req, res) => {
+    console.log('Admin: purging ALL fantasy points cache');
+    fantasyCache = null;
+    if (db) {
+        try { await db.collection('fantasy_points').deleteMany({}); } catch (e) { console.error('DB clear failed:', e.message); }
+    }
+    broadcastFantasyUpdate();
+    try {
+        const result = await fetchAllFantasyPoints();
+        res.json({ success: true, message: `Cache cleared. Fetched ${result.totalMatches} matches fresh from IPL Fantasy API.` });
+    } catch (err) {
+        res.json({ success: true, message: 'Cache cleared. Fresh fetch failed: ' + err.message });
+    }
+});
+
+// Room-specific clear (backward compat)
+app.post('/api/room/:code/fantasy-points/clear', async (req, res) => {
+    console.log('Admin: purging ALL fantasy points cache (room-specific endpoint)');
+    fantasyCache = null;
+    if (db) {
+        try { await db.collection('fantasy_points').deleteMany({}); } catch (e) { console.error('DB clear failed:', e.message); }
+    }
+    broadcastFantasyUpdate();
+    try {
+        const result = await fetchAllFantasyPoints();
+        res.json({ success: true, message: `Cache cleared. Fetched ${result.totalMatches} matches fresh from IPL Fantasy API.` });
+    } catch (err) {
+        res.json({ success: true, message: 'Cache cleared. Fresh fetch failed: ' + err.message });
+    }
 });
 
 // ============ MATCH SCORECARD API ============
