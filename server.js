@@ -2784,7 +2784,17 @@ function computeCurrentMatchDay(matches, schedule) {
 }
 
 function computeRoomFantasyPoints(room) {
-    const matches = fantasyCache?.matches || [];
+    // Hard cap: never serve more matches than physically possible this season
+    // This prevents stale IPL 2025 data (54+ matches) from ever reaching clients
+    const seasonStart = new Date(IPL_SEASON_START_DATE);
+    const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
+    const maxMatches = Math.max(4, daysSinceStart * 2);
+    let allMatches = fantasyCache?.matches || [];
+    if (allMatches.length > maxMatches) {
+        console.warn(`Hard cap: trimming ${allMatches.length} matches to ${maxMatches} (IPL ${IPL_SEASON_YEAR}, day ${daysSinceStart})`);
+        allMatches = allMatches.slice(0, maxMatches);
+    }
+    const matches = allMatches;
     const nameMapping = fantasyCache?.nameMapping || {};
     // Reverse mapping: our player name -> array of CricAPI names
     const reverseMapping = {};
