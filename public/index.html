@@ -2172,7 +2172,13 @@
             { code: 'LSG',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 }
         ];
 
+        // Server-synced standings (overrides localStorage when available)
+        var _serverStandings = null;
+        var _standingsFetchedAt = 0;
+
         function getIPL2026Standings() {
+            // Prefer server-synced data (auto-updated from official IPL sources)
+            if (_serverStandings && _serverStandings.length > 0) return _serverStandings;
             try {
                 var stored = localStorage.getItem('ipl2026_standings');
                 if (stored) return JSON.parse(stored);
@@ -2185,7 +2191,31 @@
         }
 
         function resetIPL2026Standings() {
+            _serverStandings = null;
             try { localStorage.removeItem('ipl2026_standings'); } catch(e) {}
+        }
+
+        function applyServerStandings(standings) {
+            if (!standings || standings.length === 0) return;
+            _serverStandings = standings;
+            _standingsFetchedAt = Date.now();
+            // Persist to localStorage as fallback
+            saveIPL2026Standings(standings);
+            // Re-render if the IPL analysis tab is visible
+            var iplTab = document.getElementById('fantasy-ipl-analysis-tab');
+            if (iplTab && iplTab.style.display !== 'none') renderIPLTeamAnalysis();
+        }
+
+        function fetchStandingsFromServer() {
+            fetch('/api/ipl-standings')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data && data.standings && data.standings.length > 0) {
+                        console.log('IPL standings synced from server (' + data.source + ')');
+                        applyServerStandings(data.standings);
+                    }
+                })
+                .catch(function(e) { console.warn('Could not fetch IPL standings from server:', e.message); });
         }
 
         // IPL team name variants → team code mapping (for matching match names to squads)
@@ -2701,11 +2731,17 @@
             socket.on('playerSold', ({ player, team, price }) => { try { showSoldOverlay(player, team, price); } catch(e) { console.error('playerSold render error:', e); } });
             socket.on('playersUpdated', (players) => { try { state.players = players; renderPlayers(); renderPlayersPrice(); renderLiveCategories(); } catch(e) { console.error('playersUpdated render error:', e); } });
             socket.on('fantasyPointsUpdate', (data) => { try { fantasyData = data; _fantasyDataVersion++; _matchContentCache = {}; renderPointsTable(); var todayTab = document.getElementById('fantasy-today-tab'); if (todayTab && todayTab.style.display !== 'none') renderTodaysPlayers(); var iplTab = document.getElementById('fantasy-ipl-analysis-tab'); if (iplTab && iplTab.style.display !== 'none') renderIPLTeamAnalysis(); } catch(e) { console.error('fantasyPointsUpdate render error:', e); } });
+            socket.on('standingsUpdate', (data) => { try { if (data && data.standings && data.standings.length > 0) { applyServerStandings(data.standings); } } catch(e) { console.error('standingsUpdate render error:', e); } });
             socket.on('roomPinned', (data) => { try { roomPinned = data.pinned; updatePinButton(); } catch(e) {} });
             socket.on('roomError', (msg) => {
                 showAuctionPopup('Room Error', msg, false);
                 setTimeout(() => forceLeaveRoom(), 2000);
             });
+
+            // Fetch current IPL standings from server immediately (auto-synced from official sources)
+            fetchStandingsFromServer();
+            // Re-fetch every 30 minutes to stay current
+            setInterval(fetchStandingsFromServer, 30 * 60 * 1000);
         }
 
         async function leaveRoom() {
@@ -4458,20 +4494,21 @@
                 ? '<div class="ipl-analysis-note" style="text-align:center;padding:2rem;">No participant teams found. Add teams and players to the auction to see the risk analysis.</div>'
                 : '';
 
+            var syncedAgo = _standingsFetchedAt ? Math.round((Date.now() - _standingsFetchedAt) / 60000) : null;
+            var syncNote = _serverStandings && _standingsFetchedAt
+                ? ' <span style="opacity:0.6;font-size:0.78rem;">(synced ' + (syncedAgo < 1 ? 'just now' : syncedAgo + 'm ago') + ')</span>'
+                : '';
             var dataNote = !hasData
-                ? '<div class="ipl-analysis-note">&#8505;&#65039; IPL 2026 standings are not yet updated. Update the standings table below to see accurate playoff risk. ' +
-                  'Risk levels are based on current standings — teams in the <strong>top 4</strong> qualify for playoffs, ' +
-                  '<strong>5th &amp; 6th</strong> are borderline, and <strong>7th–10th</strong> are at risk of missing playoffs.</div>'
-                : '<div class="ipl-analysis-note">&#8505;&#65039; Risk analysis based on current IPL 2026 standings. Teams in <strong>top 4</strong> qualify for playoffs ' +
-                  '(more matches = more points for your players). <strong>5th–6th</strong> are borderline. ' +
-                  '<strong>7th–10th</strong> are at risk of elimination — players from those teams score no playoff bonus points.</div>';
+                ? '<div class="ipl-analysis-note">&#8505;&#65039; IPL 2026 standings are being synced automatically from official sources. Use &#8635; Sync to refresh now.' + syncNote + '</div>'
+                : '<div class="ipl-analysis-note">&#8505;&#65039; Standings auto-synced from official IPL sources.' + syncNote + ' Teams in <strong>top 4</strong> qualify for playoffs. <strong>5th–6th</strong> borderline. <strong>7th–10th</strong> at risk.</div>';
 
             content.innerHTML =
                 // ── Section: IPL 2026 Standings ──
                 '<div>' +
                 '<div class="ipl-analysis-section-title">' +
                     '&#127942; IPL 2026 Points Table' +
-                    '<button class="btn-sm-outline" onclick="toggleIPLStandingsEdit()" style="margin-left:auto;">&#9998; Update Standings</button>' +
+                    '<button class="btn-sm-outline" onclick="fetchStandingsFromServer()" style="margin-left:0.5rem;" title="Sync from official IPL sources">&#8635; Sync</button>' +
+                    '<button class="btn-sm-outline" onclick="toggleIPLStandingsEdit()" style="margin-left:auto;">&#9998; Override</button>' +
                 '</div>' +
                 dataNote +
 
