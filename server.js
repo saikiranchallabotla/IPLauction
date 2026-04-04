@@ -2584,7 +2584,10 @@ const PLAYER_NAME_ALIASES = {
     // "Lungisani Ngidi" in players.json — widely known as "Lungi Ngidi" on APIs
     'lungi ngidi': 'Lungisani Ngidi',
     'l ngidi': 'Lungisani Ngidi',
+    'l. ngidi': 'Lungisani Ngidi',
     'ls ngidi': 'Lungisani Ngidi',
+    'ls ngidi': 'Lungisani Ngidi',
+    'l.s. ngidi': 'Lungisani Ngidi',
     'lungisani ngidi': 'Lungisani Ngidi',
     'ngidi': 'Lungisani Ngidi',
 };
@@ -2606,18 +2609,20 @@ function buildNameMapping(matches) {
 
     const mapping = {};
     for (const apiName of cricApiNames) {
-        // Alias lookup (case-insensitive)
-        const aliasMatch = PLAYER_NAME_ALIASES[apiName.toLowerCase().trim()];
+        // Alias lookup (case-insensitive, strip periods for variants like "L. Ngidi")
+        const aliasKey = apiName.toLowerCase().trim();
+        const aliasMatch = PLAYER_NAME_ALIASES[aliasKey] || PLAYER_NAME_ALIASES[aliasKey.replace(/\./g, '').replace(/\s+/g, ' ').trim()];
         if (aliasMatch) { mapping[apiName] = aliasMatch; continue; }
 
         // Exact match
         const exact = playersData.find(p => p.name.toLowerCase() === apiName.toLowerCase());
         if (exact) { mapping[apiName] = exact.name; continue; }
 
-        // First-initial + last-name match: e.g. "V Suryavanshi" -> "Vaibhav Suryavanshi"
+        // First-initial + last-name match: e.g. "V Suryavanshi" or "V. Suryavanshi" -> "Vaibhav Suryavanshi"
         const apiParts = apiName.trim().split(/\s+/);
-        if (apiParts.length >= 2 && apiParts[0].length === 1) {
-            const firstInitial = apiParts[0].toLowerCase();
+        const firstPart = apiParts[0].replace(/\./g, '');
+        if (apiParts.length >= 2 && (apiParts[0].length === 1 || (apiParts[0].length === 2 && apiParts[0].endsWith('.')) || firstPart.length === 1)) {
+            const firstInitial = firstPart[0].toLowerCase();
             const lastName = apiParts[apiParts.length - 1].toLowerCase();
             const initialMatches = playersData.filter(p => {
                 const pParts = p.name.trim().split(/\s+/);
@@ -2829,7 +2834,9 @@ function computeRoomFantasyPoints(room) {
             .map(([key]) => key);
         if (aliasKeys.length > 0) {
             for (const actualName of allCricApiNames) {
-                if (aliasKeys.includes(actualName.toLowerCase().trim())) found.add(actualName);
+                const normalizedActual = actualName.toLowerCase().trim();
+                const strippedActual = normalizedActual.replace(/\./g, '').replace(/\s+/g, ' ').trim();
+                if (aliasKeys.includes(normalizedActual) || aliasKeys.includes(strippedActual)) found.add(actualName);
             }
         }
 
