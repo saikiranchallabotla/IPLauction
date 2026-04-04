@@ -234,7 +234,6 @@ async function initFantasyPoints() {
             'ipl_fantasy_public',
             'cricbuzz_ipl',
             `espn_ipl_${year}`,
-            `espn_ipl_${year - 1}`,
             'ipl_public_stats',
             CRICAPI_SERIES_ID,
         ].filter(Boolean);
@@ -285,9 +284,9 @@ function isStaleSeasonCache(cache) {
             const d = new Date(m.matchDate);
             return !isNaN(d.getTime()) && d < seasonStart;
         });
-        // If most matches have dates before the season start, cache is stale
-        const matchesWithDates = cache.matches.filter(m => !isNaN(new Date(m.matchDate).getTime()));
-        if (matchesWithDates.length > 0 && matchesBeforeSeason.length > matchesWithDates.length * 0.5) return true;
+        // If ANY matches have dates before the season start, cache is stale
+        // (strict check — prevents mixing IPL 2025 data with IPL 2026)
+        if (matchesBeforeSeason.length > 0) return true;
     }
     // Check match count vs what's possible this season — even if seasonYear is set.
     // The IPL Fantasy API reuses tourgamedayId across seasons, so a prior run may have
@@ -342,17 +341,23 @@ function startNextMatchWatcher() {
     if (nextMatchWatcherTimer) return;
     nextMatchWatcherTimer = setInterval(() => {
         if (!fantasyCache?.schedule?.length) return;
-        if (liveMatchTimer) return; // already in live refresh mode
-        const IST_OFFSET = 5.5 * 60 * 60 * 1000;
-        const nowIST = new Date(Date.now() + IST_OFFSET);
+        const nowUTC = Date.now();
         const schedule = fantasyCache.schedule;
-        // Check if any scheduled match's start time is within the last 4 hours and we have no live match
-        const hasLive = (fantasyCache?.matches || []).some(m => m.status === 'live');
-        if (hasLive) return;
+        // Check all scheduled matches — support double-headers (2 matches/day)
+        // Don't skip if liveMatchTimer is running; a second match may have started
+        const completedIds = new Set((fantasyCache?.matches || []).filter(m => m.status === 'completed').map(m => m.matchId));
+        const liveIds = new Set((fantasyCache?.matches || []).filter(m => m.status === 'live').map(m => m.matchId));
         const recentlyStarted = schedule.some(s => {
             if (!s.matchDate) return false;
+            if (completedIds.has(s.matchId)) return false; // already completed
+            if (liveIds.has(s.matchId)) return false; // already tracked as live
             const matchTime = new Date(s.matchDate);
-            const diffMs = nowIST - matchTime;
+            if (isNaN(matchTime.getTime())) return false;
+            // If matchDate has no timezone info, it's likely IST — adjust to UTC
+            const matchDateStr = s.matchDate;
+            const isUTC = matchDateStr.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(matchDateStr);
+            const matchUTC = isUTC ? matchTime.getTime() : matchTime.getTime() - (5.5 * 60 * 60 * 1000);
+            const diffMs = nowUTC - matchUTC;
             // Match was supposed to start in the last 4 hours
             return diffMs > 0 && diffMs < 4 * 60 * 60 * 1000;
         });
@@ -362,8 +367,8 @@ function startNextMatchWatcher() {
                 console.error('Next-match watcher refresh failed:', err.message)
             );
         }
-    }, 60 * 1000); // check every 60 seconds
-    console.log('Next-match watcher started (checks every 60 seconds for newly started matches)');
+    }, 45 * 1000); // check every 45 seconds for faster detection
+    console.log('Next-match watcher started (checks every 45 seconds for newly started matches)');
 }
 
 async function fetchAllFantasyPoints() {
@@ -2698,14 +2703,14 @@ function computeCurrentMatchDay(matches, schedule) {
         };
     }
 
-    // Step 2: Check for today's matches (completed today) — show only the most recent one
+    // Step 2: Check for today's matches (completed today) — show all (double-headers have 2)
     const todayMatches = matches
         .filter(m => toISTDateStr(m.matchDate) === todayIST)
         .sort((a, b) => new Date(b.matchDate) - new Date(a.matchDate));
     if (todayMatches.length > 0) {
         return {
-            matches: [todayMatches[0]].map(enrichWithTeams),
-            label: "Today's Match",
+            matches: todayMatches.map(enrichWithTeams),
+            label: todayMatches.length > 1 ? "Today's Matches" : "Today's Match",
             isLive: false,
             isToday: true
         };
@@ -2716,9 +2721,15 @@ function computeCurrentMatchDay(matches, schedule) {
     if (todayScheduled.length > 0) {
         // Determine if any of today's scheduled matches should have already started
         // (start time has passed — could be live but not yet in matches array, e.g., during toss)
+        // Handle IST dates: if matchDate has no timezone indicator, treat it as IST
         const anyStarted = todayScheduled.some(s => {
             if (!s.matchDate) return false;
-            return new Date(s.matchDate) <= now;
+            const matchTime = new Date(s.matchDate);
+            if (isNaN(matchTime.getTime())) return false;
+            const isUTC = s.matchDate.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s.matchDate);
+            // If no timezone info, assume IST: subtract 5.5h to get UTC equivalent
+            const matchUTC = isUTC ? matchTime.getTime() : matchTime.getTime() - IST_OFFSET;
+            return matchUTC <= now.getTime();
         });
         return {
             matches: todayScheduled.map(s => ({
