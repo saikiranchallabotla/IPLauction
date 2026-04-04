@@ -243,7 +243,9 @@ async function initFantasyPoints() {
             const doc = await db.collection('fantasy_points').findOne({ seriesId: sid });
             if (doc?.matches?.length) {
                 fantasyCache = doc;
-                console.log(`Loaded ${doc.matches.length} matches from cache (${sid})`);
+                // Rebuild nameMapping with current aliases in case cache predates alias additions
+                fantasyCache.nameMapping = buildNameMapping(fantasyCache.matches);
+                console.log(`Loaded ${doc.matches.length} matches from cache (${sid}), nameMapping rebuilt`);
                 break;
             }
         }
@@ -2805,14 +2807,41 @@ function computeRoomFantasyPoints(room) {
     const reverseKeys = Object.keys(reverseMapping);
     const reverseFuse = reverseKeys.length > 0 ? new Fuse(reverseKeys, { threshold: 0.4, includeScore: true }) : null;
     const normalize = s => s.toLowerCase().replace(/[^a-z]/g, '');
+
+    // Build a set of all actual cricApiNames present in match data — used to resolve aliases
+    // even when nameMapping cache is stale (predates alias additions).
+    const allCricApiNames = new Set();
+    for (const match of matches) {
+        for (const pp of match.playerPoints) allCricApiNames.add(pp.cricApiName);
+    }
+
     function lookupApiNames(playerName) {
-        if (reverseMapping[playerName]) return reverseMapping[playerName];
-        // Normalized match (strips spaces/punctuation, lowercased)
+        const found = new Set();
+
+        // 1. From cached nameMapping (fast path)
+        if (reverseMapping[playerName]) reverseMapping[playerName].forEach(n => found.add(n));
+
+        // 2. PLAYER_NAME_ALIASES — always applied at runtime, bypasses stale cache.
+        //    Find alias keys whose canonical target is this playerName, then resolve
+        //    them to actual properly-cased cricApiNames present in match data.
+        const aliasKeys = Object.entries(PLAYER_NAME_ALIASES)
+            .filter(([, target]) => target === playerName)
+            .map(([key]) => key);
+        if (aliasKeys.length > 0) {
+            for (const actualName of allCricApiNames) {
+                if (aliasKeys.includes(actualName.toLowerCase().trim())) found.add(actualName);
+            }
+        }
+
+        if (found.size > 0) return [...found];
+
+        // 3. Normalized match (strips spaces/punctuation, lowercased)
         const normalizedTarget = normalize(playerName);
         for (const key of reverseKeys) {
             if (normalize(key) === normalizedTarget) return reverseMapping[key];
         }
-        // Fuzzy match for spelling variants
+
+        // 4. Fuzzy match for spelling variants
         if (reverseFuse) {
             const results = reverseFuse.search(playerName);
             if (results.length > 0 && results[0].score < 0.4) return reverseMapping[results[0].item] || [];
