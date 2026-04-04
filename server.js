@@ -2602,8 +2602,8 @@ function buildNameMapping(matches) {
 
     const fuse = new Fuse(playersData, {
         keys: ['name'],
-        threshold: 0.3,
-        distance: 100,
+        threshold: 0.45,
+        distance: 200,
         includeScore: true,
     });
 
@@ -2654,7 +2654,7 @@ function buildNameMapping(matches) {
 
         // Fuzzy match
         const results = fuse.search(apiName);
-        if (results.length > 0 && results[0].score < 0.35) {
+        if (results.length > 0 && results[0].score < 0.45) {
             mapping[apiName] = results[0].item.name;
         }
     }
@@ -2810,7 +2810,7 @@ function computeRoomFantasyPoints(room) {
     // Fuzzy reverse lookup: handles name spelling variants in room data
     // e.g. "Vaibhav Sooryavanshi" (room) -> "Vaibhav Suryavanshi" (mapping key)
     const reverseKeys = Object.keys(reverseMapping);
-    const reverseFuse = reverseKeys.length > 0 ? new Fuse(reverseKeys, { threshold: 0.4, includeScore: true }) : null;
+    const reverseFuse = reverseKeys.length > 0 ? new Fuse(reverseKeys, { threshold: 0.45, includeScore: true }) : null;
     const normalize = s => s.toLowerCase().replace(/[^a-z]/g, '');
 
     // Build a set of all actual cricApiNames present in match data — used to resolve aliases
@@ -2819,6 +2819,13 @@ function computeRoomFantasyPoints(room) {
     for (const match of matches) {
         for (const pp of match.playerPoints) allCricApiNames.add(pp.cricApiName);
     }
+
+    // Direct fuzzy matcher against all cricApiNames — catches name variants even when
+    // nameMapping cache is stale or aliases are incomplete.
+    const allCricApiNamesList = [...allCricApiNames];
+    const directFuse = allCricApiNamesList.length > 0
+        ? new Fuse(allCricApiNamesList, { threshold: 0.45, includeScore: true })
+        : null;
 
     function lookupApiNames(playerName) {
         const found = new Set();
@@ -2848,10 +2855,29 @@ function computeRoomFantasyPoints(room) {
             if (normalize(key) === normalizedTarget) return reverseMapping[key];
         }
 
-        // 4. Fuzzy match for spelling variants
+        // 4. Fuzzy match against reverseMapping keys (canonical player names)
         if (reverseFuse) {
             const results = reverseFuse.search(playerName);
-            if (results.length > 0 && results[0].score < 0.4) return reverseMapping[results[0].item] || [];
+            if (results.length > 0 && results[0].score < 0.45) return reverseMapping[results[0].item] || [];
+        }
+
+        // 5. Last-name match: if the player's last name matches exactly one cricApiName's
+        //    last name, it's very likely the same player (handles "Lungisani Ngidi" vs "Lungi Ngidi").
+        const playerParts = playerName.trim().split(/\s+/);
+        if (playerParts.length >= 2) {
+            const playerLastName = playerParts[playerParts.length - 1].toLowerCase();
+            const lastNameHits = allCricApiNamesList.filter(n => {
+                const parts = n.trim().split(/\s+/);
+                return parts.length >= 2 && parts[parts.length - 1].toLowerCase() === playerLastName;
+            });
+            if (lastNameHits.length === 1) return lastNameHits;
+        }
+
+        // 6. Direct fuzzy match against all cricApiNames — catches remaining variants
+        //    (e.g. shortened first names, transliteration differences) without needing aliases.
+        if (directFuse) {
+            const results = directFuse.search(playerName);
+            if (results.length > 0 && results[0].score < 0.45) return [results[0].item];
         }
         return [];
     }
