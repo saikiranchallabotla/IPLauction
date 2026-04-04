@@ -2897,6 +2897,8 @@ function broadcastFantasyUpdate() {
         data.configured = isFantasyConfigured();
         io.to(code).emit('fantasyPointsUpdate', data);
     }
+    // Refresh standings whenever match data updates (standings computed from same cache)
+    fetchIPLStandings().catch(() => {});
 }
 
 // Emit fantasy points update to a single room (called after team/player changes)
@@ -3740,141 +3742,90 @@ app.get('/api/match-scorecards', async (req, res) => {
 
 // ============ IPL STANDINGS AUTO-SYNC ============
 
-async function fetchStandingsFromCricbuzz() {
-    const headers = {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.105 Mobile Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-IN,en;q=0.9',
-        'Referer': 'https://www.cricbuzz.com/',
-        'Origin': 'https://www.cricbuzz.com',
-        'x-requested-with': 'com.cricbuzz.android'
+const ALL_IPL_TEAMS = ['MI', 'CSK', 'RCB', 'KKR', 'DC', 'PBKS', 'RR', 'SRH', 'GT', 'LSG'];
+
+// Parse a score string like "165/9" or "165/9 (20 Ov)" → { runs, wickets }
+function parseScoreStr(str) {
+    if (!str) return { runs: 0, wickets: 0 };
+    const clean = String(str).replace(/\(.*\)/, '').trim();
+    const parts = clean.split('/');
+    return { runs: parseInt(parts[0]) || 0, wickets: parseInt(parts[1]) || 0 };
+}
+
+// Parse overs string "18.2" or "20" → decimal overs
+function parseOversStr(str) {
+    const parts = String(str || '0').split('.');
+    const full = parseInt(parts[0]) || 0;
+    const balls = parseInt(parts[1]) || 0;
+    return full + balls / 6;
+}
+
+// Strategy 1: compute standings from fantasyCache match scorecards (no external API needed)
+function computeStandingsFromCache() {
+    if (!fantasyCache?.matches?.length) throw new Error('No match data in cache yet');
+
+    const teamStats = {};
+    const initTeam = (code) => {
+        if (!teamStats[code]) teamStats[code] = { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0 };
+        return teamStats[code];
     };
 
-    // Find IPL series ID
-    let seriesId = null;
-    const liveRes = await fetch('https://www.cricbuzz.com/api/cricket-match/live', { headers });
-    if (liveRes.ok) {
-        const data = await liveRes.json();
-        for (const tg of (data.typeMatches || [])) {
-            for (const sg of (tg.seriesMatches || [])) {
-                const w = sg.seriesAdWrapper || sg;
-                const name = (w.seriesName || '').toLowerCase();
-                if ((name.includes('ipl') || name.includes('indian premier')) && w.seriesId) {
-                    seriesId = String(w.seriesId);
-                    break;
-                }
-            }
-            if (seriesId) break;
-        }
-    }
-    if (!seriesId) {
-        const recentRes = await fetch('https://www.cricbuzz.com/api/cricket-match/recent', { headers });
-        if (recentRes.ok) {
-            const data = await recentRes.json();
-            for (const tg of (data.typeMatches || [])) {
-                for (const sg of (tg.seriesMatches || [])) {
-                    const w = sg.seriesAdWrapper || sg;
-                    const name = (w.seriesName || '').toLowerCase();
-                    if ((name.includes('ipl') || name.includes('indian premier')) && w.seriesId) {
-                        seriesId = String(w.seriesId);
-                        break;
-                    }
-                }
-                if (seriesId) break;
-            }
-        }
-    }
-    if (!seriesId) throw new Error('Cricbuzz: IPL series ID not found');
+    let processed = 0;
+    for (const match of fantasyCache.matches) {
+        if (match.status !== 'completed') continue;
+        const sc = match.scorecard;
+        if (!sc || sc.length < 2) continue;
 
-    const ptRes = await fetch(`https://www.cricbuzz.com/api/series/${seriesId}/points-table`, { headers });
-    if (!ptRes.ok) throw new Error(`Cricbuzz points-table HTTP ${ptRes.status}`);
-    const ptData = await ptRes.json();
+        const inn1 = sc[0];
+        const inn2 = sc[1];
+        const code1 = resolveTeamCode(inn1.teamName);
+        const code2 = resolveTeamCode(inn2.teamName);
+        if (!code1 || !code2 || code1 === code2) continue;
 
-    const standings = [];
-    const rows = (ptData.pointsTable || []).flatMap(g => g.pointsTableInfo || []);
-    for (const row of rows) {
-        const code = resolveTeamCode(row.shortName || row.teamName || '');
-        if (!code) continue;
-        const nrrRaw = parseFloat(row.nrrText || row.nrr || 0) || 0;
-        standings.push({
-            code,
-            played: parseInt(row.matchesPlayed || row.played || 0) || 0,
-            won:    parseInt(row.matchesWon   || row.won    || 0) || 0,
-            lost:   parseInt(row.matchesLost  || row.lost   || 0) || 0,
-            nr:     parseInt(row.noResult     || row.nr     || 0) || 0,
-            points: parseInt(row.points || 0) || 0,
-            nrr:    nrrRaw
-        });
+        const s1 = parseScoreStr(inn1.score);
+        const s2 = parseScoreStr(inn2.score);
+        const o1 = parseOversStr(inn1.overs) || 20;
+        const o2 = parseOversStr(inn2.overs) || 20;
+
+        if (s1.runs === 0 && s2.runs === 0) continue; // no data
+
+        const t1 = initTeam(code1);
+        const t2 = initTeam(code2);
+        t1.played++; t2.played++;
+        t1.runsFor += s1.runs; t1.oversFor += o1; t1.runsAgainst += s2.runs; t1.oversAgainst += o2;
+        t2.runsFor += s2.runs; t2.oversFor += o2; t2.runsAgainst += s1.runs; t2.oversAgainst += o1;
+
+        if (s2.runs > s1.runs) {
+            // Batting second team won (chased successfully)
+            t2.won++; t2.points += 2; t1.lost++;
+        } else if (s1.runs > s2.runs) {
+            // Batting first team won (defended)
+            t1.won++; t1.points += 2; t2.lost++;
+        } else {
+            // Tie / Super Over — give 1 point each (simplified)
+            t1.nr++; t2.nr++; t1.points++; t2.points++;
+        }
+        processed++;
     }
-    if (standings.length < 5) throw new Error(`Cricbuzz: only ${standings.length} teams in points table`);
-    console.log(`Cricbuzz standings: ${standings.length} teams fetched`);
+
+    if (processed === 0) throw new Error('No completed matches with scorecard data found');
+
+    const standings = ALL_IPL_TEAMS.map(code => {
+        const t = teamStats[code] || { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0 };
+        let nrr = 0;
+        if (t.oversFor > 0 && t.oversAgainst > 0) {
+            nrr = (t.runsFor / t.oversFor) - (t.runsAgainst / t.oversAgainst);
+            nrr = Math.round(nrr * 1000) / 1000;
+        }
+        return { code, played: t.played, won: t.won, lost: t.lost, nr: t.nr, points: t.points, nrr };
+    });
+
+    console.log(`Standings computed from cache: ${processed} matches, ${standings.filter(t => t.played > 0).length} active teams`);
     return standings;
 }
 
-async function fetchStandingsFromESPN() {
-    const headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://www.espncricinfo.com/',
-        'Origin': 'https://www.espncricinfo.com'
-    };
-    const year = IPL_SEASON_YEAR;
-
-    let seriesId = null;
-    const searchUrls = [
-        `https://hs-consumer-api.espncricinfo.com/v1/search?lang=en&query=Indian+Premier+League+${year}&type=series&size=10`,
-        `https://hs-consumer-api.espncricinfo.com/v1/search?lang=en&query=IPL+${year}&type=series&size=10`,
-    ];
-    for (const url of searchUrls) {
-        try {
-            const res = await fetch(url, { headers });
-            if (!res.ok) continue;
-            const data = await res.json();
-            const results = data?.results || data?.searchResults || [];
-            const found = results.find(r => {
-                const h = (r?.headline || r?.title || r?.name || '').toLowerCase();
-                return (h.includes('indian premier league') || h.includes(' ipl ') || h.startsWith('ipl ')) && h.includes(String(year));
-            });
-            if (found?.id) { seriesId = found.id; break; }
-        } catch (_) {}
-    }
-    if (!seriesId) throw new Error(`ESPN: IPL ${year} series not found`);
-
-    const standRes = await fetch(
-        `https://hs-consumer-api.espncricinfo.com/v1/pages/series/standings?lang=en&seriesId=${seriesId}`,
-        { headers }
-    );
-    if (!standRes.ok) throw new Error(`ESPN standings HTTP ${standRes.status}`);
-    const standData = await standRes.json();
-
-    const groups = standData?.content?.groups || standData?.content?.standing?.groups ||
-                   standData?.groups || standData?.standings?.groups || [];
-    const standings = [];
-    for (const group of groups) {
-        for (const entry of (group.teams || group.entries || [])) {
-            const teamName = entry?.team?.shortName || entry?.team?.name || entry?.shortName || '';
-            const code = resolveTeamCode(teamName);
-            if (!code) continue;
-            const stats = entry?.stats || entry;
-            const nrrRaw = parseFloat(stats?.netRunRate || stats?.nrr || stats?.nrrText || 0) || 0;
-            standings.push({
-                code,
-                played: parseInt(stats?.played || stats?.matchesPlayed || 0) || 0,
-                won:    parseInt(stats?.won    || stats?.matchesWon    || 0) || 0,
-                lost:   parseInt(stats?.lost   || stats?.matchesLost   || 0) || 0,
-                nr:     parseInt(stats?.noResult || stats?.nr           || 0) || 0,
-                points: parseInt(stats?.points  || 0) || 0,
-                nrr:    nrrRaw
-            });
-        }
-    }
-    if (standings.length < 5) throw new Error(`ESPN: only ${standings.length} teams in standings`);
-    console.log(`ESPN standings: ${standings.length} teams fetched`);
-    return standings;
-}
-
-async function fetchStandingsFromIPLStats() {
+// Strategy 2: fetch MatchSchedule.json (same source as fantasy data — already works) and parse winner from MatchResult field
+async function computeStandingsFromScheduleJSON() {
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/plain, */*',
@@ -3882,48 +3833,99 @@ async function fetchStandingsFromIPLStats() {
         'Origin': 'https://www.iplt20.com',
         'Cache-Control': 'no-cache'
     };
-    const urls = [
-        'https://ipl-stats.iplt20.com/ipl/json/Standings.json',
-        'https://ipl-stats.iplt20.com/ipl/json/PointsTable.json',
-        'https://ipl-stats.iplt20.com/ipl/json/pointstable.json',
+
+    const scheduleUrls = [
+        'https://ipl-stats.iplt20.com/ipl/json/MatchSchedule.json',
+        'https://ipl-stats.iplt20.com/ipl/json/Fixtures.json',
     ];
-    for (const url of urls) {
+
+    let matchList = null;
+    for (const url of scheduleUrls) {
         try {
             const res = await fetch(url, { headers });
-            if (!res.ok) { console.log(`IPL Stats standings HTTP ${res.status}: ${url}`); continue; }
+            if (!res.ok) continue;
             const data = await res.json();
-            const rows = data?.Standings || data?.PointsTable || data?.pointsTable ||
-                         data?.standings || data?.data || data?.teams || [];
-            if (!Array.isArray(rows) || rows.length < 5) continue;
-            const standings = [];
-            for (const row of rows) {
-                const code = resolveTeamCode(row?.TeamShortName || row?.shortName || row?.team || row?.TeamName || '');
-                if (!code) continue;
-                const nrrRaw = parseFloat(row?.NRR || row?.nrr || row?.NetRunRate || row?.nrrText || 0) || 0;
-                standings.push({
-                    code,
-                    played: parseInt(row?.Played || row?.played || row?.MatchesPlayed || 0) || 0,
-                    won:    parseInt(row?.Won    || row?.won    || row?.MatchesWon    || 0) || 0,
-                    lost:   parseInt(row?.Lost   || row?.lost   || row?.MatchesLost   || 0) || 0,
-                    nr:     parseInt(row?.NR     || row?.nr     || row?.NoResult      || 0) || 0,
-                    points: parseInt(row?.Pts    || row?.points || row?.Points        || 0) || 0,
-                    nrr:    nrrRaw
-                });
-            }
-            if (standings.length >= 5) {
-                console.log(`IPL Stats standings (${url}): ${standings.length} teams fetched`);
-                return standings;
-            }
-        } catch (e) { console.log(`IPL Stats standings error (${url}): ${e.message}`); }
+            const raw = data?.Matchsummary || data?.matchsummary || data?.MatchSchedule || data?.matches || data?.data || [];
+            if (Array.isArray(raw) && raw.length > 0) { matchList = raw; break; }
+        } catch (_) {}
     }
-    throw new Error('IPL Stats: standings not available');
+    if (!matchList) throw new Error('MatchSchedule.json unavailable');
+
+    const teamStats = {};
+    const initTeam = (code) => {
+        if (!teamStats[code]) teamStats[code] = { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0 };
+        return teamStats[code];
+    };
+
+    let processed = 0;
+    for (const m of matchList) {
+        const status = String(m?.MatchStatus || m?.matchStatus || '').toLowerCase();
+        if (status !== 'result' && status !== 'post' && status !== 'completed') continue;
+
+        // Team codes — already short codes in this feed
+        const bat1Code = resolveTeamCode(m?.FirstBattingTeamCode || m?.Team1ShortName || m?.TeamAShortName || '');
+        const bat2Code = resolveTeamCode(m?.SecondBattingTeamCode || m?.Team2ShortName || m?.TeamBShortName || '');
+        if (!bat1Code || !bat2Code || bat1Code === bat2Code) continue;
+
+        // Scores from summary fields e.g. "165/9 (20 Ov)"
+        const s1 = parseScoreStr(m?.FirstBattingSummary || m?.Team1Score || '');
+        const s2 = parseScoreStr(m?.SecondBattingSummary || m?.Team2Score || '');
+        const o1 = parseOversStr((String(m?.FirstBattingSummary || '')).match(/\((\S+)\s*[Oo]v/)?.[1] || '20');
+        const o2 = parseOversStr((String(m?.SecondBattingSummary || '')).match(/\((\S+)\s*[Oo]v/)?.[1] || '20');
+
+        // Also try MatchResult string: "MI won by 5 wickets" or "CSK won by 20 runs"
+        const resultStr = String(m?.MatchResult || m?.matchResult || '').toLowerCase();
+        let winnerCode = null;
+        if (resultStr.includes('won')) {
+            const winnerName = resultStr.split(' won')[0].trim();
+            winnerCode = resolveTeamCode(winnerName);
+        }
+        const noResult = resultStr.includes('no result') || resultStr.includes('abandoned') || resultStr.includes('tied');
+
+        const t1 = initTeam(bat1Code);
+        const t2 = initTeam(bat2Code);
+        t1.played++; t2.played++;
+
+        // Accumulate runs/overs for NRR (use scores if available)
+        if (s1.runs > 0 || s2.runs > 0) {
+            t1.runsFor += s1.runs; t1.oversFor += o1; t1.runsAgainst += s2.runs; t1.oversAgainst += o2;
+            t2.runsFor += s2.runs; t2.oversFor += o2; t2.runsAgainst += s1.runs; t2.oversAgainst += o1;
+        }
+
+        if (noResult) {
+            t1.nr++; t2.nr++; t1.points++; t2.points++;
+        } else if (winnerCode === bat1Code) {
+            t1.won++; t1.points += 2; t2.lost++;
+        } else if (winnerCode === bat2Code) {
+            t2.won++; t2.points += 2; t1.lost++;
+        } else if (s1.runs > 0 || s2.runs > 0) {
+            // Fallback: determine winner from scores
+            if (s2.runs > s1.runs) { t2.won++; t2.points += 2; t1.lost++; }
+            else if (s1.runs > s2.runs) { t1.won++; t1.points += 2; t2.lost++; }
+            else { t1.nr++; t2.nr++; t1.points++; t2.points++; }
+        }
+        processed++;
+    }
+
+    if (processed === 0) throw new Error('No completed matches found in MatchSchedule.json');
+
+    const standings = ALL_IPL_TEAMS.map(code => {
+        const t = teamStats[code] || { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0 };
+        let nrr = 0;
+        if (t.oversFor > 0 && t.oversAgainst > 0) {
+            nrr = Math.round(((t.runsFor / t.oversFor) - (t.runsAgainst / t.oversAgainst)) * 1000) / 1000;
+        }
+        return { code, played: t.played, won: t.won, lost: t.lost, nr: t.nr, points: t.points, nrr };
+    });
+
+    console.log(`Standings from MatchSchedule: ${processed} matches processed`);
+    return standings;
 }
 
 async function fetchIPLStandings() {
     const sources = [
-        { name: 'Cricbuzz',  fn: fetchStandingsFromCricbuzz },
-        { name: 'ESPN',      fn: fetchStandingsFromESPN },
-        { name: 'IPL Stats', fn: fetchStandingsFromIPLStats },
+        { name: 'match cache', fn: async () => computeStandingsFromCache() },
+        { name: 'MatchSchedule.json', fn: computeStandingsFromScheduleJSON },
     ];
     for (const src of sources) {
         try {
