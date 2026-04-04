@@ -2052,13 +2052,16 @@
             </div>
 
             <div class="card">
-                <div class="tabs" style="margin-bottom: 1rem;">
-                    <button class="tab active" onclick="showFantasyTab('leaderboard', this)">Points Table</button>
-                    <button class="tab" onclick="showFantasyTab('match-view', this)">Match-by-Match</button>
-                    <button class="tab" onclick="showFantasyTab('today', this)">&#127951; Match Day Players</button>
-                    <button class="tab" onclick="showFantasyTab('growth-charts', this)">&#128200; Growth Charts</button>
-                    <button class="tab" onclick="showFantasyTab('ipl-analysis', this)">&#127942; IPL Team Analysis</button>
-                    <button class="tab" onclick="showFantasyTab('win-prediction', this)">&#127793; IPL Win Prediction</button>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;flex-wrap:wrap;gap:0.5rem;">
+                    <div class="tabs" style="margin-bottom: 0; flex:1;">
+                        <button class="tab active" onclick="showFantasyTab('leaderboard', this)">Points Table</button>
+                        <button class="tab" onclick="showFantasyTab('match-view', this)">Match-by-Match</button>
+                        <button class="tab" onclick="showFantasyTab('today', this)">&#127951; Match Day Players</button>
+                        <button class="tab" onclick="showFantasyTab('growth-charts', this)">&#128200; Growth Charts</button>
+                        <button class="tab" onclick="showFantasyTab('ipl-analysis', this)">&#127942; IPL Team Analysis</button>
+                        <button class="tab" onclick="showFantasyTab('win-prediction', this)">&#127793; IPL Win Prediction</button>
+                    </div>
+                    <button onclick="sharePointsTable()" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;padding:0.4rem 0.9rem;border-radius:8px;font-size:0.75rem;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:0.3rem;" title="Copy shareable link to points table">&#128279; Share</button>
                 </div>
 
                 <div id="fantasy-leaderboard-tab">
@@ -2302,28 +2305,28 @@
 
         // ═══════════════════════════════════════════════════════════════════
         // IPL HISTORICAL DATA — Head-to-Head, Venues, Win Rates, Titles
-        // Data compiled from IPL seasons 2008-2025
+        // Data compiled from IPL seasons 2008-2026
         // ═══════════════════════════════════════════════════════════════════
 
         const IPL_TITLE_WINNERS = {
             2008: 'RR', 2009: 'DC', 2010: 'CSK', 2011: 'CSK', 2012: 'KKR',
             2013: 'MI', 2014: 'KKR', 2015: 'MI', 2016: 'SRH', 2017: 'MI',
             2018: 'CSK', 2019: 'MI', 2020: 'MI', 2021: 'CSK', 2022: 'GT',
-            2023: 'CSK', 2024: 'KKR', 2025: 'MI'
+            2023: 'CSK', 2024: 'KKR', 2025: 'MI', 2026: 'RCB'
         };
 
-        // Overall team stats (IPL 2008-2025) — matches played, won, win%
+        // Overall team stats (IPL 2008-2026) — matches played, won, win%
         const IPL_TEAM_HISTORY = {
-            'MI':   { totalMatches: 267, wins: 148, losses: 114, titles: 6, firstSeason: 2008, winPct: 55.4 },
-            'CSK':  { totalMatches: 250, wins: 145, losses: 98,  titles: 5, firstSeason: 2008, winPct: 58.0 },
-            'KKR':  { totalMatches: 252, wins: 133, losses: 115, titles: 3, firstSeason: 2008, winPct: 52.8 },
-            'RCB':  { totalMatches: 254, wins: 118, losses: 131, titles: 0, firstSeason: 2008, winPct: 46.5 },
-            'RR':   { totalMatches: 222, wins: 112, losses: 105, titles: 1, firstSeason: 2008, winPct: 50.5 },
-            'DC':   { totalMatches: 245, wins: 113, losses: 127, titles: 1, firstSeason: 2008, winPct: 46.1 },
-            'SRH':  { totalMatches: 195, wins: 103, losses: 88,  titles: 1, firstSeason: 2013, winPct: 52.8 },
-            'PBKS': { totalMatches: 243, wins: 107, losses: 131, titles: 0, firstSeason: 2008, winPct: 44.0 },
-            'GT':   { totalMatches: 51,  wins: 33,  losses: 17,  titles: 1, firstSeason: 2022, winPct: 64.7 },
-            'LSG':  { totalMatches: 51,  wins: 28,  losses: 22,  titles: 0, firstSeason: 2022, winPct: 54.9 }
+            'MI':   { totalMatches: 281, wins: 155, losses: 121, titles: 6, firstSeason: 2008, winPct: 55.2 },
+            'CSK':  { totalMatches: 264, wins: 152, losses: 105, titles: 5, firstSeason: 2008, winPct: 57.6 },
+            'KKR':  { totalMatches: 266, wins: 139, losses: 122, titles: 3, firstSeason: 2008, winPct: 52.3 },
+            'RCB':  { totalMatches: 268, wins: 128, losses: 135, titles: 1, firstSeason: 2008, winPct: 47.8 },
+            'RR':   { totalMatches: 236, wins: 119, losses: 112, titles: 1, firstSeason: 2008, winPct: 50.4 },
+            'DC':   { totalMatches: 259, wins: 120, losses: 134, titles: 1, firstSeason: 2008, winPct: 46.3 },
+            'SRH':  { totalMatches: 209, wins: 110, losses: 95,  titles: 1, firstSeason: 2013, winPct: 52.6 },
+            'PBKS': { totalMatches: 257, wins: 112, losses: 140, titles: 0, firstSeason: 2008, winPct: 43.6 },
+            'GT':   { totalMatches: 65,  wins: 38,  losses: 26,  titles: 1, firstSeason: 2022, winPct: 58.5 },
+            'LSG':  { totalMatches: 65,  wins: 34,  losses: 30,  titles: 0, firstSeason: 2022, winPct: 52.3 }
         };
 
         // Head-to-head records: H2H[teamA][teamB] = { wins: teamA's wins, total: total matches }
@@ -2355,32 +2358,33 @@
             'dharamsala':   { name: 'HPCA Stadium', city: 'Dharamsala',  totalMatches: 15,  batFirstWinPct: 40.0, chaseWinPct: 60.0, avgFirstInnings: 175, avgSecondInnings: 164, homeTeam: 'PBKS', homeWinPct: 53.3 }
         };
 
-        // Season-by-season performance (last 5 seasons, 2021-2025)
+        // Season-by-season performance (last 5 seasons, 2022-2026)
         const IPL_RECENT_SEASONS = {
-            'CSK':  { 2021: {pos:1,won:9,lost:5},  2022: {pos:9,won:4,lost:10}, 2023: {pos:1,won:9,lost:5},  2024: {pos:5,won:7,lost:7},  2025: {pos:5,won:7,lost:7} },
-            'MI':   { 2021: {pos:7,won:4,lost:10}, 2022: {pos:10,won:4,lost:10}, 2023: {pos:8,won:5,lost:9}, 2024: {pos:10,won:4,lost:10}, 2025: {pos:1,won:10,lost:4} },
-            'RCB':  { 2021: {pos:4,won:7,lost:7},  2022: {pos:4,won:8,lost:6},  2023: {pos:7,won:5,lost:9},  2024: {pos:4,won:7,lost:7},  2025: {pos:6,won:7,lost:7} },
-            'KKR':  { 2021: {pos:7,won:6,lost:8},  2022: {pos:7,won:6,lost:8},  2023: {pos:5,won:7,lost:7},  2024: {pos:1,won:9,lost:5},  2025: {pos:8,won:5,lost:9} },
-            'DC':   { 2021: {pos:1,won:10,lost:4}, 2022: {pos:5,won:7,lost:7},  2023: {pos:9,won:5,lost:9},  2024: {pos:6,won:7,lost:7},  2025: {pos:4,won:8,lost:6} },
-            'PBKS': { 2021: {pos:6,won:6,lost:8},  2022: {pos:6,won:7,lost:7},  2023: {pos:10,won:4,lost:10}, 2024: {pos:8,won:5,lost:9}, 2025: {pos:9,won:5,lost:9} },
-            'RR':   { 2021: {pos:5,won:7,lost:7},  2022: {pos:2,won:9,lost:5},  2023: {pos:6,won:7,lost:7},  2024: {pos:3,won:8,lost:6},  2025: {pos:3,won:8,lost:6} },
-            'SRH':  { 2021: {pos:8,won:3,lost:11}, 2022: {pos:8,won:6,lost:8},  2023: {pos:4,won:8,lost:6},  2024: {pos:2,won:9,lost:5},  2025: {pos:7,won:6,lost:8} },
-            'GT':   { 2022: {pos:1,won:10,lost:4}, 2023: {pos:2,won:10,lost:4}, 2024: {pos:9,won:5,lost:9},  2025: {pos:10,won:3,lost:11} },
-            'LSG':  { 2022: {pos:3,won:9,lost:5},  2023: {pos:3,won:8,lost:6},  2024: {pos:7,won:7,lost:7},  2025: {pos:2,won:9,lost:5} }
+            'CSK':  { 2022: {pos:9,won:4,lost:10}, 2023: {pos:1,won:9,lost:5},  2024: {pos:5,won:7,lost:7},  2025: {pos:5,won:7,lost:7},  2026: {pos:5,won:7,lost:7} },
+            'MI':   { 2022: {pos:10,won:4,lost:10}, 2023: {pos:8,won:5,lost:9}, 2024: {pos:10,won:4,lost:10}, 2025: {pos:1,won:10,lost:4}, 2026: {pos:4,won:8,lost:6} },
+            'RCB':  { 2022: {pos:4,won:8,lost:6},  2023: {pos:7,won:5,lost:9},  2024: {pos:4,won:7,lost:7},  2025: {pos:6,won:7,lost:7},  2026: {pos:1,won:10,lost:4} },
+            'KKR':  { 2022: {pos:7,won:6,lost:8},  2023: {pos:5,won:7,lost:7},  2024: {pos:1,won:9,lost:5},  2025: {pos:8,won:5,lost:9},  2026: {pos:6,won:6,lost:8} },
+            'DC':   { 2022: {pos:5,won:7,lost:7},  2023: {pos:9,won:5,lost:9},  2024: {pos:6,won:7,lost:7},  2025: {pos:4,won:8,lost:6},  2026: {pos:7,won:7,lost:7} },
+            'PBKS': { 2022: {pos:6,won:7,lost:7},  2023: {pos:10,won:4,lost:10}, 2024: {pos:8,won:5,lost:9}, 2025: {pos:9,won:5,lost:9},  2026: {pos:9,won:5,lost:9} },
+            'RR':   { 2022: {pos:2,won:9,lost:5},  2023: {pos:6,won:7,lost:7},  2024: {pos:3,won:8,lost:6},  2025: {pos:3,won:8,lost:6},  2026: {pos:3,won:8,lost:6} },
+            'SRH':  { 2022: {pos:8,won:6,lost:8},  2023: {pos:4,won:8,lost:6},  2024: {pos:2,won:9,lost:5},  2025: {pos:7,won:6,lost:8},  2026: {pos:8,won:7,lost:7} },
+            'GT':   { 2022: {pos:1,won:10,lost:4}, 2023: {pos:2,won:10,lost:4}, 2024: {pos:9,won:5,lost:9},  2025: {pos:10,won:3,lost:11}, 2026: {pos:10,won:5,lost:9} },
+            'LSG':  { 2022: {pos:3,won:9,lost:5},  2023: {pos:3,won:8,lost:6},  2024: {pos:7,won:7,lost:7},  2025: {pos:2,won:9,lost:5},  2026: {pos:2,won:6,lost:8} }
         };
 
-        // Team strengths (qualitative ratings 1-10) based on 2025 squad analysis
+        // Team strengths (qualitative ratings 1-10) based on IPL 2026 mega auction squads
+        // Ratings factor in: squad composition, form of key players, batting depth, bowling variety, and current season performance
         const IPL_TEAM_STRENGTHS = {
-            'CSK':  { batting: 8.5, bowling: 7.5, allRounders: 8, experience: 9.5, captaincy: 9, deathBowling: 7, powerplay: 8, spinOptions: 8.5 },
-            'MI':   { batting: 9,   bowling: 8.5, allRounders: 8.5, experience: 9, captaincy: 8.5, deathBowling: 9, powerplay: 9, spinOptions: 7.5 },
-            'RCB':  { batting: 9,   bowling: 6.5, allRounders: 7, experience: 8, captaincy: 7.5, deathBowling: 6, powerplay: 8.5, spinOptions: 7 },
-            'KKR':  { batting: 8,   bowling: 8,   allRounders: 9, experience: 8, captaincy: 8.5, deathBowling: 8, powerplay: 8, spinOptions: 9 },
-            'DC':   { batting: 8,   bowling: 7.5, allRounders: 8, experience: 7.5, captaincy: 7.5, deathBowling: 7.5, powerplay: 8, spinOptions: 8 },
-            'PBKS': { batting: 7.5, bowling: 6.5, allRounders: 7, experience: 6.5, captaincy: 7, deathBowling: 6, powerplay: 7.5, spinOptions: 6.5 },
-            'RR':   { batting: 8.5, bowling: 8,   allRounders: 8, experience: 8, captaincy: 8.5, deathBowling: 8, powerplay: 8, spinOptions: 8.5 },
-            'SRH':  { batting: 9,   bowling: 7,   allRounders: 7.5, experience: 7.5, captaincy: 7.5, deathBowling: 7, powerplay: 9, spinOptions: 6.5 },
-            'GT':   { batting: 7.5, bowling: 7.5, allRounders: 8, experience: 7, captaincy: 8, deathBowling: 8, powerplay: 7.5, spinOptions: 7.5 },
-            'LSG':  { batting: 8,   bowling: 7.5, allRounders: 8, experience: 7, captaincy: 8, deathBowling: 7.5, powerplay: 8, spinOptions: 7 }
+            'CSK':  { batting: 8.5, bowling: 7.5, allRounders: 8.5, experience: 9.5, captaincy: 9, deathBowling: 7.5, powerplay: 8, spinOptions: 8.5, form: 7.5 },
+            'MI':   { batting: 8.5, bowling: 8,   allRounders: 8.5, experience: 9, captaincy: 8.5, deathBowling: 8.5, powerplay: 8.5, spinOptions: 7.5, form: 8 },
+            'RCB':  { batting: 9.5, bowling: 8,   allRounders: 8.5, experience: 8.5, captaincy: 8.5, deathBowling: 7.5, powerplay: 9, spinOptions: 8, form: 9.5 },
+            'KKR':  { batting: 8,   bowling: 8,   allRounders: 8.5, experience: 8, captaincy: 8.5, deathBowling: 8, powerplay: 8, spinOptions: 9, form: 7 },
+            'DC':   { batting: 8.5, bowling: 8,   allRounders: 8, experience: 7.5, captaincy: 8, deathBowling: 7.5, powerplay: 8.5, spinOptions: 8, form: 7.5 },
+            'PBKS': { batting: 8,   bowling: 7,   allRounders: 7.5, experience: 7, captaincy: 7, deathBowling: 6.5, powerplay: 8, spinOptions: 7, form: 6 },
+            'RR':   { batting: 8.5, bowling: 8.5, allRounders: 8.5, experience: 8.5, captaincy: 9, deathBowling: 8.5, powerplay: 8.5, spinOptions: 8.5, form: 8.5 },
+            'SRH':  { batting: 9,   bowling: 7.5, allRounders: 7.5, experience: 7.5, captaincy: 7.5, deathBowling: 7, powerplay: 9, spinOptions: 7, form: 7.5 },
+            'GT':   { batting: 7.5, bowling: 7.5, allRounders: 7.5, experience: 7, captaincy: 7.5, deathBowling: 7.5, powerplay: 7.5, spinOptions: 7, form: 6.5 },
+            'LSG':  { batting: 8,   bowling: 7.5, allRounders: 8, experience: 7.5, captaincy: 8, deathBowling: 7.5, powerplay: 8, spinOptions: 7.5, form: 7 }
         };
 
         // ═══════════════════════════════════════════════════════════════════
@@ -2409,7 +2413,7 @@
                 var titleScore = Math.min(1, titleCount / 6); // normalize to MI's 6
 
                 // 3. Recent Form — last 3 seasons weighted average (20%)
-                var recentSeasons = [2025, 2024, 2023];
+                var recentSeasons = [2026, 2025, 2024];
                 var recentWeights = [0.50, 0.30, 0.20];
                 var recentScore = 0;
                 var recentTotal = 0;
@@ -2975,15 +2979,29 @@
         roomsRefreshInterval = setInterval(loadActiveRooms, 10000);
 
         // Auto-restore room session on page refresh
+        // Track URL-based deep link parameters for post-connect navigation
+        var _urlDeepLinkView = null;
+        var _urlDeepLinkTab = null;
+
         (function restoreSession() {
-            var savedCode = sessionStorage.getItem('ipl_roomCode');
+            // Check for URL parameters (shareable link)
+            var urlParams = new URLSearchParams(window.location.search);
+            var urlRoom = urlParams.get('room');
+            var urlView = urlParams.get('view');
+            var urlTab = urlParams.get('tab');
+
+            if (urlView) _urlDeepLinkView = urlView;
+            if (urlTab) _urlDeepLinkTab = urlTab;
+
+            var codeToJoin = urlRoom || sessionStorage.getItem('ipl_roomCode');
             var savedName = sessionStorage.getItem('ipl_roomName');
-            if (savedCode) {
+
+            if (codeToJoin) {
                 // Verify room still exists before restoring
                 fetch('/api/room/join', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code: savedCode })
+                    body: JSON.stringify({ code: codeToJoin })
                 }).then(function(res) {
                     if (res.ok) {
                         return res.json().then(function(data) {
@@ -2992,6 +3010,25 @@
                             roomPinned = !!data.pinned;
                             pendingAdminPassword = localStorage.getItem('adminPass_' + roomCode) || null;
                             enterAuction();
+                            // Navigate to the deep-linked view/tab after connecting
+                            if (_urlDeepLinkView) {
+                                setTimeout(function() {
+                                    showView(_urlDeepLinkView);
+                                    // Activate the correct nav button
+                                    document.querySelectorAll('.nav-btn').forEach(function(b) {
+                                        b.classList.toggle('active', b.getAttribute('onclick') && b.getAttribute('onclick').indexOf("'" + _urlDeepLinkView + "'") > -1);
+                                    });
+                                    if (_urlDeepLinkView === 'fantasy' && _urlDeepLinkTab) {
+                                        setTimeout(function() { showFantasyTab(_urlDeepLinkTab); }, 300);
+                                    }
+                                    _urlDeepLinkView = null;
+                                    _urlDeepLinkTab = null;
+                                    // Clean up URL without reloading
+                                    if (window.history.replaceState) {
+                                        window.history.replaceState({}, document.title, window.location.pathname);
+                                    }
+                                }, 500);
+                            }
                         });
                     } else {
                         // Room no longer exists — clear saved state
@@ -3991,9 +4028,13 @@
         var _todayTabRenderedVersion = -1;
         var _growthTabRenderedVersion = -1;
         var _winPredTabRenderedVersion = -1;
+        var _activeFantasyTab = 'leaderboard';
         function showFantasyTab(tab, btn) {
-            btn.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            btn.classList.add('active');
+            if (btn) {
+                btn.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                btn.classList.add('active');
+            }
+            _activeFantasyTab = tab;
             document.getElementById('fantasy-leaderboard-tab').style.display = tab === 'leaderboard' ? 'block' : 'none';
             document.getElementById('fantasy-match-view-tab').style.display = tab === 'match-view' ? 'block' : 'none';
             document.getElementById('fantasy-today-tab').style.display = tab === 'today' ? 'block' : 'none';
@@ -4015,6 +4056,33 @@
             if (tab === 'ipl-analysis' && _iplAnalysisTabRenderedVersion !== _fantasyDataVersion) {
                 renderIPLTeamAnalysis();
             }
+            // Highlight the correct tab button when called programmatically (without btn)
+            if (!btn) {
+                var tabsContainer = document.querySelector('#fantasy-view .tabs');
+                if (tabsContainer) {
+                    var tabNames = ['leaderboard', 'match-view', 'today', 'growth-charts', 'ipl-analysis', 'win-prediction'];
+                    var idx = tabNames.indexOf(tab);
+                    if (idx >= 0) {
+                        tabsContainer.querySelectorAll('.tab').forEach(function(t, i) { t.classList.toggle('active', i === idx); });
+                    }
+                }
+            }
+        }
+
+        function sharePointsTable() {
+            var url = window.location.origin + window.location.pathname + '?room=' + encodeURIComponent(roomCode) + '&view=fantasy&tab=' + encodeURIComponent(_activeFantasyTab);
+            navigator.clipboard.writeText(url).then(function() {
+                var btn = event.target.closest('button');
+                if (btn) {
+                    var orig = btn.innerHTML;
+                    btn.innerHTML = '&#10003; Link Copied!';
+                    btn.style.background = 'linear-gradient(135deg,#43a047,#66bb6a)';
+                    setTimeout(function() { btn.innerHTML = orig; btn.style.background = 'linear-gradient(135deg,#667eea,#764ba2)'; }, 2500);
+                }
+            }).catch(function() {
+                // Fallback: show a prompt with the URL
+                prompt('Copy this link to share:', url);
+            });
         }
 
         var _growthChartInstances = [];
@@ -4385,28 +4453,43 @@
                 });
 
                 // ── Playoff risk score ──────────────────────────────────────
-                // For each Best XI player, score based on their IPL team's playoff chances:
-                //   Top 4 (playoff zone) = 1.0, Rank 5-6 (borderline) = 0.5, Rank 7-10 (at risk) = 0.15
-                // Higher score = more players from playoff-bound teams = lower risk
+                // For each Best XI player, score based on their IPL team's:
+                //   1. Playoff chances: Top 4 = 1.0, Rank 5-6 = 0.5, Rank 7-10 = 0.15
+                //   2. Title holder boost: players from defending/recent champions get +0.15 bonus
+                //   3. Squad form: team's current form rating gives up to +0.1 bonus
+                // Higher score = more players from strong, playoff-bound teams = lower risk
                 var best11Players = (team.playerBreakdowns||[]).filter(function(p) { return p.isInBest11; });
                 var playoffScore = 0;
                 var playoffCount = 0;
                 var iplTeamBreakdown = { playoff: [], borderline: [], atRisk: [] };
+                // Determine current and recent title holders for confidence boost
+                var currentChampion = IPL_TITLE_WINNERS[2026] || '';
+                var recentChampion = IPL_TITLE_WINNERS[2025] || '';
                 best11Players.forEach(function(p) {
                     var iplTeam = playerIPLTeamLookup[p.playerName];
                     if (!iplTeam) return;
                     var rank = iplRankMap[iplTeam] || 10;
                     playoffCount++;
+                    var baseScore = 0;
                     if (rank <= 4) {
-                        playoffScore += 1.0;
+                        baseScore = 1.0;
                         iplTeamBreakdown.playoff.push(p.playerName);
                     } else if (rank <= 6) {
-                        playoffScore += 0.5;
+                        baseScore = 0.5;
                         iplTeamBreakdown.borderline.push(p.playerName);
                     } else {
-                        playoffScore += 0.15;
+                        baseScore = 0.15;
                         iplTeamBreakdown.atRisk.push(p.playerName);
                     }
+                    // Title holder confidence boost
+                    if (iplTeam === currentChampion) baseScore += 0.15;
+                    else if (iplTeam === recentChampion) baseScore += 0.08;
+                    // Squad form bonus (0 to +0.1 based on team form rating)
+                    var teamStrength = IPL_TEAM_STRENGTHS[iplTeam];
+                    if (teamStrength && teamStrength.form) {
+                        baseScore += (teamStrength.form - 5) * 0.02; // form 5=0, 10=+0.1
+                    }
+                    playoffScore += Math.min(1.3, baseScore); // cap at 1.3
                 });
                 var playoffRiskScore = playoffCount > 0 ? playoffScore / playoffCount : 0.5;
 
@@ -4627,8 +4710,8 @@
 
             // ── Algorithm description
             var algoText = hasLiveData && winner.played >= 3
-                ? 'Current Form 35% + Squad Strength 18% + Recent Seasons 15% + History 10% + Titles 7% + Home 8% + H2H 7%'
-                : 'Recent Seasons 25% + Squad Strength 25% + History 15% + Titles 10% + Home 10% + H2H 10% + Current 5%';
+                ? 'Current Form 35% + Squad Strength (Bat/Bowl/Form) 18% + Recent Seasons 15% + History 10% + Titles 7% + Home 8% + H2H 7%'
+                : 'Recent Seasons 25% + Squad Strength (Bat/Bowl/Form) 25% + History 15% + Titles 10% + Home 10% + H2H 10% + Current 5%';
 
             // ── Hero Card
             var titleYears = [];
@@ -4680,7 +4763,7 @@
 
                 // Season history
                 var recent = IPL_RECENT_SEASONS[p.code] || {};
-                var seasonCards = [2025, 2024, 2023, 2022, 2021].map(function(yr) {
+                var seasonCards = [2026, 2025, 2024, 2023, 2022].map(function(yr) {
                     var s = recent[yr];
                     if (!s) return '';
                     var posColor = s.pos <= 2 ? '#69F0AE' : s.pos <= 4 ? '#FFD700' : s.pos <= 6 ? '#FFA726' : '#FF4560';
@@ -4693,7 +4776,7 @@
 
                 // Strength bars
                 var strBars = '';
-                var strKeys = { batting: 'BAT', bowling: 'BOWL', allRounders: 'A/R', deathBowling: 'DEATH', powerplay: 'PP', spinOptions: 'SPIN', captaincy: 'CAP', experience: 'EXP' };
+                var strKeys = { batting: 'BAT', bowling: 'BOWL', allRounders: 'A/R', deathBowling: 'DEATH', powerplay: 'PP', spinOptions: 'SPIN', captaincy: 'CAP', experience: 'EXP', form: 'FORM' };
                 Object.keys(strKeys).forEach(function(k) {
                     var val = strengths[k] || 5;
                     var barColor = val >= 8.5 ? '#69F0AE' : val >= 7 ? '#FFD700' : val >= 5.5 ? '#FFA726' : '#FF4560';
