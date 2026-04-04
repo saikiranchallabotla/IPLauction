@@ -220,9 +220,8 @@ function getFantasySource() {
     const iplUid = process.env.IPL_FANTASY_UID || IPL_FANTASY_UID;
     const iplToken = process.env.IPL_FANTASY_AUTH_TOKEN || IPL_FANTASY_AUTH_TOKEN;
     if (iplUid && iplToken) return 'ipl_cookie';
-    const cricKey = process.env.CRICAPI_KEY || CRICAPI_KEY;
-    if (cricKey) return 'cricapi'; // series ID auto-discovered if not provided
-    return 'ipl_public'; // Official public IPL Fantasy API — no credentials needed
+    // Always use official IPL Fantasy public API — no CricAPI or other sources
+    return 'ipl_public';
 }
 
 async function initFantasyPoints() {
@@ -377,29 +376,11 @@ async function fetchAllFantasyPoints() {
         const source = getFantasySource();
         if (source === 'ipl_cookie') return await fetchFromIPLFantasy();
         if (source === 'cricapi')    return await fetchFromCricAPI();
+        // Always use official IPL Fantasy public API — no fallback to Cricbuzz/ESPN/IPL Stats
         if (source === 'ipl_public') {
-            try {
-                return await fetchFromIPLFantasyPublic();
-            } catch (err) {
-                console.warn(`IPL Fantasy Public failed: ${err.message} — trying fallback sources...`);
-            }
+            return await fetchFromIPLFantasyPublic();
         }
-        // 'auto' or fallback after ipl_public: Cricbuzz → ESPN → IPL Stats
-        const sources = [
-            { name: 'Cricbuzz', fn: fetchFromCricbuzz },
-            { name: 'ESPN Cricinfo', fn: fetchFromESPN },
-            { name: 'IPL Stats', fn: fetchFromIPLStats },
-        ];
-        let lastErr;
-        for (const src of sources) {
-            try {
-                return await src.fn();
-            } catch (err) {
-                lastErr = err;
-                console.warn(`${src.name} failed: ${err.message} — trying next source...`);
-            }
-        }
-        throw lastErr;
+        throw new Error('No valid fantasy data source configured');
     } finally {
         isRefreshing = false;
     }
