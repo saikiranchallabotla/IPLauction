@@ -175,7 +175,7 @@ const Fuse = require('fuse.js');
 let fantasyCache = null;
 // Bump this version whenever the points parsing logic changes to force a re-fetch
 // of all cached match data (invalidates stale data computed with old logic).
-const FANTASY_CACHE_VERSION = 3;
+const FANTASY_CACHE_VERSION = 4;
 let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
@@ -593,7 +593,13 @@ async function fetchFromCricbuzz() {
     const allCached = [...existingMatches];
     for (const nm of newMatches) {
         const idx = allCached.findIndex(x => x.matchId === nm.matchId);
-        if (idx >= 0) allCached[idx] = nm; else allCached.push(nm);
+        if (idx >= 0) {
+            const oldMatch = allCached[idx];
+            if (oldMatch.scorecard && oldMatch.scorecard.length > 0 && !nm.scorecard) {
+                nm.scorecard = oldMatch.scorecard;
+            }
+            allCached[idx] = nm;
+        } else allCached.push(nm);
     }
     // Filter to only current season matches — exclude matches with missing dates
     // (they could be from a prior IPL season fetched via a shared series endpoint)
@@ -990,7 +996,13 @@ async function fetchFromESPN() {
     const allMatches = [...existingMatches];
     for (const nm of newMatches) {
         const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
-        if (idx >= 0) allMatches[idx] = nm; else allMatches.push(nm);
+        if (idx >= 0) {
+            const oldMatch = allMatches[idx];
+            if (oldMatch.scorecard && oldMatch.scorecard.length > 0 && !nm.scorecard) {
+                nm.scorecard = oldMatch.scorecard;
+            }
+            allMatches[idx] = nm;
+        } else allMatches.push(nm);
     }
     // Filter to current season only — exclude matches without valid dates
     const seasonStart = new Date(IPL_SEASON_START_DATE);
@@ -1196,7 +1208,13 @@ async function fetchFromIPLFantasy() {
     const allMatches = [...existingMatches];
     for (const nm of newMatches) {
         const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
-        if (idx >= 0) allMatches[idx] = nm;
+        if (idx >= 0) {
+            const oldMatch = allMatches[idx];
+            if (oldMatch.scorecard && oldMatch.scorecard.length > 0 && !nm.scorecard) {
+                nm.scorecard = oldMatch.scorecard;
+            }
+            allMatches[idx] = nm;
+        }
         else allMatches.push(nm);
     }
     allMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
@@ -1455,9 +1473,28 @@ async function fetchFromIPLFantasyPublic() {
             const hasPoints = playerPoints.some(p => p.points > 0);
 
             if (!hasPoints) {
-                // If the fixture explicitly says this match is live, include it even with 0 points.
-                // This happens at the very start of a match (toss, first over) before runs are scored.
-                if (entry.status === 'live') {
+                // Check if this match should be live based on schedule (match start time has passed).
+                // This catches matches at toss/start where the fixture API hasn't flagged them as live yet.
+                let isScheduledLive = entry.status === 'live';
+                if (!isScheduledLive && entry.matchDate) {
+                    const matchTime = new Date(entry.matchDate);
+                    if (!isNaN(matchTime.getTime())) {
+                        const isUTC = entry.matchDate.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(entry.matchDate);
+                        const matchUTC = isUTC ? matchTime.getTime() : matchTime.getTime() - (5.5 * 60 * 60 * 1000);
+                        const diffMs = Date.now() - matchUTC;
+                        // Match was supposed to start within the last 6 hours — likely live or just started
+                        if (diffMs > 0 && diffMs < 6 * 60 * 60 * 1000) {
+                            isScheduledLive = true;
+                        }
+                    }
+                }
+                // Also check if a previously cached match was live (e.g., points stopped updating between overs)
+                if (!isScheduledLive) {
+                    const prevMatch = existingMatches.find(m => m.matchId === entry.matchId);
+                    if (prevMatch && prevMatch.status === 'live') isScheduledLive = true;
+                }
+
+                if (isScheduledLive) {
                     console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} is live but has 0 points (toss/match start) — including as live`);
                     // Fall through to add as 'live' below
                 } else {
@@ -1511,6 +1548,20 @@ async function fetchFromIPLFantasyPublic() {
                     }
                     // If fixture API says not live and points haven't changed for long enough → completed.
                 }
+                // Check schedule time: if match was supposed to start recently, mark as live
+                // even if we didn't detect it through point changes (e.g., first refresh after start)
+                if (matchStatus === 'completed' && entry.matchDate) {
+                    const matchTime = new Date(entry.matchDate);
+                    if (!isNaN(matchTime.getTime())) {
+                        const isUTC = entry.matchDate.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(entry.matchDate);
+                        const matchUTC = isUTC ? matchTime.getTime() : matchTime.getTime() - (5.5 * 60 * 60 * 1000);
+                        const diffMs = Date.now() - matchUTC;
+                        // Match started within the last 6 hours — likely still in progress
+                        if (diffMs > 0 && diffMs < 6 * 60 * 60 * 1000) {
+                            matchStatus = 'live';
+                        }
+                    }
+                }
                 // Newly discovered match in probing — only the most recent match could be live.
                 // All earlier matches in a fresh probe are definitely completed since IPL
                 // matches are sequential and we stop probing at the first unplayed match.
@@ -1552,10 +1603,21 @@ async function fetchFromIPLFantasyPublic() {
     }
 
     // Merge new matches with existing cached matches
+    // IMPORTANT: Preserve scorecard from existing match when merging, since the new
+    // match data (from IPL Fantasy API) only has playerPoints, not scorecard.
+    // Without this, every 30-second live refresh would wipe out the scorecard
+    // that was added by background enrichment, causing live scores to disappear.
     let allMatches = [...existingMatches];
     for (const nm of newMatches) {
         const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
-        if (idx >= 0) allMatches[idx] = nm;
+        if (idx >= 0) {
+            const oldMatch = allMatches[idx];
+            // Carry over scorecard from old match if new match doesn't have one
+            if (oldMatch.scorecard && oldMatch.scorecard.length > 0 && !nm.scorecard) {
+                nm.scorecard = oldMatch.scorecard;
+            }
+            allMatches[idx] = nm;
+        }
         else allMatches.push(nm);
     }
 
@@ -1952,7 +2014,13 @@ async function fetchFromCricAPI() {
     const allMatches = [...existingMatches];
     for (const nm of newMatches) {
         const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
-        if (idx >= 0) allMatches[idx] = nm;
+        if (idx >= 0) {
+            const oldMatch = allMatches[idx];
+            if (oldMatch.scorecard && oldMatch.scorecard.length > 0 && !nm.scorecard) {
+                nm.scorecard = oldMatch.scorecard;
+            }
+            allMatches[idx] = nm;
+        }
         else allMatches.push(nm);
     }
     // Filter to current season only — exclude matches without valid dates
@@ -2010,6 +2078,8 @@ async function enrichMatchesWithScorecards() {
 
     try {
         const matchesNeedingScorecard = fantasyCache.matches.filter(m => {
+            // Always re-fetch scorecard for live matches (scores change continuously)
+            if (m.status === 'live') return true;
             return !(m.scorecard && m.scorecard.length > 0);
         });
 
@@ -2192,53 +2262,57 @@ async function enrichMatchesWithScorecards() {
 
 // ============ IPL PUBLIC STATS — no authentication required ============
 
-// Official IPL Fantasy / My11Circle T20 scoring rules (2025-2026 season)
-// Source: https://www.my11circle.com/points-system.html
+// Official IPL Fantasy scoring rules (fantasy.iplt20.com, 2025-2026 season)
+// Source: https://fantasy.iplt20.com/classic/how-to-play (scoring rules)
+// Used as fallback when computing points from raw scorecard data (Cricbuzz/ESPN).
+// When the primary IPL Fantasy API is available, GamedayPoints are used directly.
 function calcIPLFantasyPoints(batting, bowling, fielding, playingXI) {
     let pts = playingXI ? 4 : 0;
 
     if (batting) {
         const { runs = 0, balls = 0, fours = 0, sixes = 0, dismissed = false } = batting;
-        pts += runs * 0.5;      // +0.5 per run
-        pts += fours * 0.5;     // +0.5 per boundary (4)
-        pts += sixes * 1;       // +1 per six
-        if (runs >= 100) pts += 8;
-        else if (runs >= 50) pts += 4;
-        else if (runs >= 30) pts += 2;
+        pts += runs * 1;        // +1 per run
+        pts += fours * 1;       // +1 per boundary (4)
+        pts += sixes * 2;       // +2 per six
+        if (runs >= 100) pts += 16;
+        else if (runs >= 50) pts += 8;
+        else if (runs >= 30) pts += 4;
         if (dismissed && runs === 0) pts -= 2; // duck
         if (balls >= 10) {
             const sr = (runs / balls) * 100;
-            if (sr > 200) pts += 4;
-            else if (sr > 150) pts += 2;
-            else if (sr < 50) pts -= 4;
-            else if (sr < 75) pts -= 2;
-            else if (sr < 100) pts -= 1;
+            if (sr > 170) pts += 6;
+            else if (sr > 150) pts += 4;
+            else if (sr >= 130) pts += 2;
+            else if (sr < 50) pts -= 6;
+            else if (sr < 60) pts -= 4;
+            else if (sr < 70) pts -= 2;
         }
     }
 
     if (bowling) {
         const { wickets = 0, maidens = 0, balls = 0, runs = 0 } = bowling;
-        pts += wickets * 10;    // +10 per wicket
-        pts += maidens * 4;     // +4 per maiden
-        if (wickets >= 7) pts += 9;
-        else if (wickets >= 5) pts += 6;
-        else if (wickets >= 3) pts += 3;
+        pts += wickets * 25;    // +25 per wicket
+        pts += maidens * 12;    // +12 per maiden
+        if (wickets >= 5) pts += 16;
+        else if (wickets >= 4) pts += 8;
+        else if (wickets >= 3) pts += 4;
         if (balls >= 12) { // min 2 overs for economy bonus/penalty
             const er = runs / (balls / 6);
-            if (er < 3) pts += 3;
-            else if (er < 4.5) pts += 2;
-            else if (er <= 6) pts += 1;
-            else if (er > 9) pts -= 2;
-            else if (er >= 7.5) pts -= 1;
+            if (er < 5) pts += 6;
+            else if (er < 6) pts += 4;
+            else if (er < 7) pts += 2;
+            else if (er > 10) pts -= 6;
+            else if (er > 9) pts -= 4;
+            else if (er > 8) pts -= 2;
         }
     }
 
     if (fielding) {
         const { catches = 0, stumpings = 0, directRunOuts = 0, indirectRunOuts = 0 } = fielding;
-        pts += catches * 4;         // +4 per catch
-        pts += stumpings * 6;       // +6 per stumping
-        pts += directRunOuts * 6;   // +6 per direct run-out
-        pts += indirectRunOuts * 3; // +3 per indirect run-out
+        pts += catches * 8;          // +8 per catch
+        pts += stumpings * 12;       // +12 per stumping
+        pts += directRunOuts * 12;   // +12 per direct run-out
+        pts += indirectRunOuts * 6;  // +6 per indirect run-out
     }
 
     return Math.round(pts * 10) / 10;
@@ -2566,7 +2640,13 @@ async function fetchFromIPLStats() {
     const allMatches = [...existingMatches];
     for (const nm of newMatches) {
         const idx = allMatches.findIndex(m => m.matchId === nm.matchId);
-        if (idx >= 0) allMatches[idx] = nm; else allMatches.push(nm);
+        if (idx >= 0) {
+            const oldMatch = allMatches[idx];
+            if (oldMatch.scorecard && oldMatch.scorecard.length > 0 && !nm.scorecard) {
+                nm.scorecard = oldMatch.scorecard;
+            }
+            allMatches[idx] = nm;
+        } else allMatches.push(nm);
     }
     // Filter to current season only — exclude matches without valid dates
     const seasonStart = new Date(IPL_SEASON_START_DATE);
