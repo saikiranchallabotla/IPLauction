@@ -203,7 +203,7 @@ let fantasyCache = null;
 // Bump this version whenever the points parsing logic changes to force a re-fetch
 // of all cached match data (invalidates stale data computed with old logic).
 // v5: force re-fetch to clear stale IPL 2025 data and rebuild matchNumber field
-const FANTASY_CACHE_VERSION = 9;
+const FANTASY_CACHE_VERSION = 10;
 let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
@@ -1780,6 +1780,32 @@ async function fetchFromIPLFantasyPublic() {
     }
     fullSchedule.sort((a, b) => new Date(a.matchDate || 0) - new Date(b.matchDate || 0));
 
+    // Authoritative status normalization: if schedule says completed/live, override
+    // heuristic status from player-point deltas to avoid sticky live artifacts.
+    const scheduleByMatchId = new Map(fullSchedule.map(s => [String(s.matchId || ''), s]));
+    const scheduleByMatchNumber = new Map();
+    for (const s of fullSchedule) {
+        const num = parseInt(String(s.matchName || '').match(/match\s*(\d+)/i)?.[1] || '0', 10);
+        if (num) scheduleByMatchNumber.set(num, s);
+    }
+    for (const m of validMatches) {
+        let sched = scheduleByMatchId.get(String(m.matchId || ''));
+        if (!sched && m.matchNumber) sched = scheduleByMatchNumber.get(m.matchNumber);
+        if (!sched) continue;
+
+        const st = String(sched.state || '').toLowerCase();
+        const scheduleSaysLive = st === 'live' || st.includes('progress') || st.includes('innings break') || st.includes('break') || st.includes('interval');
+        const scheduleSaysCompleted = st === 'completed' || st === 'result' || st === 'post' || st.includes('result');
+
+        if (scheduleSaysCompleted && m.status !== 'completed') {
+            m.status = 'completed';
+            m.consecutiveUnchanged = Math.max(m.consecutiveUnchanged || 0, 100);
+        } else if (scheduleSaysLive && m.status !== 'live') {
+            m.status = 'live';
+            m.consecutiveUnchanged = 0;
+        }
+    }
+
     // Preserve existing schedule if new one is empty (API calls failed)
     if (fullSchedule.length === 0 && fantasyCache?.schedule?.length > 0) {
         fullSchedule = fantasyCache.schedule;
@@ -2963,20 +2989,24 @@ function computeCurrentMatchDay(matches, schedule) {
     // Step 3: Also check schedule for today's matches (may be upcoming, not yet in matches array)
     const todayScheduled = schedule.filter(s => toISTDateStr(s.matchDate) === todayIST);
     if (todayScheduled.length > 0) {
-        // Determine if any of today's scheduled matches should have already started
-        // (start time has passed — could be live but not yet in matches array, e.g., during toss)
-        // Handle IST dates: if matchDate has no timezone indicator, treat it as IST
-        const anyStarted = todayScheduled.some(s => {
-            if (!s.matchDate) return false;
-            const matchTime = new Date(s.matchDate);
-            if (isNaN(matchTime.getTime())) return false;
-            const isUTC = s.matchDate.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s.matchDate);
-            // If no timezone info, assume IST: subtract 5.5h to get UTC equivalent
-            const matchUTC = isUTC ? matchTime.getTime() : matchTime.getTime() - IST_OFFSET;
-            return matchUTC <= now.getTime();
+        // Prefer explicit schedule state for live detection.
+        const explicitLive = todayScheduled.filter(s => {
+            const st = String(s.state || s.status || '').toLowerCase();
+            return st === 'live' || st.includes('progress') || st.includes('innings break') || st.includes('break') || st.includes('interval');
         });
+
+        // Fallback: if no explicit live state yet, infer only already-started non-completed matches.
+        const inferredLive = explicitLive.length > 0 ? [] : todayScheduled.filter(s => {
+            const st = String(s.state || s.status || '').toLowerCase();
+            if (st === 'completed' || st === 'result' || st === 'post' || st.includes('result')) return false;
+            const matchUTC = parseFixtureDateToUtcMs(s.matchDate);
+            return !isNaN(matchUTC) && matchUTC <= now.getTime();
+        });
+
+        const liveNow = explicitLive.length > 0 ? explicitLive : inferredLive;
+        const anyStarted = liveNow.length > 0;
         return {
-            matches: todayScheduled.map(s => ({
+            matches: (anyStarted ? liveNow : todayScheduled).map(s => ({
                 matchId: s.matchId || '', matchName: s.matchName || '',
                 matchDate: s.matchDate || '', status: anyStarted ? 'live' : 'scheduled',
                 team1: s.team1, team2: s.team2
