@@ -176,7 +176,8 @@ const Fuse = require('fuse.js');
 let fantasyCache = null;
 // Bump this version whenever the points parsing logic changes to force a re-fetch
 // of all cached match data (invalidates stale data computed with old logic).
-const FANTASY_CACHE_VERSION = 4;
+// v5: force re-fetch to clear stale IPL 2025 data and rebuild matchNumber field
+const FANTASY_CACHE_VERSION = 5;
 let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
@@ -240,9 +241,11 @@ async function initFantasyPoints() {
             const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
             const maxExpected = Math.max(4, Math.ceil(daysSinceStart * 1.2));
 
-            if (doc.matches.length > maxExpected) {
-                // Stale data (e.g. 54 matches from IPL 2025) — nuke it
-                console.log(`Purging stale cache: ${doc.matches.length} matches exceeds max ${maxExpected} for ${daysSinceStart} days into IPL ${IPL_SEASON_YEAR}`);
+            if (doc.matches.length >= maxExpected) {
+                // Stale data (e.g. 17 or 54 matches from IPL 2025) — nuke it.
+                // Use >= so that a cache with exactly maxExpected matches is also purged
+                // (boundary is inclusive: maxExpected is the first suspicious count).
+                console.log(`Purging stale cache: ${doc.matches.length} matches >= max ${maxExpected} for ${daysSinceStart} days into IPL ${IPL_SEASON_YEAR}`);
                 await db.collection('fantasy_points').deleteMany({});
                 fantasyCache = null;
             } else if (isStaleSeasonCache(doc)) {
@@ -293,13 +296,25 @@ function isStaleSeasonCache(cache) {
     // Check match count vs what's possible this season — even if seasonYear is set.
     // The IPL Fantasy API reuses tourgamedayId across seasons, so a prior run may have
     // probed IDs 1-74 and stored 70+ prior-season matches incorrectly tagged as the current season.
-    // IPL has at most 2 matches per day, so match count should not exceed daysSinceStart * 2.
     if (cache.matches?.length > 0) {
         const seasonStart2 = new Date(IPL_SEASON_START_DATE);
         const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart2.getTime()) / (24 * 60 * 60 * 1000)));
-        const maxExpected = Math.max(4, Math.ceil(daysSinceStart * 1.2));
-        if (cache.matches.length > maxExpected) {
-            console.log(`Stale cache detected: ${cache.matches.length} matches exceeds max expected ${maxExpected} for ${daysSinceStart} days into IPL ${IPL_SEASON_YEAR}`);
+        // Conservative ceiling: IPL typically has ~1 match/day in early rounds.
+        // Use daysSinceStart + 2 as ceiling (2-match buffer for double-headers).
+        const maxExpected = Math.max(4, daysSinceStart + 2);
+        if (cache.matches.length >= maxExpected) {
+            console.log(`Stale cache detected: ${cache.matches.length} matches >= max expected ${maxExpected} for ${daysSinceStart} days into IPL ${IPL_SEASON_YEAR}`);
+            return true;
+        }
+        // Extra check: if ALL cached matches are undated they can't be verified as current season.
+        // Undated matches escape the date-filter above (new Date('') is NaN → not added to matchesBeforeSeason).
+        // If >4 undated matches exist and we've only had a few days of IPL, treat as stale.
+        const datedMatchCount = cache.matches.filter(m => {
+            const d = new Date(m.matchDate || '');
+            return !isNaN(d.getTime());
+        }).length;
+        if (datedMatchCount === 0 && cache.matches.length > 4) {
+            console.log(`Stale cache detected: ${cache.matches.length} undated matches with no verifiable season dates — treating as stale`);
             return true;
         }
     }
@@ -1396,6 +1411,7 @@ async function fetchFromIPLFantasyPublic() {
               tourgamedayId: startId + i,
               matchId: String(startId + i),
               matchName: `Match ${i + 1}`,
+              matchNumber: i + 1,  // explicit 1-based match number stable across name rewrites
               matchDate: '',
               status: 'completed',
           }))
@@ -1403,6 +1419,8 @@ async function fetchFromIPLFantasyPublic() {
               tourgamedayId: parseInt(f.gamedayId, 10) || parseInt(f.matchId, 10),
               matchId: f.matchId,
               matchName: f.matchName,
+              // Parse match number from fixture name (e.g. 'MI vs SRH, Match 11' → 11)
+              matchNumber: parseInt((f.matchName || '').match(/match\s*(\d+)/i)?.[1] || '0') || null,
               matchDate: f.matchDate,
               status: f.status,
           }));
@@ -1585,6 +1603,7 @@ async function fetchFromIPLFantasyPublic() {
             newMatches.push({
                 matchId: entry.matchId,
                 matchName: entry.matchName,
+                matchNumber: entry.matchNumber || null,
                 matchDate: entry.matchDate || '',
                 status: matchStatus,
                 consecutiveUnchanged,
@@ -1654,6 +1673,9 @@ async function fetchFromIPLFantasyPublic() {
             if (!statsMatch) break;
             const m = undated[i];
             m.matchDate = statsMatch.matchDate;
+            // Preserve matchNumber from statsMatch — used by scorecard enrichment
+            // to look up the fixture by RowNo (survives matchName overwrite below).
+            if (!m.matchNumber && statsMatch.matchNumber) m.matchNumber = statsMatch.matchNumber;
             // Also update matchName if it's a placeholder like "Match 1"
             if (/^Match \d+$/.test(m.matchName)) {
                 m.matchName = statsMatch.matchName;
@@ -2175,22 +2197,31 @@ async function enrichMatchesWithScorecards() {
 
             if (scoresFeed.length > 0) {
                 for (const match of matchesNeedingScorecard) {
-                    // Match by match number (e.g., "Match 5" -> RowNo 5)
-                    const matchNum = (match.matchName || '').match(/match\s*(\d+)/i)?.[1];
+                    // Use explicit matchNumber first (survives matchName rewrites like 'MI vs SRH').
+                    // Fall back to extracting match number from matchName, then team-code matching.
+                    const matchNum = match.matchNumber ||
+                        parseInt((match.matchName || '').match(/match\s*(\d+)/i)?.[1] || '0') || null;
+                    console.log(`[Scorecard] Looking up fixture for '${match.matchName}' matchNumber=${matchNum}`);
                     let fixture = null;
                     if (matchNum) {
-                        fixture = scoresFeed.find(f => f.RowNo === parseInt(matchNum));
+                        fixture = scoresFeed.find(f => f.RowNo === matchNum);
                     }
-                    // Also try matching by team codes
+                    // Fallback: match by team codes embedded in match name
                     if (!fixture) {
                         const matchNameLower = (match.matchName || '').toLowerCase();
                         fixture = scoresFeed.find(f => {
                             const t1 = (f.FirstBattingTeamCode || '').toLowerCase();
                             const t2 = (f.SecondBattingTeamCode || '').toLowerCase();
-                            return t1 && t2 && (matchNameLower.includes(t1) || matchNameLower.includes(t2));
+                            // Both team codes must appear, or at least one exact code boundary match
+                            const has1 = t1.length >= 2 && matchNameLower.includes(t1);
+                            const has2 = t2.length >= 2 && matchNameLower.includes(t2);
+                            return has1 && has2;
                         });
                     }
-                    if (!fixture) continue;
+                    if (!fixture) {
+                        console.log(`[Scorecard] No fixture found for '${match.matchName}' matchNumber=${matchNum} — skipping`);
+                        continue;
+                    }
 
                     try {
                         await new Promise(r => setTimeout(r, 150));
