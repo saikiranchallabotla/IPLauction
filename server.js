@@ -175,7 +175,7 @@ const Fuse = require('fuse.js');
 let fantasyCache = null;
 // Bump this version whenever the points parsing logic changes to force a re-fetch
 // of all cached match data (invalidates stale data computed with old logic).
-const FANTASY_CACHE_VERSION = 2;
+const FANTASY_CACHE_VERSION = 3;
 let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
@@ -380,6 +380,14 @@ async function fetchAllFantasyPoints() {
     isRefreshing = true;
     try {
         return await fetchFromIPLFantasyPublic();
+    } catch (err) {
+        console.error('IPL Fantasy Public API failed:', err.message, '— falling back to Cricbuzz');
+        try {
+            return await fetchFromCricbuzz();
+        } catch (err2) {
+            console.error('Cricbuzz fallback also failed:', err2.message);
+            throw err; // throw original error
+        }
     } finally {
         isRefreshing = false;
     }
@@ -2184,55 +2192,53 @@ async function enrichMatchesWithScorecards() {
 
 // ============ IPL PUBLIC STATS — no authentication required ============
 
-// Official IPL Fantasy / my11Circle T20 scoring rules
+// Official IPL Fantasy / My11Circle T20 scoring rules (2025-2026 season)
+// Source: https://www.my11circle.com/points-system.html
 function calcIPLFantasyPoints(batting, bowling, fielding, playingXI) {
     let pts = playingXI ? 4 : 0;
 
     if (batting) {
         const { runs = 0, balls = 0, fours = 0, sixes = 0, dismissed = false } = batting;
-        pts += runs;           // +1 per run
-        pts += fours;          // +1 per boundary
-        pts += sixes * 2;      // +2 per six
-        if (runs >= 100) pts += 16;
-        else if (runs >= 50) pts += 8;
-        else if (runs >= 30) pts += 4;
+        pts += runs * 0.5;      // +0.5 per run
+        pts += fours * 0.5;     // +0.5 per boundary (4)
+        pts += sixes * 1;       // +1 per six
+        if (runs >= 100) pts += 8;
+        else if (runs >= 50) pts += 4;
+        else if (runs >= 30) pts += 2;
         if (dismissed && runs === 0) pts -= 2; // duck
         if (balls >= 10) {
             const sr = (runs / balls) * 100;
-            if (sr >= 170) pts += 6;
-            else if (sr >= 150) pts += 4;
-            else if (sr >= 130) pts += 2;
-            else if (sr < 50) pts -= 6;
-            else if (sr < 60) pts -= 4;
-            else if (sr < 70) pts -= 2;
+            if (sr > 200) pts += 4;
+            else if (sr > 150) pts += 2;
+            else if (sr < 50) pts -= 4;
+            else if (sr < 75) pts -= 2;
+            else if (sr < 100) pts -= 1;
         }
     }
 
     if (bowling) {
-        const { wickets = 0, lbwBowled = 0, maidens = 0, balls = 0, runs = 0 } = bowling;
-        pts += wickets * 25;
-        pts += lbwBowled * 8;
-        pts += maidens * 4;
-        if (wickets >= 5) pts += 16;
-        else if (wickets >= 4) pts += 8;
-        else if (wickets >= 3) pts += 4;
-        if (balls >= 12) { // min 2 overs
+        const { wickets = 0, maidens = 0, balls = 0, runs = 0 } = bowling;
+        pts += wickets * 10;    // +10 per wicket
+        pts += maidens * 4;     // +4 per maiden
+        if (wickets >= 7) pts += 9;
+        else if (wickets >= 5) pts += 6;
+        else if (wickets >= 3) pts += 3;
+        if (balls >= 12) { // min 2 overs for economy bonus/penalty
             const er = runs / (balls / 6);
-            if (er < 5) pts += 6;
-            else if (er < 6) pts += 4;
-            else if (er < 7) pts += 2;
-            else if (er >= 12) pts -= 6;
-            else if (er >= 11) pts -= 4;
-            else if (er >= 10) pts -= 2;
+            if (er < 3) pts += 3;
+            else if (er < 4.5) pts += 2;
+            else if (er <= 6) pts += 1;
+            else if (er > 9) pts -= 2;
+            else if (er >= 7.5) pts -= 1;
         }
     }
 
     if (fielding) {
         const { catches = 0, stumpings = 0, directRunOuts = 0, indirectRunOuts = 0 } = fielding;
-        pts += catches * 8;
-        pts += stumpings * 12;
-        pts += directRunOuts * 12;
-        pts += indirectRunOuts * 6;
+        pts += catches * 4;         // +4 per catch
+        pts += stumpings * 6;       // +6 per stumping
+        pts += directRunOuts * 6;   // +6 per direct run-out
+        pts += indirectRunOuts * 3; // +3 per indirect run-out
     }
 
     return Math.round(pts * 10) / 10;
