@@ -173,6 +173,9 @@ function loadRoomsFromFile() {
 // ============ FANTASY POINTS LAYER ============
 const Fuse = require('fuse.js');
 let fantasyCache = null;
+// Bump this version whenever the points parsing logic changes to force a re-fetch
+// of all cached match data (invalidates stale data computed with old logic).
+const FANTASY_CACHE_VERSION = 2;
 let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
@@ -243,6 +246,11 @@ async function initFantasyPoints() {
                 fantasyCache = null;
             } else if (isStaleSeasonCache(doc)) {
                 console.log(`Clearing stale IPL ${doc.seasonYear || 'unknown'} cache — current season is IPL ${IPL_SEASON_YEAR}`);
+                await db.collection('fantasy_points').deleteMany({});
+                fantasyCache = null;
+            } else if (doc.cacheVersion !== FANTASY_CACHE_VERSION) {
+                // Points parsing logic changed — discard cached data to force re-fetch
+                console.log(`Cache version mismatch (cached: ${doc.cacheVersion || 1}, current: ${FANTASY_CACHE_VERSION}) — clearing to re-fetch with corrected parsing`);
                 await db.collection('fantasy_points').deleteMany({});
                 fantasyCache = null;
             } else {
@@ -1622,6 +1630,7 @@ async function fetchFromIPLFantasyPublic() {
     fantasyCache = {
         seriesId: 'ipl_fantasy_public',
         seasonYear: IPL_SEASON_YEAR,
+        cacheVersion: FANTASY_CACHE_VERSION,
         lastFetchedAt: Date.now(),
         matches: validMatches,
         nameMapping,
@@ -1654,6 +1663,8 @@ async function fetchFromIPLFantasyPublic() {
 //   { Data: { Value: { Players: [ { Id, Name, ShortName, TeamName, TeamShortName,
 //       SkillName, OverallPoints, GamedayPoints, IsActive, Value, ... } ] } } }
 // We use GamedayPoints for per-match fantasy points.
+// IMPORTANT: OverallPoints and TotalPoints are CUMULATIVE season totals — using them
+// as per-match values causes inflated totals when summed across matches.
 function parseIPLPublicPlayerPoints(json) {
     // Try multiple possible paths — API may capitalise keys differently
     const list =
@@ -1675,21 +1686,49 @@ function parseIPLPublicPlayerPoints(json) {
         }
     }
 
+    // Log the first player's keys once to help diagnose API format changes
+    if (list.length > 0 && list[0]) {
+        const sampleKeys = Object.keys(list[0]).filter(k => /point|score/i.test(k));
+        if (sampleKeys.length > 0) {
+            console.log(`  IPL Fantasy Public: player point-related keys: [${sampleKeys.join(', ')}]`);
+        }
+    }
+
     const players = [];
     for (const p of list) {
         const name = p?.Name || p?.name || p?.PlayerName || p?.playerName || p?.DisplayName || p?.FullName || '';
         if (!name) continue;
 
-        // Prefer per-match GamedayPoints; fall back to OverallPoints then TotalPoints
-        const pts = parseFloat(
+        // Use ONLY per-gameday points fields. Do NOT fall back to OverallPoints or
+        // TotalPoints — those are cumulative season totals. Summing cumulative values
+        // across matches produces inflated totals (e.g. 355 instead of 226).
+        const gamedayPts =
             p?.GamedayPoints ?? p?.gamedayPoints ??
-            p?.OverallPoints ?? p?.overallPoints ??
-            p?.TotalPoints  ?? p?.totalPoints   ??
-            p?.Points       ?? p?.points        ?? 0
-        );
+            p?.GameDayPoints ?? p?.gameDayPoints ??
+            p?.Gamedaypoints ?? p?.gamedaypoints ??
+            p?.GamedayPoint  ?? p?.gamedayPoint  ??
+            p?.GameDayPoint  ?? p?.gameDayPoint   ?? undefined;
+
+        let pts;
+        if (gamedayPts !== undefined && gamedayPts !== null) {
+            pts = parseFloat(gamedayPts);
+        } else {
+            // Last resort: use Points/points if it exists (could be per-match in some API versions),
+            // but NOT OverallPoints or TotalPoints which are always cumulative.
+            const fallbackPts = p?.Points ?? p?.points ?? 0;
+            pts = parseFloat(fallbackPts);
+        }
+
+        // Sanity check: a single T20 match can't realistically yield >300 fantasy points.
+        // Values above this threshold likely indicate a cumulative total leaked through.
+        if (pts > 300) {
+            console.warn(`  IPL Fantasy Public: suspicious per-match points for ${name}: ${pts} (likely cumulative) — clamping to 0`);
+            pts = 0;
+        }
+
         const id = String(p?.Id || p?.id || p?.PlayerId || p?.playerId || '');
 
-        players.push({ cricApiName: name, cricApiId: id, points: pts });
+        players.push({ cricApiName: name, cricApiId: id, points: isNaN(pts) ? 0 : pts });
     }
     return players;
 }
