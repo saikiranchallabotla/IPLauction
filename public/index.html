@@ -3766,18 +3766,31 @@
         // ============ FANTASY POINTS TABLE ============
         function renderPointsTable() {
             const allMatches = fantasyData.matches || [];
-            const completedMatches = allMatches.filter(m => m.status === 'completed');
-            const liveMatches = allMatches.filter(m => m.status === 'live' || m.status === 'Live' || m.status === 'In Progress');
-            const upcomingCount = (fantasyData.schedule || []).filter(s => {
-                const st = (s.state || '').toLowerCase();
+            const schedule = fantasyData.schedule || [];
+            const scheduleLive = schedule.filter(s => {
+                const st = (s.state || s.status || '').toLowerCase();
+                return st === 'live' || st.includes('progress') || st.includes('innings break') || st.includes('break') || st.includes('interval');
+            });
+            const scheduleCompleted = schedule.filter(s => {
+                const st = (s.state || s.status || '').toLowerCase();
+                return st === 'completed' || st === 'result' || st === 'post' || st.includes('result');
+            });
+            const upcomingCount = schedule.filter(s => {
+                const st = (s.state || s.status || '').toLowerCase();
                 return st === 'upcoming' || st === 'scheduled' || st === 'preview';
             }).length;
-            const matchesPlayed = completedMatches.length;
+
+            const completedMatches = allMatches.filter(m => m.status === 'completed');
+            const liveMatches = allMatches.filter(m => m.status === 'live' || m.status === 'Live' || m.status === 'In Progress');
+
+            // Use schedule as authoritative status source when available.
+            const matchesPlayed = scheduleCompleted.length > 0 ? scheduleCompleted.length : completedMatches.length;
+            const liveCount = scheduleLive.length > 0 ? scheduleLive.length : liveMatches.length;
 
             // Debug: log match list and statuses to help catch data issues
             console.log('[MatchCount] Total matches in data:', allMatches.length,
                 '| Completed:', matchesPlayed,
-                '| Live:', liveMatches.length,
+                '| Live:', liveCount,
                 '| Upcoming (schedule):', upcomingCount);
             if (allMatches.length > 0) {
                 console.log('[MatchCount] Match statuses:', allMatches.map(m => `${m.matchName || m.matchId}=${m.status}`).join(', '));
@@ -3785,7 +3798,7 @@
 
             // Use currentMatchDay for live detection and match day stats
             const matchDayInfo = getCurrentMatchDayInfo();
-            const hasLiveMatch = matchDayInfo.isLive || liveMatches.length > 0;
+            const hasLiveMatch = matchDayInfo.isLive || liveCount > 0;
             const el = id => document.getElementById(id);
 
             const statMatches = el('fantasy-stat-matches');
@@ -3796,7 +3809,7 @@
             if (breakdownEl) {
                 const parts = [];
                 parts.push(`<span style="color:var(--success)">${matchesPlayed} done</span>`);
-                if (liveMatches.length > 0) parts.push(`<span style="color:#ef5350">${liveMatches.length} live</span>`);
+                if (liveCount > 0) parts.push(`<span style="color:#ef5350">${liveCount} live</span>`);
                 if (upcomingCount > 0) parts.push(`<span>${upcomingCount} upcoming</span>`);
                 breakdownEl.innerHTML = parts.join(' &nbsp;·&nbsp; ');
             }
@@ -3809,7 +3822,9 @@
             const liveScoreCard = el('fantasy-live-score-card');
             const liveScoreEl = el('fantasy-live-score');
             if (liveScoreCard) {
-                const liveMatch = (fantasyData.matches || []).find(m => m.status === 'live' || m.status === 'Live' || m.status === 'In Progress');
+                // Prefer currentMatchDay live match (already schedule-aware); fallback to match cache status.
+                const cmdLive = (matchDayInfo.matches || []).find(m => m.status === 'live');
+                const liveMatch = cmdLive || (fantasyData.matches || []).find(m => m.status === 'live' || m.status === 'Live' || m.status === 'In Progress');
                 if (liveMatch && liveMatch.scorecard && liveMatch.scorecard.length > 0) {
                     var liveText = '';
                     liveMatch.scorecard.forEach(function(inn, i) {

@@ -3084,7 +3084,47 @@ function computeRoomFantasyPoints(room) {
         console.warn(`Hard cap: trimming ${allMatches.length} matches to ${maxMatches} (IPL ${IPL_SEASON_YEAR}, day ${daysSinceStart}, schedule=${schedulePlayed})`);
         allMatches = allMatches.slice(0, maxMatches);
     }
-    const matches = allMatches;
+    // Response-time status normalization using authoritative schedule state.
+    // This prevents stale cached "live" flags from leaking to the UI.
+    const scheduleByMatchId = new Map(schedule.map(s => [String(s.matchId || ''), s]));
+    const scheduleByMatchNumber = new Map();
+    for (const s of schedule) {
+        const num = parseInt(String(s.matchNumber || '').match(/(\d+)/)?.[1] || String(s.matchName || '').match(/match\s*(\d+)/i)?.[1] || '0', 10);
+        if (num) scheduleByMatchNumber.set(num, s);
+    }
+
+    function resolveScheduleForMatch(m) {
+        const id = String(m.matchId || '');
+        if (id && scheduleByMatchId.has(id)) return scheduleByMatchId.get(id);
+
+        const mNum = parseInt(String(m.matchNumber || '').match(/(\d+)/)?.[1] || String(m.matchName || '').match(/match\s*(\d+)/i)?.[1] || '0', 10);
+        if (mNum && scheduleByMatchNumber.has(mNum)) return scheduleByMatchNumber.get(mNum);
+
+        // Final fallback: same IST date and team-code signature in matchName.
+        const mDate = toISTDateStr(m.matchDate);
+        const mName = String(m.matchName || '').toLowerCase();
+        if (!mDate) return null;
+        return schedule.find(s => {
+            if (toISTDateStr(s.matchDate) !== mDate) return false;
+            const t1 = String(s.team1 || '').toLowerCase();
+            const t2 = String(s.team2 || '').toLowerCase();
+            return t1 && t2 && mName.includes(t1) && mName.includes(t2);
+        }) || null;
+    }
+
+    const matches = allMatches.map(m => {
+        const normalized = { ...m };
+        const sched = resolveScheduleForMatch(normalized);
+        if (!sched) return normalized;
+
+        const st = String(sched.state || sched.status || '').toLowerCase();
+        if (st === 'completed' || st === 'result' || st === 'post' || st.includes('result')) {
+            normalized.status = 'completed';
+        } else if (st === 'live' || st.includes('progress') || st.includes('innings break') || st.includes('break') || st.includes('interval')) {
+            normalized.status = 'live';
+        }
+        return normalized;
+    });
     const nameMapping = fantasyCache?.nameMapping || {};
     // Reverse mapping: our player name -> array of CricAPI names
     const reverseMapping = {};
