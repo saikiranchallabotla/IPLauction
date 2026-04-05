@@ -1419,8 +1419,8 @@ async function fetchFromIPLFantasyPublic() {
               tourgamedayId: parseInt(f.gamedayId, 10) || parseInt(f.matchId, 10),
               matchId: f.matchId,
               matchName: f.matchName,
-              // Parse match number from fixture name (e.g. 'MI vs SRH, Match 11' → 11)
-              matchNumber: parseInt((f.matchName || '').match(/match\s*(\d+)/i)?.[1] || '0') || null,
+                            // Prefer explicit match number from fixture payload, then fallback to parsing name.
+                            matchNumber: f.matchNumber || parseInt((f.matchName || '').match(/match\s*(\d+)/i)?.[1] || '0') || null,
               matchDate: f.matchDate,
               status: f.status,
           }));
@@ -1873,6 +1873,12 @@ function parseIPLFixtures(json) {
     // Collect all fixture objects regardless of nesting structure
     let allFixtureObjects = [];
 
+    // 0. Official IPL Fantasy format: { Data: { Value: [...] } }
+    const fantasyValue = json?.Data?.Value || json?.data?.Value || [];
+    if (Array.isArray(fantasyValue) && fantasyValue.length > 0) {
+        allFixtureObjects.push(...fantasyValue);
+    }
+
     // 1. Stage-based structure (classic IPL Fantasy API: data.Stages[].Fixtures[])
     const stages = json?.data?.Stages || json?.data?.stages || json?.Stages || json?.stages ||
                    json?.data?.stage || json?.stage || [];
@@ -1905,33 +1911,50 @@ function parseIPLFixtures(json) {
 
         const statusId = f?.StatusId ?? f?.statusId ?? f?.MatchStatus ?? f?.matchStatus ?? f?.status;
         const statusStr = statusId !== undefined && statusId !== null ? String(statusId).toLowerCase() : '';
+        const statusNum = Number(statusId);
 
-        // Status IDs: 2=live, 3=completed in the classic API.
-        // Some versions use 1=completed or 4=live; also accept boolean/string flags.
-        const isLive = statusId === 2 || statusId === 4 || statusStr === '2' || statusStr === '4' ||
-                       !!(f?.IsLive || f?.isLive || f?.matchStarted || f?.MatchStarted || f?.IsStarted || f?.isStarted) ||
+        const isOne = (v) => v === 1 || v === '1' || v === true || v === 'true';
+        const isTwo = (v) => v === 2 || v === '2';
+
+        // IPL Fantasy API currently uses MatchStatus: 1=live/current, 2=completed, 0=upcoming.
+        // Keep compatibility with alternate sources while avoiding truthy checks where 2 means not live.
+        const isLive = statusNum === 1 || statusStr === '1' ||
+                       isOne(f?.IsLive) || isOne(f?.isLive) ||
+                       isOne(f?.IsCurrent) || isOne(f?.isCurrent) ||
+                       isOne(f?.matchStarted) || isOne(f?.MatchStarted) || isOne(f?.IsStarted) || isOne(f?.isStarted) ||
                        statusStr === 'live' || statusStr === 'inprogress' || statusStr === 'started' ||
                        statusStr.includes('innings break') || statusStr.includes('break') || statusStr.includes('interval');
-        const isCompleted = statusId === 1 || statusId === 3 || statusStr === '1' || statusStr === '3' ||
-                            !!(f?.IsCompleted || f?.isCompleted || f?.MatchEnded || f?.matchEnded) ||
+        const isCompleted = statusNum === 2 || statusNum === 3 || statusStr === '2' || statusStr === '3' ||
+                            isOne(f?.IsCompleted) || isOne(f?.isCompleted) || isOne(f?.MatchEnded) || isOne(f?.matchEnded) || isTwo(f?.IsLive) ||
                             statusStr === 'completed' || statusStr === 'result' ||
                             statusStr === 'finished' || statusStr === 'post';
 
-        const gamedayId = f?.GamedayId || f?.gamedayId || f?.GameDayId || f?.gameDayId ||
+        const gamedayId = f?.TourGamedayId || f?.tourGamedayId || f?.TourGamdayId ||
+                          f?.GamedayId || f?.gamedayId || f?.GameDayId || f?.gameDayId ||
                           f?.MatchId || f?.matchId || f?.FixtureId || f?.fixtureId;
         if (!gamedayId) continue;
 
-        const home = f?.HomeTeam?.ShortName || f?.HomeTeam?.Name || f?.HomeTeam || f?.Team1 || f?.team1 || '';
-        const away = f?.AwayTeam?.ShortName || f?.AwayTeam?.Name || f?.AwayTeam || f?.Team2 || f?.team2 || '';
-        const matchName = f?.MatchName || f?.matchName || (home && away ? `${home} vs ${away}` : `Match ${gamedayId}`);
+        const home = f?.HomeTeamShortName || f?.HomeTeam?.ShortName || f?.HomeTeam?.Name || f?.HomeTeam || f?.Team1 || f?.team1 || '';
+        const away = f?.AwayTeamShortName || f?.AwayTeam?.ShortName || f?.AwayTeam?.Name || f?.AwayTeam || f?.Team2 || f?.team2 || '';
+        const matchName = f?.MatchdayName || f?.MatchName || f?.matchName ||
+            (home && away ? `${home} vs ${away}` : `Match ${gamedayId}`);
+        const matchNumber = parseInt(
+            String(f?.MatchNumber || f?.MatchdayName || f?.matchName || '')
+                .match(/match\s*(\d+)/i)?.[1] || '0',
+            10
+        ) || null;
+        const matchDate = f?.MatchdateTime || f?.MatchDateTime || f?.StartDate || f?.startDate ||
+                          f?.MatchDate || f?.matchDate || f?.Matchdate || '';
+        const matchId = String(f?.MatchId || f?.matchId || f?.FixtureId || f?.fixtureId || gamedayId);
 
         // A "live" flag takes priority over "completed" classification.
         // Upcoming/scheduled matches are collected separately for schedule building.
         if (!isLive && !isCompleted) {
             upcomingFixtures.push({
-                matchId: String(f?.FixtureId || f?.fixtureId || f?.MatchId || f?.matchId || gamedayId),
+                matchId,
                 matchName,
-                matchDate: f?.StartDate || f?.startDate || f?.MatchDate || f?.matchDate || '',
+                matchDate,
+                matchNumber,
                 status: 'upcoming',
                 gamedayId: String(gamedayId),
                 phaseId: String(f?.PhaseId || f?.phaseId || 1)
@@ -1940,9 +1963,10 @@ function parseIPLFixtures(json) {
         }
 
         fixtures.push({
-            matchId: String(f?.FixtureId || f?.fixtureId || f?.MatchId || f?.matchId || gamedayId),
+            matchId,
             matchName,
-            matchDate: f?.StartDate || f?.startDate || f?.MatchDate || f?.matchDate || '',
+            matchDate,
+            matchNumber,
             status: isLive ? 'live' : 'completed',
             gamedayId: String(gamedayId),
             phaseId: String(f?.PhaseId || f?.phaseId || 1)
