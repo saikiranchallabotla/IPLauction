@@ -27,6 +27,32 @@ const IPL_START_GAMEDAY_ID = parseInt(process.env.IPL_START_GAMEDAY_ID) || 1;
 // avoids the cap being inflated when using the over-permissive March 1 default.
 const IPL_SEASON_START_DATE = process.env.IPL_SEASON_START_DATE || `${IPL_SEASON_YEAR}-03-22`;
 
+function parseFixtureDateToUtcMs(value) {
+    if (!value) return NaN;
+    const raw = String(value).trim();
+    if (!raw) return NaN;
+
+    // If timezone is present, trust native parsing.
+    if (raw.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(raw)) {
+        return new Date(raw).getTime();
+    }
+
+    // IPL Fantasy commonly returns "MM/DD/YYYY HH:mm:ss" without timezone.
+    // Treat this format as UTC to match the feed's schedule times (e.g. 14:00 UTC).
+    const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (m) {
+        const month = parseInt(m[1], 10) - 1;
+        const day = parseInt(m[2], 10);
+        const year = parseInt(m[3], 10);
+        const hour = parseInt(m[4], 10);
+        const minute = parseInt(m[5], 10);
+        const second = parseInt(m[6] || '0', 10);
+        return Date.UTC(year, month, day, hour, minute, second);
+    }
+
+    return new Date(raw).getTime();
+}
+
 // Store multiple auction rooms (in-memory cache)
 let rooms = new Map();
 
@@ -1517,10 +1543,8 @@ async function fetchFromIPLFantasyPublic() {
                 // This catches matches at toss/start where the fixture API hasn't flagged them as live yet.
                 let isScheduledLive = entry.status === 'live';
                 if (!isScheduledLive && entry.matchDate) {
-                    const matchTime = new Date(entry.matchDate);
-                    if (!isNaN(matchTime.getTime())) {
-                        const isUTC = entry.matchDate.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(entry.matchDate);
-                        const matchUTC = isUTC ? matchTime.getTime() : matchTime.getTime() - (5.5 * 60 * 60 * 1000);
+                    const matchUTC = parseFixtureDateToUtcMs(entry.matchDate);
+                    if (!isNaN(matchUTC)) {
                         const diffMs = Date.now() - matchUTC;
                         // Match was supposed to start within the last 6 hours — likely live or just started
                         if (diffMs > 0 && diffMs < 6 * 60 * 60 * 1000) {
@@ -1591,10 +1615,8 @@ async function fetchFromIPLFantasyPublic() {
                 // Check schedule time: if match was supposed to start recently, mark as live
                 // even if we didn't detect it through point changes (e.g., first refresh after start)
                 if (matchStatus === 'completed' && entry.matchDate) {
-                    const matchTime = new Date(entry.matchDate);
-                    if (!isNaN(matchTime.getTime())) {
-                        const isUTC = entry.matchDate.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(entry.matchDate);
-                        const matchUTC = isUTC ? matchTime.getTime() : matchTime.getTime() - (5.5 * 60 * 60 * 1000);
+                    const matchUTC = parseFixtureDateToUtcMs(entry.matchDate);
+                    if (!isNaN(matchUTC)) {
                         const diffMs = Date.now() - matchUTC;
                         // Match started within the last 6 hours — likely still in progress
                         if (diffMs > 0 && diffMs < 6 * 60 * 60 * 1000) {
@@ -1920,7 +1942,6 @@ function parseIPLFixtures(json) {
         // Keep compatibility with alternate sources while avoiding truthy checks where 2 means not live.
         const isLive = statusNum === 1 || statusStr === '1' ||
                        isOne(f?.IsLive) || isOne(f?.isLive) ||
-                       isOne(f?.IsCurrent) || isOne(f?.isCurrent) ||
                        isOne(f?.matchStarted) || isOne(f?.MatchStarted) || isOne(f?.IsStarted) || isOne(f?.isStarted) ||
                        statusStr === 'live' || statusStr === 'inprogress' || statusStr === 'started' ||
                        statusStr.includes('innings break') || statusStr.includes('break') || statusStr.includes('interval');
