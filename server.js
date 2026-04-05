@@ -1553,7 +1553,7 @@ async function fetchFromIPLFantasyPublic() {
                     }
                 }
                 // Also check if a previously cached match was live (e.g., points stopped updating between overs)
-                if (!isScheduledLive) {
+                if (!isScheduledLive && entry.status !== 'completed') {
                     const prevMatch = existingMatches.find(m => m.matchId === entry.matchId);
                     if (prevMatch && prevMatch.status === 'live') isScheduledLive = true;
                 }
@@ -1592,6 +1592,10 @@ async function fetchFromIPLFantasyPublic() {
             let consecutiveUnchanged = 0;
             if (entry.status === 'live') {
                 matchStatus = 'live';
+            } else if (entry.status === 'completed') {
+                // Fixture endpoint is authoritative for completed status.
+                // This prevents an old cached "live" flag from lingering after match end.
+                matchStatus = 'completed';
             } else {
                 const prevMatch = existingMatches.find(m => m.matchId === entry.matchId);
                 if (prevMatch && prevMatch.playerPoints) {
@@ -1614,7 +1618,7 @@ async function fetchFromIPLFantasyPublic() {
                 }
                 // Check schedule time: if match was supposed to start recently, mark as live
                 // even if we didn't detect it through point changes (e.g., first refresh after start)
-                if (matchStatus === 'completed' && entry.matchDate) {
+                if (matchStatus === 'completed' && entry.matchDate && entry.status !== 'completed') {
                     const matchUTC = parseFixtureDateToUtcMs(entry.matchDate);
                     if (!isNaN(matchUTC)) {
                         const diffMs = Date.now() - matchUTC;
