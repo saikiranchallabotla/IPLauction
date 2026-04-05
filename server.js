@@ -177,7 +177,7 @@ let fantasyCache = null;
 // Bump this version whenever the points parsing logic changes to force a re-fetch
 // of all cached match data (invalidates stale data computed with old logic).
 // v5: force re-fetch to clear stale IPL 2025 data and rebuild matchNumber field
-const FANTASY_CACHE_VERSION = 5;
+const FANTASY_CACHE_VERSION = 6;
 let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
@@ -1488,9 +1488,20 @@ async function fetchFromIPLFantasyPublic() {
             const json = await res.json();
             const playerPoints = parseIPLPublicPlayerPoints(json);
 
-            // Skip entirely if no players returned at all
+            // Skip entirely if no players returned at all (API returned Players: null)
             if (playerPoints.length === 0) {
                 consecutiveNoPoints++;
+                // In probing mode, a null-players response (Players: null from the API) after
+                // we've already found current-season matches means this gameday hasn't been
+                // initialized for the current season yet. Treat this as the unplayed boundary
+                // so we don't fall through to stale prior-season data: the API reuses
+                // tourgamedayId values across seasons, and uninitialized future slots still
+                // serve player data from the previous IPL season with non-zero GamedayPoints.
+                if (useProbing && newMatches.length > 0) {
+                    hitUnplayedBoundary = true;
+                    console.log(`IPL Fantasy Public: tourgamedayId ${entry.tourgamedayId} returned null players — unplayed boundary (${newMatches.length} IPL ${IPL_SEASON_YEAR} matches found)`);
+                    break;
+                }
                 if (useProbing && consecutiveNoPoints >= 3) {
                     console.log(`IPL Fantasy Public: stopping probe after ${consecutiveNoPoints} consecutive empty responses at tourgamedayId ${entry.tourgamedayId}`);
                     break;
