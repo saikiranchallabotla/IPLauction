@@ -237,7 +237,7 @@ async function initFantasyPoints() {
             // Validate: match count must be reasonable for current season
             const seasonStart = new Date(IPL_SEASON_START_DATE);
             const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
-            const maxExpected = Math.max(4, daysSinceStart * 2);
+            const maxExpected = Math.max(4, Math.ceil(daysSinceStart * 1.2));
 
             if (doc.matches.length > maxExpected) {
                 // Stale data (e.g. 54 matches from IPL 2025) — nuke it
@@ -296,7 +296,7 @@ function isStaleSeasonCache(cache) {
     if (cache.matches?.length > 0) {
         const seasonStart2 = new Date(IPL_SEASON_START_DATE);
         const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart2.getTime()) / (24 * 60 * 60 * 1000)));
-        const maxExpected = Math.max(4, daysSinceStart * 2);
+        const maxExpected = Math.max(4, Math.ceil(daysSinceStart * 1.2));
         if (cache.matches.length > maxExpected) {
             console.log(`Stale cache detected: ${cache.matches.length} matches exceeds max expected ${maxExpected} for ${daysSinceStart} days into IPL ${IPL_SEASON_YEAR}`);
             return true;
@@ -1427,9 +1427,17 @@ async function fetchFromIPLFantasyPublic() {
             continue;
         }
 
-        // Stop probing if we've already found more matches than possible this season
-        if (useProbing && newMatches.length >= maxPossibleMatches) {
-            console.log(`IPL Fantasy Public: reached max possible matches (${maxPossibleMatches}) for ${daysSinceSeasonStart} days into IPL ${IPL_SEASON_YEAR}, stopping probe`);
+        // Stop probing if we've already found more matches than possible this season.
+        // If we have an IPL Stats schedule, use the number of played matches as a tighter cap.
+        const schedulePlayedCount = iplStatsSchedule.filter(s =>
+            s.status.includes('result') || s.status === 'completed' || s.status.includes('progress') || s.status === 'live'
+        ).length;
+        // Allow +1 extra match beyond schedule count to detect newly started matches
+        const effectiveMax = schedulePlayedCount > 0
+            ? Math.min(maxPossibleMatches, schedulePlayedCount + 1)
+            : maxPossibleMatches;
+        if (useProbing && newMatches.length >= effectiveMax) {
+            console.log(`IPL Fantasy Public: reached max matches (${effectiveMax}, schedule=${schedulePlayedCount}) for IPL ${IPL_SEASON_YEAR}, stopping probe`);
             break;
         }
 
@@ -1651,16 +1659,27 @@ async function fetchFromIPLFantasyPublic() {
         console.log(`IPL Fantasy Public: enriched ${Math.min(undated.length, statsCompleted.length)} probed matches with dates from IPL Stats`);
     }
 
-    // Filter out matches from before the current season start date.
-    // Keep matches without valid dates (probed matches with no matching stats entry) — season boundary
-    // is enforced by hitUnplayedBoundary + maxPossibleMatches checks during probing.
+    // Filter out stale matches:
+    // 1. Matches with dates before the current season start — clearly from a prior season.
+    // 2. Undated probed matches that couldn't be matched to the IPL Stats schedule — these are
+    //    stale prior-season data returned by the API (which reuses tourgamedayId across seasons).
+    //    If the schedule says only N matches have been played, probed matches beyond N are stale.
+    const hasSchedule = iplStatsSchedule.length > 0;
     const validMatches = allMatches.filter(m => {
-        if (!m.matchDate) return true; // keep undated matches (couldn't be enriched)
+        if (!m.matchDate) {
+            // Undated match couldn't be enriched from the schedule — it's stale prior-season data.
+            // Only keep undated matches if we don't have a schedule to validate against.
+            if (hasSchedule) {
+                console.log(`IPL Fantasy Public: discarding undated match ${m.matchName} (matchId=${m.matchId}) — not in IPL ${IPL_SEASON_YEAR} schedule`);
+                return false;
+            }
+            return true;
+        }
         const d = new Date(m.matchDate);
         return isNaN(d.getTime()) || d >= seasonStart;
     });
     if (validMatches.length < allMatches.length) {
-        console.log(`IPL Fantasy Public: removed ${allMatches.length - validMatches.length} matches from before IPL ${IPL_SEASON_YEAR} season start`);
+        console.log(`IPL Fantasy Public: removed ${allMatches.length - validMatches.length} stale matches (not in IPL ${IPL_SEASON_YEAR})`);
     }
 
     validMatches.sort((a, b) => {
@@ -2913,14 +2932,24 @@ function computeCurrentMatchDay(matches, schedule) {
 }
 
 function computeRoomFantasyPoints(room) {
-    // Hard cap: never serve more matches than physically possible this season
-    // This prevents stale IPL 2025 data (54+ matches) from ever reaching clients
+    // Hard cap: never serve more matches than physically possible this season.
+    // IPL averages ~1.1 matches per day (74 matches over ~65 days), not 2.
+    // Use schedule data as the authoritative cap when available.
     const seasonStart = new Date(IPL_SEASON_START_DATE);
     const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
-    const maxMatches = Math.max(4, daysSinceStart * 2);
+    const schedule = fantasyCache?.schedule || [];
+    // Count matches that have actually been played or are live according to the schedule
+    const schedulePlayed = schedule.filter(s => {
+        const st = (s.state || s.status || '').toLowerCase();
+        return st.includes('result') || st === 'completed' || st.includes('progress') || st === 'live' || st === 'post';
+    }).length;
+    // Use schedule count + 1 as primary cap; fall back to days-based estimate (1.2 matches/day)
+    const maxMatches = schedulePlayed > 0
+        ? schedulePlayed + 1
+        : Math.max(4, Math.ceil(daysSinceStart * 1.2));
     let allMatches = fantasyCache?.matches || [];
     if (allMatches.length > maxMatches) {
-        console.warn(`Hard cap: trimming ${allMatches.length} matches to ${maxMatches} (IPL ${IPL_SEASON_YEAR}, day ${daysSinceStart})`);
+        console.warn(`Hard cap: trimming ${allMatches.length} matches to ${maxMatches} (IPL ${IPL_SEASON_YEAR}, day ${daysSinceStart}, schedule=${schedulePlayed})`);
         allMatches = allMatches.slice(0, maxMatches);
     }
     const matches = allMatches;
