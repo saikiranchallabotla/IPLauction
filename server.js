@@ -203,7 +203,7 @@ let fantasyCache = null;
 // Bump this version whenever the points parsing logic changes to force a re-fetch
 // of all cached match data (invalidates stale data computed with old logic).
 // v5: force re-fetch to clear stale IPL 2025 data and rebuild matchNumber field
-const FANTASY_CACHE_VERSION = 11;
+const FANTASY_CACHE_VERSION = 12;
 let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
@@ -2006,6 +2006,8 @@ function parseIPLFixtures(json) {
                 matchName,
                 matchDate,
                 matchNumber,
+                team1: String(home),
+                team2: String(away),
                 status: 'upcoming',
                 gamedayId: String(gamedayId),
                 phaseId: String(f?.PhaseId || f?.phaseId || 1)
@@ -2018,6 +2020,8 @@ function parseIPLFixtures(json) {
             matchName,
             matchDate,
             matchNumber,
+            team1: String(home),
+            team2: String(away),
             status: isLive ? 'live' : 'completed',
             gamedayId: String(gamedayId),
             phaseId: String(f?.PhaseId || f?.phaseId || 1)
