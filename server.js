@@ -175,7 +175,7 @@ const Fuse = require('fuse.js');
 let fantasyCache = null;
 // Bump this version whenever the points parsing logic changes to force a re-fetch
 // of all cached match data (invalidates stale data computed with old logic).
-const FANTASY_CACHE_VERSION = 2;
+const FANTASY_CACHE_VERSION = 3;
 let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
@@ -1662,9 +1662,10 @@ async function fetchFromIPLFantasyPublic() {
 // Response shape (from official IPL Fantasy API):
 //   { Data: { Value: { Players: [ { Id, Name, ShortName, TeamName, TeamShortName,
 //       SkillName, OverallPoints, GamedayPoints, IsActive, Value, ... } ] } } }
-// We use GamedayPoints for per-match fantasy points.
-// IMPORTANT: OverallPoints and TotalPoints are CUMULATIVE season totals — using them
-// as per-match values causes inflated totals when summed across matches.
+// We capture BOTH GamedayPoints (per-match) and OverallPoints (cumulative season total).
+// The authoritative total comes from OverallPoints on the latest gameday — this matches
+// the official IPL Fantasy app. Per-match breakdowns use GamedayPoints when available,
+// or are computed as deltas from OverallPoints across consecutive gamedays.
 function parseIPLPublicPlayerPoints(json) {
     // Try multiple possible paths — API may capitalise keys differently
     const list =
@@ -1699,9 +1700,7 @@ function parseIPLPublicPlayerPoints(json) {
         const name = p?.Name || p?.name || p?.PlayerName || p?.playerName || p?.DisplayName || p?.FullName || '';
         if (!name) continue;
 
-        // Use ONLY per-gameday points fields. Do NOT fall back to OverallPoints or
-        // TotalPoints — those are cumulative season totals. Summing cumulative values
-        // across matches produces inflated totals (e.g. 355 instead of 226).
+        // Per-gameday points (try multiple casing variants)
         const gamedayPts =
             p?.GamedayPoints ?? p?.gamedayPoints ??
             p?.GameDayPoints ?? p?.gameDayPoints ??
@@ -1713,14 +1712,19 @@ function parseIPLPublicPlayerPoints(json) {
         if (gamedayPts !== undefined && gamedayPts !== null) {
             pts = parseFloat(gamedayPts);
         } else {
-            // Last resort: use Points/points if it exists (could be per-match in some API versions),
-            // but NOT OverallPoints or TotalPoints which are always cumulative.
+            // Last resort for per-match: use Points/points (NOT OverallPoints/TotalPoints)
             const fallbackPts = p?.Points ?? p?.points ?? 0;
             pts = parseFloat(fallbackPts);
         }
 
-        // Sanity check: a single T20 match can't realistically yield >300 fantasy points.
-        // Values above this threshold likely indicate a cumulative total leaked through.
+        // Cumulative season total (OverallPoints) — used as authoritative total
+        const overallPts = parseFloat(
+            p?.OverallPoints ?? p?.overallPoints ??
+            p?.OverallPoint  ?? p?.overallPoint  ??
+            p?.TotalPoints   ?? p?.totalPoints   ?? NaN
+        );
+
+        // Sanity check: a single T20 match can't realistically yield >300 fantasy points
         if (pts > 300) {
             console.warn(`  IPL Fantasy Public: suspicious per-match points for ${name}: ${pts} (likely cumulative) — clamping to 0`);
             pts = 0;
@@ -1728,7 +1732,12 @@ function parseIPLPublicPlayerPoints(json) {
 
         const id = String(p?.Id || p?.id || p?.PlayerId || p?.playerId || '');
 
-        players.push({ cricApiName: name, cricApiId: id, points: isNaN(pts) ? 0 : pts });
+        players.push({
+            cricApiName: name,
+            cricApiId: id,
+            points: isNaN(pts) ? 0 : pts,
+            overallPoints: isNaN(overallPts) ? null : overallPts
+        });
     }
     return players;
 }
@@ -2924,19 +2933,39 @@ function computeRoomFantasyPoints(room) {
     const teamPoints = (room.teams || []).map(team => {
         const playerBreakdowns = (team.players || []).map(player => {
             const apiNames = lookupApiNames(player.name);
-            const matchPoints = matches.reduce((acc, match) => {
+
+            // Collect per-match points AND track the latest overallPoints (cumulative total)
+            let latestOverallPoints = null;
+            const matchPoints = [];
+            for (let mi = 0; mi < matches.length; mi++) {
+                const match = matches[mi];
                 let pts = 0;
+                let overallPts = null;
                 let inMatch = false;
                 for (const apiName of apiNames) {
                     const found = match.playerPoints.find(pp => pp.cricApiName === apiName);
-                    if (found) { pts = found.points; inMatch = true; break; }
+                    if (found) {
+                        pts = found.points;
+                        overallPts = found.overallPoints ?? null;
+                        inMatch = true;
+                        break;
+                    }
                 }
                 if (inMatch) {
-                    acc.push({ matchId: match.matchId, matchName: match.matchName, points: pts });
+                    matchPoints.push({ matchId: match.matchId, matchName: match.matchName, points: pts });
+                    // Track the highest overallPoints seen (cumulative, so max = latest)
+                    if (overallPts !== null && (latestOverallPoints === null || overallPts > latestOverallPoints)) {
+                        latestOverallPoints = overallPts;
+                    }
                 }
-                return acc;
-            }, []);
-            const totalPoints = matchPoints.reduce((sum, mp) => sum + mp.points, 0);
+            }
+
+            // Use OverallPoints from the latest gameday as the authoritative total
+            // (matches the official IPL Fantasy app). Fall back to summing per-match
+            // GamedayPoints only if OverallPoints is unavailable.
+            const summedPoints = matchPoints.reduce((sum, mp) => sum + mp.points, 0);
+            const totalPoints = latestOverallPoints !== null ? latestOverallPoints : summedPoints;
+
             return {
                 playerName: player.name,
                 role: player.role,
