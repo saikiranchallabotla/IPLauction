@@ -3086,6 +3086,13 @@ function computeRoomFantasyPoints(room) {
     }
     // Response-time status normalization using authoritative schedule state.
     // This prevents stale cached "live" flags from leaking to the UI.
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    function toISTDateStr(dateStr) {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '';
+        return new Date(d.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+    }
     const scheduleByMatchId = new Map(schedule.map(s => [String(s.matchId || ''), s]));
     const scheduleByMatchNumber = new Map();
     for (const s of schedule) {
@@ -3143,7 +3150,7 @@ function computeRoomFantasyPoints(room) {
     // even when nameMapping cache is stale (predates alias additions).
     const allCricApiNames = new Set();
     for (const match of matches) {
-        for (const pp of match.playerPoints) allCricApiNames.add(pp.cricApiName);
+        for (const pp of (match.playerPoints || [])) allCricApiNames.add(pp.cricApiName);
     }
 
     // Direct fuzzy matcher against all cricApiNames — catches name variants even when
@@ -3215,7 +3222,7 @@ function computeRoomFantasyPoints(room) {
                 let pts = 0;
                 let inMatch = false;
                 for (const apiName of apiNames) {
-                    const found = match.playerPoints.find(pp => pp.cricApiName === apiName);
+                    const found = (match.playerPoints || []).find(pp => pp.cricApiName === apiName);
                     if (found) { pts = found.points; inMatch = true; break; }
                 }
                 if (inMatch) {
@@ -3281,9 +3288,13 @@ function computeRoomFantasyPoints(room) {
 
 function broadcastFantasyUpdate() {
     for (const [code, room] of rooms) {
-        const data = computeRoomFantasyPoints(room);
-        data.configured = isFantasyConfigured();
-        io.to(code).emit('fantasyPointsUpdate', data);
+        try {
+            const data = computeRoomFantasyPoints(room);
+            data.configured = isFantasyConfigured();
+            io.to(code).emit('fantasyPointsUpdate', data);
+        } catch (err) {
+            console.error(`broadcastFantasyUpdate failed for room ${code}:`, err.message);
+        }
     }
     // Refresh standings whenever match data updates (standings computed from same cache)
     fetchIPLStandings().catch(() => {});
@@ -3293,9 +3304,13 @@ function broadcastFantasyUpdate() {
 function emitFantasyUpdate(roomCode) {
     const room = getRoom(roomCode);
     if (!room) return;
-    const data = computeRoomFantasyPoints(room);
-    data.configured = isFantasyConfigured();
-    io.to(roomCode).emit('fantasyPointsUpdate', data);
+    try {
+        const data = computeRoomFantasyPoints(room);
+        data.configured = isFantasyConfigured();
+        io.to(roomCode).emit('fantasyPointsUpdate', data);
+    } catch (err) {
+        console.error(`emitFantasyUpdate failed for room ${roomCode}:`, err.message);
+    }
 }
 
 // Generate random 6-character room code
@@ -3714,11 +3729,16 @@ app.get('/api/room/:code/fantasy-points', (req, res) => {
     const room = getRoom(req.params.code);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
-    // Always compute — returns all teams with 0 pts when no data yet
-    const data = computeRoomFantasyPoints(room);
-    data.configured = isFantasyConfigured();
-    data.seasonYear = IPL_SEASON_YEAR;
-    res.json(data);
+    try {
+        // Always compute — returns all teams with 0 pts when no data yet
+        const data = computeRoomFantasyPoints(room);
+        data.configured = isFantasyConfigured();
+        data.seasonYear = IPL_SEASON_YEAR;
+        res.json(data);
+    } catch (err) {
+        console.error('Fantasy points compute failed:', err);
+        res.status(500).json({ error: 'Failed to compute fantasy points', detail: err.message });
+    }
 });
 
 // Admin: Trigger manual fantasy points refresh
