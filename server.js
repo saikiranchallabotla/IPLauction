@@ -23,8 +23,9 @@ const IPL_SEASON_YEAR = parseInt(process.env.IPL_SEASON_YEAR) || new Date().getF
 // Starting tourgamedayId for the current season (override if API uses cumulative IDs across seasons)
 const IPL_START_GAMEDAY_ID = parseInt(process.env.IPL_START_GAMEDAY_ID) || 1;
 // IPL season start date — used to validate fetched data belongs to the current season
-// Format: YYYY-MM-DD. IPL typically starts in late March.
-const IPL_SEASON_START_DATE = process.env.IPL_SEASON_START_DATE || `${IPL_SEASON_YEAR}-03-01`;
+// Format: YYYY-MM-DD. IPL typically starts around March 22. Using March 22 as default
+// avoids the cap being inflated when using the over-permissive March 1 default.
+const IPL_SEASON_START_DATE = process.env.IPL_SEASON_START_DATE || `${IPL_SEASON_YEAR}-03-22`;
 
 // Store multiple auction rooms (in-memory cache)
 let rooms = new Map();
@@ -1427,7 +1428,9 @@ async function fetchFromIPLFantasyPublic() {
             continue;
         }
 
-        // Stop probing if we've already found more matches than possible this season.
+        // Stop as soon as we've found more matches than physically possible this season.
+        // Applied in BOTH probing mode AND fixture mode to prevent stale prior-season
+        // data (the API reuses tourgamedayId values across seasons) from slipping through.
         // If we have an IPL Stats schedule, use the number of played matches as a tighter cap.
         const schedulePlayedCount = iplStatsSchedule.filter(s =>
             s.status.includes('result') || s.status === 'completed' || s.status.includes('progress') || s.status === 'live'
@@ -1436,14 +1439,14 @@ async function fetchFromIPLFantasyPublic() {
         const effectiveMax = schedulePlayedCount > 0
             ? Math.min(maxPossibleMatches, schedulePlayedCount + 1)
             : maxPossibleMatches;
-        if (useProbing && newMatches.length >= effectiveMax) {
-            console.log(`IPL Fantasy Public: reached max matches (${effectiveMax}, schedule=${schedulePlayedCount}) for IPL ${IPL_SEASON_YEAR}, stopping probe`);
+        if (newMatches.length >= effectiveMax) {
+            console.log(`IPL Fantasy Public: reached max matches (${effectiveMax}, schedule=${schedulePlayedCount}) for IPL ${IPL_SEASON_YEAR}, stopping`);
             break;
         }
 
-        // If we already hit an unplayed match boundary, skip all remaining gameday IDs.
-        // The same tourgamedayId can return stale data from a prior IPL season (e.g. a prior IPL season)
-        // because the API reuses gameday IDs across seasons. Once an unplayed match is found,
+        // If we already hit an unplayed match boundary (probing mode only), stop.
+        // The same tourgamedayId can return stale data from a prior IPL season because
+        // the API reuses gameday IDs across seasons. Once an unplayed match is found,
         // all subsequent IDs with points belong to the previous season, not the current one.
         if (useProbing && hitUnplayedBoundary) {
             console.log(`IPL Fantasy Public: skipping tourgamedayId ${entry.tourgamedayId} — already past unplayed match boundary`);
@@ -1630,11 +1633,11 @@ async function fetchFromIPLFantasyPublic() {
     }
 
     // Final sanity check: if total matches exceed what's possible this season,
-    // discard ALL existing matches and keep only newly fetched ones.
-    // This catches stale prior-season data that was cached with the wrong seasonYear.
+    // truncate to maxPossibleMatches. This catches stale prior-season data that was
+    // cached with the wrong seasonYear, or fixture-mode over-fetches.
     if (allMatches.length > maxPossibleMatches) {
-        console.log(`IPL Fantasy Public: total ${allMatches.length} matches exceeds max possible ${maxPossibleMatches} — discarding stale cache, keeping only ${newMatches.length} new matches`);
-        allMatches = [...newMatches];
+        console.log(`IPL Fantasy Public: total ${allMatches.length} matches exceeds max possible ${maxPossibleMatches} — truncating to ${maxPossibleMatches}`);
+        allMatches = allMatches.slice(0, maxPossibleMatches);
     }
 
     // Enrich probed matches (which have empty matchDate) with dates and team names
@@ -1661,25 +1664,33 @@ async function fetchFromIPLFantasyPublic() {
 
     // Filter out stale matches:
     // 1. Matches with dates before the current season start — clearly from a prior season.
-    // 2. Undated probed matches that couldn't be matched to the IPL Stats schedule — these are
-    //    stale prior-season data returned by the API (which reuses tourgamedayId across seasons).
-    //    If the schedule says only N matches have been played, probed matches beyond N are stale.
+    // 2. Undated probed matches: if we have an IPL Stats schedule, discard them as stale
+    //    prior-season data (the API reuses tourgamedayId across seasons). Without a schedule,
+    //    cap undated matches to remaining slots within maxPossibleMatches.
     const hasSchedule = iplStatsSchedule.length > 0;
-    const validMatches = allMatches.filter(m => {
-        if (!m.matchDate) {
-            // Undated match couldn't be enriched from the schedule — it's stale prior-season data.
-            // Only keep undated matches if we don't have a schedule to validate against.
-            if (hasSchedule) {
-                console.log(`IPL Fantasy Public: discarding undated match ${m.matchName} (matchId=${m.matchId}) — not in IPL ${IPL_SEASON_YEAR} schedule`);
-                return false;
-            }
-            return true;
-        }
+    const datedMatches = allMatches.filter(m => {
+        if (!m.matchDate) return false; // handle undated separately
         const d = new Date(m.matchDate);
-        return isNaN(d.getTime()) || d >= seasonStart;
+        return !isNaN(d.getTime()) && d >= seasonStart;
     });
-    if (validMatches.length < allMatches.length) {
-        console.log(`IPL Fantasy Public: removed ${allMatches.length - validMatches.length} stale matches (not in IPL ${IPL_SEASON_YEAR})`);
+    const undatedMatches = allMatches.filter(m => !m.matchDate);
+    let keptUndated;
+    if (hasSchedule) {
+        // Schedule is available — undated matches couldn't be enriched, meaning they're
+        // stale prior-season data not present in the current season's schedule.
+        keptUndated = [];
+        for (const m of undatedMatches) {
+            console.log(`IPL Fantasy Public: discarding undated match ${m.matchName} (matchId=${m.matchId}) — not in IPL ${IPL_SEASON_YEAR} schedule`);
+        }
+    } else {
+        // No schedule — fall back to slot-based cap to limit undated matches.
+        const remainingSlots = Math.max(0, maxPossibleMatches - datedMatches.length);
+        keptUndated = undatedMatches.slice(0, remainingSlots);
+    }
+    const validMatches = [...datedMatches, ...keptUndated];
+    const removed = allMatches.length - validMatches.length;
+    if (removed > 0) {
+        console.log(`IPL Fantasy Public: removed ${removed} stale matches (not in IPL ${IPL_SEASON_YEAR} or before season start)`);
     }
 
     validMatches.sort((a, b) => {

@@ -2022,6 +2022,7 @@
                     <div class="fantasy-stat-content">
                         <div class="fantasy-stat-number" id="fantasy-stat-matches">0</div>
                         <div class="fantasy-stat-title">Matches Played</div>
+                        <div id="fantasy-stat-matches-breakdown" style="font-size:0.7rem;color:var(--text-secondary);margin-top:0.2rem;"></div>
                     </div>
                 </div>
                 <div class="fantasy-stat-card">
@@ -3764,14 +3765,41 @@
 
         // ============ FANTASY POINTS TABLE ============
         function renderPointsTable() {
-            const matchesPlayed = (fantasyData.matches || []).filter(m => m.status === 'completed').length;
+            const allMatches = fantasyData.matches || [];
+            const completedMatches = allMatches.filter(m => m.status === 'completed');
+            const liveMatches = allMatches.filter(m => m.status === 'live' || m.status === 'Live' || m.status === 'In Progress');
+            const upcomingCount = (fantasyData.schedule || []).filter(s => {
+                const st = (s.state || '').toLowerCase();
+                return st === 'upcoming' || st === 'scheduled' || st === 'preview';
+            }).length;
+            const matchesPlayed = completedMatches.length;
+
+            // Debug: log match list and statuses to help catch data issues
+            console.log('[MatchCount] Total matches in data:', allMatches.length,
+                '| Completed:', matchesPlayed,
+                '| Live:', liveMatches.length,
+                '| Upcoming (schedule):', upcomingCount);
+            if (allMatches.length > 0) {
+                console.log('[MatchCount] Match statuses:', allMatches.map(m => `${m.matchName || m.matchId}=${m.status}`).join(', '));
+            }
+
             // Use currentMatchDay for live detection and match day stats
             const matchDayInfo = getCurrentMatchDayInfo();
-            const hasLiveMatch = matchDayInfo.isLive;
+            const hasLiveMatch = matchDayInfo.isLive || liveMatches.length > 0;
             const el = id => document.getElementById(id);
 
             const statMatches = el('fantasy-stat-matches');
             if (statMatches) statMatches.textContent = matchesPlayed;
+
+            // Show breakdown: Completed X | Live Y | Upcoming Z
+            const breakdownEl = el('fantasy-stat-matches-breakdown');
+            if (breakdownEl) {
+                const parts = [];
+                parts.push(`<span style="color:var(--success)">${matchesPlayed} done</span>`);
+                if (liveMatches.length > 0) parts.push(`<span style="color:#ef5350">${liveMatches.length} live</span>`);
+                if (upcomingCount > 0) parts.push(`<span>${upcomingCount} upcoming</span>`);
+                breakdownEl.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+            }
 
             // Show/hide live match indicator
             const liveIndicator = el('fantasy-live-indicator');
