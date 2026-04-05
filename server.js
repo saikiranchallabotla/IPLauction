@@ -203,7 +203,7 @@ let fantasyCache = null;
 // Bump this version whenever the points parsing logic changes to force a re-fetch
 // of all cached match data (invalidates stale data computed with old logic).
 // v5: force re-fetch to clear stale IPL 2025 data and rebuild matchNumber field
-const FANTASY_CACHE_VERSION = 8;
+const FANTASY_CACHE_VERSION = 9;
 let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
