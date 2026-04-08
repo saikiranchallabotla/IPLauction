@@ -1932,16 +1932,21 @@ function parseIPLFixtures(json) {
     }
 
     // 1. Stage-based structure (classic IPL Fantasy API: data.Stages[].Fixtures[])
-    const stages = json?.data?.Stages || json?.data?.stages || json?.Stages || json?.stages ||
-                   json?.data?.stage || json?.stage || [];
-    const stageArray = Array.isArray(stages) ? stages : (stages ? [stages] : []);
-    for (const stage of stageArray) {
-        const sf = stage?.Fixtures || stage?.fixtures || stage?.matches || stage?.Match || stage?.match || [];
-        const fa = Array.isArray(sf) ? sf : [sf];
-        allFixtureObjects.push(...fa);
+    // Only try if format 0 found nothing — prevents duplicates when the API response
+    // includes both a flat Data.Value array (all matches) and a Stages structure
+    // (only recent-stage matches), which would cause those matches to be counted twice.
+    if (allFixtureObjects.length === 0) {
+        const stages = json?.data?.Stages || json?.data?.stages || json?.Stages || json?.stages ||
+                       json?.data?.stage || json?.stage || [];
+        const stageArray = Array.isArray(stages) ? stages : (stages ? [stages] : []);
+        for (const stage of stageArray) {
+            const sf = stage?.Fixtures || stage?.fixtures || stage?.matches || stage?.Match || stage?.match || [];
+            const fa = Array.isArray(sf) ? sf : [sf];
+            allFixtureObjects.push(...fa);
+        }
     }
 
-    // 2. Flat list structures — tried when stage-based yields nothing
+    // 2. Flat list structures — tried when formats 0 and 1 yield nothing
     if (allFixtureObjects.length === 0) {
         const flat = json?.data?.fixtures || json?.data?.matches || json?.data?.matchList ||
                      json?.data?.Matches || json?.data?.MatchList || json?.data?.Fixtures ||
@@ -3088,6 +3093,14 @@ function computeRoomFantasyPoints(room) {
         console.warn(`Hard cap: trimming ${allMatches.length} matches to ${maxMatches} (IPL ${IPL_SEASON_YEAR}, day ${daysSinceStart}, schedule=${schedulePlayed})`);
         allMatches = allMatches.slice(0, maxMatches);
     }
+    // Deduplicate by matchId — guards against duplicate entries that could double player points.
+    const _seenMatchIds = new Set();
+    allMatches = allMatches.filter(m => {
+        const id = String(m.matchId || '');
+        if (!id || _seenMatchIds.has(id)) return false;
+        _seenMatchIds.add(id);
+        return true;
+    });
     // Response-time status normalization using authoritative schedule state.
     // This prevents stale cached "live" flags from leaking to the UI.
     const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
