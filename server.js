@@ -203,7 +203,7 @@ let fantasyCache = null;
 // Bump this version whenever the points parsing logic changes to force a re-fetch
 // of all cached match data (invalidates stale data computed with old logic).
 // v5: force re-fetch to clear stale IPL 2025 data and rebuild matchNumber field
-const FANTASY_CACHE_VERSION = 12;
+const FANTASY_CACHE_VERSION = 13;
 let fantasyFetchTimer = null;
 let liveMatchTimer = null;
 let isRefreshing = false;
@@ -1449,6 +1449,8 @@ async function fetchFromIPLFantasyPublic() {
                             matchNumber: f.matchNumber || parseInt((f.matchName || '').match(/match\s*(\d+)/i)?.[1] || '0') || null,
               matchDate: f.matchDate,
               status: f.status,
+              team1: (f.team1 || '').toUpperCase(),
+              team2: (f.team2 || '').toUpperCase(),
           }));
 
     // Fast-path: if we already have live matches in cache, only re-fetch those
@@ -1512,7 +1514,20 @@ async function fetchFromIPLFantasyPublic() {
             }
 
             const json = await res.json();
-            const playerPoints = parseIPLPublicPlayerPoints(json);
+            let playerPoints = parseIPLPublicPlayerPoints(json);
+
+            // Double-header fix: the IPL Fantasy API returns combined player data for
+            // all matches on the same gameday (e.g. tourgamedayId 8 and 9 both return
+            // players from all 4 teams playing that day). Filter to only the two teams
+            // actually playing in THIS specific match when team info is available.
+            if (entry.team1 && entry.team2) {
+                const matchTeams = new Set([entry.team1, entry.team2]);
+                const filtered = playerPoints.filter(p => p.teamShortName && matchTeams.has(p.teamShortName));
+                // Only apply filter if it found players (guard against team name mismatches)
+                if (filtered.length > 0) {
+                    playerPoints = filtered;
+                }
+            }
 
             // Skip entirely if no players returned at all (API returned Players: null)
             if (playerPoints.length === 0) {
@@ -1913,7 +1928,8 @@ function parseIPLPublicPlayerPoints(json) {
 
         const id = String(p?.Id || p?.id || p?.PlayerId || p?.playerId || '');
 
-        players.push({ cricApiName: name, cricApiId: id, points: isNaN(pts) ? 0 : pts });
+        const teamShort = (p?.TeamShortName || p?.teamShortName || p?.Team || p?.team || '').toUpperCase();
+        players.push({ cricApiName: name, cricApiId: id, points: isNaN(pts) ? 0 : pts, teamShortName: teamShort });
     }
     return players;
 }
