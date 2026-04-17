@@ -4222,44 +4222,86 @@ function computeStandingsFromCache() {
 
     const teamStats = {};
     const initTeam = (code) => {
-        if (!teamStats[code]) teamStats[code] = { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0 };
+        if (!teamStats[code]) teamStats[code] = { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0, form: [] };
         return teamStats[code];
     };
 
+    // Sort matches chronologically so `form` ends up in chronological order
+    const sortedMatches = fantasyCache.matches.slice().sort((a, b) => {
+        const da = new Date(a?.matchDate || a?.startDate || a?.MatchDate || 0).getTime() || 0;
+        const db = new Date(b?.matchDate || b?.startDate || b?.MatchDate || 0).getTime() || 0;
+        return da - db;
+    });
+
     let processed = 0;
-    for (const match of fantasyCache.matches) {
-        if (match.status !== 'completed') continue;
+    for (const match of sortedMatches) {
+        // Accept completed OR abandoned/no-result statuses so washed-out matches count
+        const rawStatus = String(match.status || '').toLowerCase();
+        const isCompleted = rawStatus === 'completed' || rawStatus === 'finished' || rawStatus === 'result';
+        const isNR = ['abandoned', 'abandon', 'no result', 'no-result', 'noresult', 'washed', 'called off', 'cancelled', 'canceled']
+            .some(k => rawStatus.includes(k));
+        const resultStr = String(match.result || match.matchResult || match.comments || '').toLowerCase();
+        const resultSaysNR = ['no result', 'abandoned', 'washed', 'called off', 'cancel', 'tied']
+            .some(k => resultStr.includes(k));
+        if (!isCompleted && !isNR && !resultSaysNR) continue;
+
         const sc = match.scorecard;
-        if (!sc || sc.length < 2) continue;
+        const hasScorecard = Array.isArray(sc) && sc.length >= 2;
 
-        const inn1 = sc[0];
-        const inn2 = sc[1];
-        const code1 = resolveTeamCode(inn1.teamName);
-        const code2 = resolveTeamCode(inn2.teamName);
+        // Resolve team codes — prefer scorecard, fall back to match.teamA/teamB/matchName
+        let code1 = null, code2 = null;
+        if (hasScorecard) {
+            code1 = resolveTeamCode(sc[0].teamName);
+            code2 = resolveTeamCode(sc[1].teamName);
+        }
+        if (!code1 || !code2) {
+            const teamA = match.teamA || match.team1 || match.homeTeam || '';
+            const teamB = match.teamB || match.team2 || match.awayTeam || '';
+            code1 = code1 || resolveTeamCode(teamA);
+            code2 = code2 || resolveTeamCode(teamB);
+        }
+        if ((!code1 || !code2) && match.matchName) {
+            // Try "TeamA vs TeamB" fallback
+            const parts = String(match.matchName).split(/\s+vs\s+|\s+v\s+/i);
+            if (parts.length >= 2) {
+                code1 = code1 || resolveTeamCode(parts[0]);
+                code2 = code2 || resolveTeamCode(parts[1]);
+            }
+        }
         if (!code1 || !code2 || code1 === code2) continue;
-
-        const s1 = parseScoreStr(inn1.score);
-        const s2 = parseScoreStr(inn2.score);
-        const o1 = parseOversStr(inn1.overs) || 20;
-        const o2 = parseOversStr(inn2.overs) || 20;
-
-        if (s1.runs === 0 && s2.runs === 0) continue; // no data
 
         const t1 = initTeam(code1);
         const t2 = initTeam(code2);
+
+        // No-result / abandoned / washed-out (either flagged, or both sides have no score)
+        const noPlay = !hasScorecard || (parseScoreStr(sc[0].score).runs === 0 && parseScoreStr(sc[1].score).runs === 0);
+        if (isNR || resultSaysNR || noPlay) {
+            t1.played++; t2.played++;
+            t1.nr++; t2.nr++; t1.points++; t2.points++;
+            t1.form.push('N'); t2.form.push('N');
+            processed++;
+            continue;
+        }
+
+        const s1 = parseScoreStr(sc[0].score);
+        const s2 = parseScoreStr(sc[1].score);
+        const o1 = parseOversStr(sc[0].overs) || 20;
+        const o2 = parseOversStr(sc[1].overs) || 20;
+
         t1.played++; t2.played++;
         t1.runsFor += s1.runs; t1.oversFor += o1; t1.runsAgainst += s2.runs; t1.oversAgainst += o2;
         t2.runsFor += s2.runs; t2.oversFor += o2; t2.runsAgainst += s1.runs; t2.oversAgainst += o1;
 
         if (s2.runs > s1.runs) {
-            // Batting second team won (chased successfully)
             t2.won++; t2.points += 2; t1.lost++;
+            t1.form.push('L'); t2.form.push('W');
         } else if (s1.runs > s2.runs) {
-            // Batting first team won (defended)
             t1.won++; t1.points += 2; t2.lost++;
+            t1.form.push('W'); t2.form.push('L');
         } else {
             // Tie / Super Over — give 1 point each (simplified)
             t1.nr++; t2.nr++; t1.points++; t2.points++;
+            t1.form.push('N'); t2.form.push('N');
         }
         processed++;
     }
@@ -4267,13 +4309,13 @@ function computeStandingsFromCache() {
     if (processed === 0) throw new Error('No completed matches with scorecard data found');
 
     const standings = ALL_IPL_TEAMS.map(code => {
-        const t = teamStats[code] || { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0 };
+        const t = teamStats[code] || { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0, form: [] };
         let nrr = 0;
         if (t.oversFor > 0 && t.oversAgainst > 0) {
             nrr = (t.runsFor / t.oversFor) - (t.runsAgainst / t.oversAgainst);
             nrr = Math.round(nrr * 1000) / 1000;
         }
-        return { code, played: t.played, won: t.won, lost: t.lost, nr: t.nr, points: t.points, nrr };
+        return { code, played: t.played, won: t.won, lost: t.lost, nr: t.nr, points: t.points, nrr, form: t.form.slice(-5) };
     });
 
     console.log(`Standings computed from cache: ${processed} matches, ${standings.filter(t => t.played > 0).length} active teams`);
@@ -4309,18 +4351,45 @@ async function computeStandingsFromScheduleJSON() {
 
     const teamStats = {};
     const initTeam = (code) => {
-        if (!teamStats[code]) teamStats[code] = { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0 };
+        if (!teamStats[code]) teamStats[code] = { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0, form: [] };
         return teamStats[code];
     };
 
-    let processed = 0;
-    for (const m of matchList) {
-        const status = String(m?.MatchStatus || m?.matchStatus || '').toLowerCase();
-        if (status !== 'result' && status !== 'post' && status !== 'completed') continue;
+    // Sort matches chronologically so per-team `form` history ends up in real-world order.
+    const sortedMatches = matchList.slice().sort((a, b) => {
+        const pick = (m) => m?.MatchDateNew || m?.MatchDate || m?.matchDate || m?.StartDate || m?.startDate || m?.MatchOrder || 0;
+        const da = new Date(pick(a)).getTime() || Number(pick(a)) || 0;
+        const db = new Date(pick(b)).getTime() || Number(pick(b)) || 0;
+        return da - db;
+    });
 
-        // Team codes — already short codes in this feed
-        const bat1Code = resolveTeamCode(m?.FirstBattingTeamCode || m?.Team1ShortName || m?.TeamAShortName || '');
-        const bat2Code = resolveTeamCode(m?.SecondBattingTeamCode || m?.Team2ShortName || m?.TeamBShortName || '');
+    let processed = 0;
+    for (const m of sortedMatches) {
+        const status = String(m?.MatchStatus || m?.matchStatus || '').toLowerCase();
+        const resultStr = String(m?.MatchResult || m?.matchResult || m?.Comments || m?.comments || '').toLowerCase();
+
+        // A match counts toward the table if it has concluded — either via status or
+        // a conclusive result/comment string. We accept "abandoned", "no result",
+        // "washed", "called off", "cancelled" so washed-out matches (e.g. KKR v PBKS)
+        // get the 1-point-each treatment instead of being silently dropped.
+        const completedStatus = status === 'result' || status === 'post' || status === 'completed' || status === 'finished';
+        const nrKeywords = ['abandoned', 'abandon', 'no result', 'noresult', 'washed', 'called off', 'cancelled', 'canceled'];
+        const isNRStatus = nrKeywords.some(k => status.includes(k));
+        const isNRResult = ['no result', 'abandoned', 'tied', 'washed', 'called off', 'cancel']
+            .some(k => resultStr.includes(k));
+        const hasWonText = resultStr.includes('won');
+        if (!completedStatus && !isNRStatus && !isNRResult && !hasWonText) continue;
+
+        // Team codes — try every field the feed uses. For a washed-out match there is
+        // no "batting" team, so fall back to HomeTeam/AwayTeam/Team1/Team2 codes.
+        const bat1Code = resolveTeamCode(
+            m?.FirstBattingTeamCode || m?.Team1ShortName || m?.TeamAShortName ||
+            m?.HomeTeamCode || m?.HomeTeamShortName || m?.MatchHomeTeamCode || m?.TeamAbbrA || ''
+        );
+        const bat2Code = resolveTeamCode(
+            m?.SecondBattingTeamCode || m?.Team2ShortName || m?.TeamBShortName ||
+            m?.AwayTeamCode || m?.AwayTeamShortName || m?.MatchAwayTeamCode || m?.TeamAbbrB || ''
+        );
         if (!bat1Code || !bat2Code || bat1Code === bat2Code) continue;
 
         // Scores from summary fields e.g. "165/9 (20 Ov)"
@@ -4329,22 +4398,18 @@ async function computeStandingsFromScheduleJSON() {
         const o1 = parseOversStr((String(m?.FirstBattingSummary || '')).match(/\((\S+)\s*[Oo]v/)?.[1] || '20');
         const o2 = parseOversStr((String(m?.SecondBattingSummary || '')).match(/\((\S+)\s*[Oo]v/)?.[1] || '20');
 
-        // Also try MatchResult string: "MI won by 5 wickets" or "CSK won by 20 runs"
-        const resultStr = String(m?.MatchResult || m?.matchResult || m?.Comments || m?.comments || '').toLowerCase();
         let winnerCode = null;
-        if (resultStr.includes('won')) {
+        if (hasWonText) {
             const winnerName = resultStr.split(' won')[0].trim();
             winnerCode = resolveTeamCode(winnerName);
         }
-        const noResult = resultStr.includes('no result') || resultStr.includes('abandoned') ||
-                         resultStr.includes('tied') || resultStr.includes('washed') ||
-                         resultStr.includes('called off') || resultStr.includes('cancel');
+        const noResult = isNRStatus || isNRResult || (!hasWonText && s1.runs === 0 && s2.runs === 0);
 
         const t1 = initTeam(bat1Code);
         const t2 = initTeam(bat2Code);
         t1.played++; t2.played++;
 
-        // Accumulate runs/overs for NRR (use scores if available)
+        // Accumulate runs/overs for NRR (only if we actually have scores)
         if (s1.runs > 0 || s2.runs > 0) {
             t1.runsFor += s1.runs; t1.oversFor += o1; t1.runsAgainst += s2.runs; t1.oversAgainst += o2;
             t2.runsFor += s2.runs; t2.oversFor += o2; t2.runsAgainst += s1.runs; t2.oversAgainst += o1;
@@ -4352,18 +4417,22 @@ async function computeStandingsFromScheduleJSON() {
 
         if (noResult) {
             t1.nr++; t2.nr++; t1.points++; t2.points++;
+            t1.form.push('N'); t2.form.push('N');
         } else if (winnerCode === bat1Code) {
             t1.won++; t1.points += 2; t2.lost++;
+            t1.form.push('W'); t2.form.push('L');
         } else if (winnerCode === bat2Code) {
             t2.won++; t2.points += 2; t1.lost++;
+            t2.form.push('W'); t1.form.push('L');
         } else if (s1.runs > 0 || s2.runs > 0) {
             // Fallback: determine winner from scores
-            if (s2.runs > s1.runs) { t2.won++; t2.points += 2; t1.lost++; }
-            else if (s1.runs > s2.runs) { t1.won++; t1.points += 2; t2.lost++; }
-            else { t1.nr++; t2.nr++; t1.points++; t2.points++; }
+            if (s2.runs > s1.runs) { t2.won++; t2.points += 2; t1.lost++; t2.form.push('W'); t1.form.push('L'); }
+            else if (s1.runs > s2.runs) { t1.won++; t1.points += 2; t2.lost++; t1.form.push('W'); t2.form.push('L'); }
+            else { t1.nr++; t2.nr++; t1.points++; t2.points++; t1.form.push('N'); t2.form.push('N'); }
         } else {
             // Completed match with no winner and no scores → washed off (no result): 1 pt each
             t1.nr++; t2.nr++; t1.points++; t2.points++;
+            t1.form.push('N'); t2.form.push('N');
         }
         processed++;
     }
@@ -4371,12 +4440,12 @@ async function computeStandingsFromScheduleJSON() {
     if (processed === 0) throw new Error('No completed matches found in MatchSchedule.json');
 
     const standings = ALL_IPL_TEAMS.map(code => {
-        const t = teamStats[code] || { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0 };
+        const t = teamStats[code] || { code, played: 0, won: 0, lost: 0, nr: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0, form: [] };
         let nrr = 0;
         if (t.oversFor > 0 && t.oversAgainst > 0) {
             nrr = Math.round(((t.runsFor / t.oversFor) - (t.runsAgainst / t.oversAgainst)) * 1000) / 1000;
         }
-        return { code, played: t.played, won: t.won, lost: t.lost, nr: t.nr, points: t.points, nrr };
+        return { code, played: t.played, won: t.won, lost: t.lost, nr: t.nr, points: t.points, nrr, form: t.form.slice(-5) };
     });
 
     console.log(`Standings from MatchSchedule: ${processed} matches processed`);
