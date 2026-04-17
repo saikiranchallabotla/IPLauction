@@ -1397,6 +1397,17 @@
         .zone-badge.borderline { background: rgba(255,145,0,0.12); color: var(--warning); border: 1px solid rgba(255,145,0,0.25); }
         .zone-badge.eliminated { background: rgba(255,23,68,0.11); color: var(--danger); border: 1px solid rgba(255,23,68,0.22); }
         .nrr-pos { color: var(--success); } .nrr-neg { color: var(--danger); }
+        .form-pills { display: inline-flex; gap: 3px; align-items: center; }
+        .form-pill {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 18px; height: 18px; border-radius: 4px;
+            font-size: 0.62rem; font-weight: 800; line-height: 1;
+            border: 1px solid transparent;
+        }
+        .form-pill.w { background: rgba(0,200,83,0.18); color: var(--success); border-color: rgba(0,200,83,0.35); }
+        .form-pill.l { background: rgba(255,23,68,0.15); color: var(--danger); border-color: rgba(255,23,68,0.32); }
+        .form-pill.n { background: rgba(255,255,255,0.08); color: var(--text-secondary); border-color: rgba(255,255,255,0.12); }
+        .form-pill.empty { background: transparent; color: rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.08); }
         /* Standings edit form */
         .standings-edit-form {
             display: none; padding: 1rem; margin: 0.6rem 0 1rem;
@@ -2237,17 +2248,34 @@
             'DCH': 'Deccan Chargers'
         };
         const IPL_2026_DEFAULT_STANDINGS = [
-            { code: 'MI',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
-            { code: 'CSK',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
-            { code: 'RCB',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
-            { code: 'KKR',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
-            { code: 'DC',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
-            { code: 'PBKS', played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
-            { code: 'RR',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
-            { code: 'SRH',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
-            { code: 'GT',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 },
-            { code: 'LSG',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000 }
+            { code: 'MI',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000, form: [] },
+            { code: 'CSK',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000, form: [] },
+            { code: 'RCB',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000, form: [] },
+            { code: 'KKR',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000, form: [] },
+            { code: 'DC',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000, form: [] },
+            { code: 'PBKS', played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000, form: [] },
+            { code: 'RR',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000, form: [] },
+            { code: 'SRH',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000, form: [] },
+            { code: 'GT',   played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000, form: [] },
+            { code: 'LSG',  played: 0, won: 0, lost: 0, nr: 0, points: 0, nrr: 0.000, form: [] }
         ];
+
+        // Score last-5 form array ['W','L','N',...] → 0..1 (W=1, N=0.5, L=0).
+        // Recent matches are weighted slightly more (exponential, decay=0.85).
+        function computeIPLTeamFormScore(form) {
+            if (!form || !form.length) return null;
+            var pts = { 'W': 1, 'N': 0.5, 'L': 0 };
+            var w = 1, totalW = 0, acc = 0;
+            // Iterate newest → oldest (form stored chronologically, so reverse)
+            for (var i = form.length - 1; i >= 0; i--) {
+                var p = pts[form[i]];
+                if (p === undefined) continue;
+                acc += p * w;
+                totalW += w;
+                w *= 0.85;
+            }
+            return totalW > 0 ? acc / totalW : null;
+        }
 
         // Server-synced standings (overrides localStorage when available)
         var _serverStandings = null;
@@ -2433,9 +2461,15 @@
             var hasLiveData = sorted.some(function(t) { return t.played > 0; });
             var maxPlayed = Math.max.apply(null, sorted.map(function(t) { return t.played; }));
 
-            // Dynamically update form ratings from live standings
+            // Dynamically update form ratings from live standings.
+            // Preferred signal: last-5-matches form array (W=1, N=0.5, L=0, recent-weighted).
+            // Fallback: overall win rate when no per-match history is available.
             sorted.forEach(function(t) {
-                if (t.played >= 2 && IPL_TEAM_STRENGTHS[t.code]) {
+                if (!IPL_TEAM_STRENGTHS[t.code]) return;
+                var recentForm = computeIPLTeamFormScore(t.form);
+                if (recentForm != null) {
+                    IPL_TEAM_STRENGTHS[t.code].form = Math.max(4, Math.min(10, 4 + recentForm * 6));
+                } else if (t.played >= 2) {
                     var winRate = t.won / t.played;
                     IPL_TEAM_STRENGTHS[t.code].form = Math.max(4, Math.min(10, 4 + winRate * 6));
                 }
@@ -5301,10 +5335,29 @@
             var totalPlayed = sorted.reduce(function(s, t) { return s + t.played; }, 0);
             var hasData = totalPlayed > 0;
 
-            // Zone: top-4 = playoff, 5-6 = borderline, 7-10 = eliminated
+            // Zone classification:
+            //   Top-4 = playoff, 5-6 = borderline, 7-10 = eliminated.
+            //   BUT: refine tier membership using recent form + points-per-game so a
+            //   team with 4 pts from 4 matches and strong form isn't written off the
+            //   same way as a team with 4 pts from 5 matches and poor form.
+            var maxPlayed = Math.max.apply(null, sorted.map(function(t){ return t.played; })) || 0;
             var zones = {};
             sorted.forEach(function(t, i) {
-                zones[t.code] = i < 4 ? 'playoff' : (i < 6 ? 'borderline' : 'eliminated');
+                var base = i < 4 ? 'playoff' : (i < 6 ? 'borderline' : 'eliminated');
+                // Points-per-game (out of 2) blended with recent form
+                var ppg = t.played > 0 ? t.points / t.played : 0;
+                var formScore = computeIPLTeamFormScore(t.form); // 0..1 or null
+                var strength = formScore != null ? ((ppg / 2) * 0.55 + formScore * 0.45) : (ppg / 2);
+                // Late-season (most teams have played 5+) treats borderline teams more strictly.
+                var lateSeason = maxPlayed >= 5;
+                if (base === 'eliminated' && strength >= (lateSeason ? 0.62 : 0.55) && i < 8) {
+                    base = 'borderline'; // hot team climbing out of the danger zone
+                } else if (base === 'borderline' && strength < 0.3) {
+                    base = 'eliminated'; // slumping mid-table team
+                } else if (base === 'playoff' && i === 3 && strength < 0.35 && lateSeason) {
+                    base = 'borderline'; // 4th-placed team in free-fall
+                }
+                zones[t.code] = base;
             });
 
             // Build player → IPL team mapping from auction state
@@ -5346,6 +5399,18 @@
             }
 
             // ── IPL Standings Table HTML ──
+            function renderFormPills(form) {
+                var arr = (form || []).slice(-5);
+                var html = '';
+                for (var j = 0; j < 5; j++) {
+                    var ch = arr[j];
+                    if (ch === 'W') html += '<span class="form-pill w" title="Win">W</span>';
+                    else if (ch === 'L') html += '<span class="form-pill l" title="Loss">L</span>';
+                    else if (ch === 'N') html += '<span class="form-pill n" title="No Result">N</span>';
+                    else html += '<span class="form-pill empty" title="No match yet">–</span>';
+                }
+                return '<div class="form-pills">' + html + '</div>';
+            }
             var standingsRows = sorted.map(function(t, i) {
                 var zone = zones[t.code];
                 var color = IPL_TEAM_COLORS[t.code] || '#888';
@@ -5359,7 +5424,7 @@
                 var nrrCls = nrrVal > 0 ? 'nrr-pos' : (nrrVal < 0 ? 'nrr-neg' : '');
                 var nrrStr = (nrrVal >= 0 ? '+' : '') + nrrVal.toFixed(3);
                 var separator = (i === 3)
-                    ? '<tr class="ipl-playoffs-divider"><td colspan="8"></td></tr>'
+                    ? '<tr class="ipl-playoffs-divider"><td colspan="10"></td></tr>'
                     : '';
                 return separator + '<tr class="ipl-standings-row ' + zone + '">' +
                     '<td class="tc" style="font-weight:700;color:var(--text-secondary);">' + (i+1) + '</td>' +
@@ -5370,6 +5435,7 @@
                     '<td class="tc">' + t.nr + '</td>' +
                     '<td class="tc" style="font-weight:800;color:var(--accent);">' + t.points + '</td>' +
                     '<td class="tc"><span class="' + nrrCls + '">' + nrrStr + '</span></td>' +
+                    '<td class="tc">' + renderFormPills(t.form) + '</td>' +
                     '<td>' + zoneBadge + '</td>' +
                     '</tr>';
             }).join('');
@@ -5403,29 +5469,42 @@
                 var atRiskCount = atRisk.length;
                 var borderlineCount = borderline.length;
                 var safeCount = safe.length;
-                // Weighted risk by fantasy points if available
                 var totalPts = pt.players.reduce(function(s, p) { return s + Math.max(0, p.points); }, 0);
                 var atRiskPts = atRisk.reduce(function(s, p) { return s + Math.max(0, p.points); }, 0);
                 var borderlinePts = borderline.reduce(function(s, p) { return s + Math.max(0, p.points); }, 0);
+                var safePts = safe.reduce(function(s, p) { return s + Math.max(0, p.points); }, 0);
                 var atRiskPct = total > 0 ? Math.round(atRiskCount / total * 100) : 0;
                 var borderlinePct = total > 0 ? Math.round(borderlineCount / total * 100) : 0;
                 var safePct = total > 0 ? Math.round(safeCount / total * 100) : 0;
-                // Risk level
+
+                // Compose a risk score in [0,1]. If fantasy points are available,
+                // weight the zones by earned points (what actually drives standings)
+                // instead of raw player count — a 13-player squad whose top scorers
+                // come from playoff-bound teams is far safer than the headcount suggests.
+                var riskScore;
+                if (pt.hasPoints && totalPts > 0) {
+                    riskScore = (atRiskPts * 1 + borderlinePts * 0.5 + safePts * 0) / totalPts;
+                } else if (total > 0) {
+                    riskScore = (atRiskCount * 1 + borderlineCount * 0.5) / total;
+                } else {
+                    riskScore = 0;
+                }
+
                 var riskLevel;
                 if (!hasData) {
                     riskLevel = 'unknown';
-                } else if (atRiskPct >= 50) {
+                } else if (riskScore >= 0.55 || atRiskPct >= 55) {
                     riskLevel = 'high';
-                } else if (atRiskPct >= 25 || (atRiskPct + borderlinePct) >= 50) {
+                } else if (riskScore >= 0.3 || atRiskPct >= 25 || (atRiskPct + borderlinePct) >= 55) {
                     riskLevel = 'medium';
                 } else {
                     riskLevel = 'low';
                 }
                 return { safe: safe, borderline: borderline, atRisk: atRisk, unknown: unknown,
                          total: total, atRiskCount: atRiskCount, borderlineCount: borderlineCount, safeCount: safeCount,
-                         atRiskPts: atRiskPts, borderlinePts: borderlinePts, totalPts: totalPts,
+                         atRiskPts: atRiskPts, borderlinePts: borderlinePts, safePts: safePts, totalPts: totalPts,
                          atRiskPct: atRiskPct, borderlinePct: borderlinePct, safePct: safePct,
-                         riskLevel: riskLevel };
+                         riskScore: riskScore, riskLevel: riskLevel };
             }
 
             var riskBadgeLabel = { high: '&#9888; High Risk', medium: '&#9888; Medium Risk', low: '&#10003; Low Risk', unknown: 'Pending Data' };
@@ -5580,6 +5659,7 @@
                         '<th class="tc">NR</th>' +
                         '<th class="tc">Pts</th>' +
                         '<th class="tc">NRR</th>' +
+                        '<th class="tc" title="Last 5 matches (most recent on the right)">Form</th>' +
                         '<th>Zone</th>' +
                     '</tr></thead>' +
                     '<tbody>' + standingsRows + '</tbody>' +
