@@ -4330,13 +4330,15 @@ async function computeStandingsFromScheduleJSON() {
         const o2 = parseOversStr((String(m?.SecondBattingSummary || '')).match(/\((\S+)\s*[Oo]v/)?.[1] || '20');
 
         // Also try MatchResult string: "MI won by 5 wickets" or "CSK won by 20 runs"
-        const resultStr = String(m?.MatchResult || m?.matchResult || '').toLowerCase();
+        const resultStr = String(m?.MatchResult || m?.matchResult || m?.Comments || m?.comments || '').toLowerCase();
         let winnerCode = null;
         if (resultStr.includes('won')) {
             const winnerName = resultStr.split(' won')[0].trim();
             winnerCode = resolveTeamCode(winnerName);
         }
-        const noResult = resultStr.includes('no result') || resultStr.includes('abandoned') || resultStr.includes('tied');
+        const noResult = resultStr.includes('no result') || resultStr.includes('abandoned') ||
+                         resultStr.includes('tied') || resultStr.includes('washed') ||
+                         resultStr.includes('called off') || resultStr.includes('cancel');
 
         const t1 = initTeam(bat1Code);
         const t2 = initTeam(bat2Code);
@@ -4359,6 +4361,9 @@ async function computeStandingsFromScheduleJSON() {
             if (s2.runs > s1.runs) { t2.won++; t2.points += 2; t1.lost++; }
             else if (s1.runs > s2.runs) { t1.won++; t1.points += 2; t2.lost++; }
             else { t1.nr++; t2.nr++; t1.points++; t2.points++; }
+        } else {
+            // Completed match with no winner and no scores → washed off (no result): 1 pt each
+            t1.nr++; t2.nr++; t1.points++; t2.points++;
         }
         processed++;
     }
@@ -4380,8 +4385,11 @@ async function computeStandingsFromScheduleJSON() {
 
 async function fetchIPLStandings() {
     const sources = [
-        { name: 'match cache', fn: async () => computeStandingsFromCache() },
+        // MatchSchedule.json has authoritative MatchResult text including "no result" /
+        // "abandoned" for washed-off matches (e.g. KKR vs PBKS). The cache-based strategy
+        // only sees matches with scorecards and would miss those, so prefer the schedule.
         { name: 'MatchSchedule.json', fn: computeStandingsFromScheduleJSON },
+        { name: 'match cache', fn: async () => computeStandingsFromCache() },
     ];
     for (const src of sources) {
         try {
