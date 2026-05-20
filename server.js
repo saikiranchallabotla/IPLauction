@@ -262,16 +262,13 @@ async function initFantasyPoints() {
         // Load cached IPL Fantasy public data
         const doc = await db.collection('fantasy_points').findOne({ seriesId: 'ipl_fantasy_public' });
         if (doc?.matches?.length) {
-            // Validate: match count must be reasonable for current season
-            const seasonStart = new Date(IPL_SEASON_START_DATE);
-            const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
-            const maxExpected = Math.max(4, Math.ceil(daysSinceStart * 1.2));
+            // Validate: match count must not exceed the maximum possible in any IPL season (74 matches).
+            // Only use a hard cap here — day-based estimates are too aggressive late in the season
+            // when 60+ matches may legitimately have been played.
+            const IPL_MAX_MATCHES = 74;
 
-            if (doc.matches.length >= maxExpected) {
-                // Stale data (e.g. 17 or 54 matches from IPL 2025) — nuke it.
-                // Use >= so that a cache with exactly maxExpected matches is also purged
-                // (boundary is inclusive: maxExpected is the first suspicious count).
-                console.log(`Purging stale cache: ${doc.matches.length} matches >= max ${maxExpected} for ${daysSinceStart} days into IPL ${IPL_SEASON_YEAR}`);
+            if (doc.matches.length > IPL_MAX_MATCHES) {
+                console.log(`Purging stale cache: ${doc.matches.length} matches exceeds IPL season max ${IPL_MAX_MATCHES}`);
                 await db.collection('fantasy_points').deleteMany({});
                 fantasyCache = null;
             } else if (isStaleSeasonCache(doc)) {
@@ -319,27 +316,16 @@ function isStaleSeasonCache(cache) {
         // (strict check — prevents mixing IPL 2025 data with IPL 2026)
         if (matchesBeforeSeason.length > 0) return true;
     }
-    // Check match count vs what's possible this season — even if seasonYear is set.
-    // The IPL Fantasy API reuses tourgamedayId across seasons, so a prior run may have
-    // probed IDs 1-74 and stored 70+ prior-season matches incorrectly tagged as the current season.
-    if (cache.matches?.length > 0) {
-        const seasonStart2 = new Date(IPL_SEASON_START_DATE);
-        const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart2.getTime()) / (24 * 60 * 60 * 1000)));
-        // Conservative ceiling: IPL typically has ~1 match/day in early rounds.
-        // Use daysSinceStart + 2 as ceiling (2-match buffer for double-headers).
-        const maxExpected = Math.max(4, daysSinceStart + 2);
-        if (cache.matches.length >= maxExpected) {
-            console.log(`Stale cache detected: ${cache.matches.length} matches >= max expected ${maxExpected} for ${daysSinceStart} days into IPL ${IPL_SEASON_YEAR}`);
-            return true;
-        }
-        // Extra check: if ALL cached matches are undated they can't be verified as current season.
-        // Undated matches escape the date-filter above (new Date('') is NaN → not added to matchesBeforeSeason).
-        // If >4 undated matches exist and we've only had a few days of IPL, treat as stale.
+    // If ALL cached matches are undated they can't be verified as current season.
+    // Undated matches escape the date-filter above (new Date('') is NaN → not added to matchesBeforeSeason).
+    // The IPL Fantasy API reuses tourgamedayId across seasons, so prior-season data probed without
+    // dates could be stored tagged as the current year. Treat as stale if >4 undated matches exist.
+    if (cache.matches?.length > 4) {
         const datedMatchCount = cache.matches.filter(m => {
             const d = new Date(m.matchDate || '');
             return !isNaN(d.getTime());
         }).length;
-        if (datedMatchCount === 0 && cache.matches.length > 4) {
+        if (datedMatchCount === 0) {
             console.log(`Stale cache detected: ${cache.matches.length} undated matches with no verifiable season dates — treating as stale`);
             return true;
         }
@@ -3089,24 +3075,19 @@ function computeCurrentMatchDay(matches, schedule) {
 }
 
 function computeRoomFantasyPoints(room) {
-    // Hard cap: never serve more matches than physically possible this season.
-    // IPL averages ~1.1 matches per day (74 matches over ~65 days), not 2.
-    // Use schedule data as the authoritative cap when available.
-    const seasonStart = new Date(IPL_SEASON_START_DATE);
-    const daysSinceStart = Math.max(0, Math.floor((Date.now() - seasonStart.getTime()) / (24 * 60 * 60 * 1000)));
     const schedule = fantasyCache?.schedule || [];
     // Count matches that have actually been played or are live according to the schedule
     const schedulePlayed = schedule.filter(s => {
         const st = (s.state || s.status || '').toLowerCase();
         return st.includes('result') || st === 'completed' || st.includes('progress') || st === 'live' || st === 'post';
     }).length;
-    // Use schedule count + 1 as primary cap; fall back to days-based estimate (1.2 matches/day)
-    const maxMatches = schedulePlayed > 0
-        ? schedulePlayed + 1
-        : Math.max(4, Math.ceil(daysSinceStart * 1.2));
+    // Use schedule-played count + 1 as a soft cap when available, otherwise allow up to the IPL season max.
+    // Avoid day-based estimates: late in the season (day 50+) these are too small and trim real match data.
+    const IPL_MAX_MATCHES = 74;
+    const maxMatches = schedulePlayed > 0 ? schedulePlayed + 1 : IPL_MAX_MATCHES;
     let allMatches = fantasyCache?.matches || [];
     if (allMatches.length > maxMatches) {
-        console.warn(`Hard cap: trimming ${allMatches.length} matches to ${maxMatches} (IPL ${IPL_SEASON_YEAR}, day ${daysSinceStart}, schedule=${schedulePlayed})`);
+        console.warn(`Hard cap: trimming ${allMatches.length} matches to ${maxMatches} (IPL ${IPL_SEASON_YEAR}, schedule=${schedulePlayed})`);
         allMatches = allMatches.slice(0, maxMatches);
     }
     // Deduplicate by matchId — guards against duplicate entries that could double player points.
